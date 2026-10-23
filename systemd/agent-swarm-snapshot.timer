@@ -1,0 +1,9 @@
+[Unit]
+Description=Snapshot tmux and agents every 5 minutes, for agent-swarm restore
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

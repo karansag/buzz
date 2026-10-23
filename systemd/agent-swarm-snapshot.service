@@ -1,0 +1,7 @@
+[Unit]
+Description=Save the tmux layout and the agent in each pane, for agent-swarm restore
+Documentation=file:%h/agent-swarm/docs/reboot-restore.md
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/agent-swarm snapshot

@@ -26,7 +26,13 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (event, ctx) => {
     // print, json and rpc runs have no pane of their own to receive messages.
     if (ctx.mode !== "tui" || event.reason === "reload") return;
-    const out = await autoregister({ hook_event_name: "SessionStart", model: ctx.model?.id });
+    // The session id lets `agent-swarm restore` resume this session with
+    // `pi --session ID`, and gives the hub the same identity when it does.
+    const out = await autoregister({
+      hook_event_name: "SessionStart",
+      session_id: ctx.sessionManager.getSessionId(),
+      model: ctx.model?.id,
+    });
     let brief = "";
     try {
       brief = JSON.parse(out).hookSpecificOutput?.additionalContext ?? "";

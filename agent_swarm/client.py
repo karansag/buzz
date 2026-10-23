@@ -16,6 +16,8 @@
     agent-swarm supervisor [HANDLE [--objective TEXT] | --clear]   # the swarm supervisor role
     agent-swarm spawn [--flavor claude|codex|pi|hermes] [--model M] [--node N]
     agent-swarm stop HANDLE   # kill that agent's tmux pane
+    agent-swarm snapshot      # save this machine's tmux layout and the agent in each pane
+    agent-swarm restore [--from FILE] [--apply] [--stagger SECONDS]   # after a reboot
 
 Defaults:
     --pane            current shell's tmux pane (via `TMUX_PANE`-targeted `tmux display-message`)
@@ -36,7 +38,7 @@ import httpx
 
 from pathlib import Path
 
-from . import bundle, config, tmux
+from . import bundle, config, restore, tmux
 from .tmux import current_pane, local_node
 
 
@@ -490,6 +492,47 @@ def cmd_recipients(_: argparse.Namespace) -> int:
     return 0 if r.is_success else 1
 
 
+def cmd_snapshot(args: argparse.Namespace) -> int:
+    server = tmux.server_id()
+    if server is None:
+        print("no tmux server is running; nothing to save", file=sys.stderr)
+        return 1
+    r = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5)
+    r.raise_for_status()
+    snap = restore.capture(restore.read_layout(), r.json()["recipients"], local_node(), server)
+    directory = Path(args.dir).expanduser()
+    path = restore.save(snap, directory)
+    panes = sum(len(w["panes"]) for sess in snap["sessions"] for w in sess["windows"])
+    summary = f"{len(snap['sessions'])} sessions, {panes} panes, {len(restore.agents_in(snap))} agents"
+    print(f"saved {path}: {summary}" if path else f"unchanged since the last snapshot: {summary}")
+    return 0
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    directory = Path(args.dir).expanduser()
+    path = Path(args.from_file).expanduser() if args.from_file else restore.pick(directory, tmux.server_id())
+    if path is None:
+        print(f"no snapshot from an earlier tmux server in {directory}", file=sys.stderr)
+        return 1
+    snap = json.loads(path.read_text())
+    if snap.get("node") != local_node():
+        print(f"{path} was taken on {snap.get('node')}, not {local_node()}", file=sys.stderr)
+        return 1
+    r = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5)
+    r.raise_for_status()
+    running = restore.running_sessions(r.json()["recipients"], restore.agents_in(snap))
+    steps = restore.plan(snap, restore.read_layout(), running)
+    print(f"snapshot {path} (taken {snap['taken_at']}, {len(restore.agents_in(snap))} agents)")
+    if not args.apply:
+        for step in steps:
+            print(f"  {step.describe}" + (f"\n      $ {step.launch}" if step.launch else ""))
+        print("dry run: nothing changed. Run again with --apply to do this.")
+        return 0
+    failed = restore.apply(steps, args.stagger, log=lambda line: print(f"  {line}", flush=True))
+    print(f"done, {failed} failed" if failed else "done")
+    return 1 if failed else 0
+
+
 def cmd_prune(args: argparse.Namespace) -> int:
     r = httpx.post(
         f"{base_url()}/recipients/prune",
@@ -815,6 +858,24 @@ def main(argv: list[str] | None = None) -> int:
     unregister = sub.add_parser("unregister", help="remove one registration without deleting messages or tasks")
     unregister.add_argument("--user", help="handle to remove (default: current pane's handle)")
     unregister.set_defaults(func=cmd_unregister)
+
+    snap = sub.add_parser(
+        "snapshot", help="save this machine's tmux layout and the agent in each pane, for restore"
+    )
+    snap.add_argument("--dir", default=str(restore.SNAPSHOT_DIR))
+    snap.set_defaults(func=cmd_snapshot)
+
+    rst = sub.add_parser(
+        "restore", help="after a reboot, recreate tmux sessions from a snapshot and resume the agents"
+    )
+    rst.add_argument("--dir", default=str(restore.SNAPSHOT_DIR))
+    rst.add_argument(
+        "--from", dest="from_file",
+        help="snapshot file (default: newest one from an earlier tmux server)",
+    )
+    rst.add_argument("--apply", action="store_true", help="do it; without this, only print the plan")
+    rst.add_argument("--stagger", type=float, default=5.0, help="seconds between agent launches")
+    rst.set_defaults(func=cmd_restore)
 
     snd = sub.add_parser("send")
     snd.add_argument("--to", required=True)

@@ -554,6 +554,16 @@ setsid -f agent-swarm-server > ~/.agent-swarm/server.log 2>&1
 All state is in `~/.agent-swarm/db.sqlite`. Copy it before upgrading.
 Deleting it (with the server stopped) starts from nothing.
 
+**After a reboot.** The hub's service brings the hub back; tmux and the
+agents need `agent-swarm restore`. `agent-swarm snapshot`, run every 5
+minutes by `systemd/agent-swarm-snapshot.timer`, saves each tmux session,
+window, and pane with the harness session id of the agent in it. After the
+reboot, `agent-swarm restore` shows the plan and `agent-swarm restore --apply`
+recreates the layout and resumes each agent by its session id (`claude
+--resume ID`, `codex resume ID --yolo`, ...), so agents sharing a directory come
+back as themselves and get their handles back. See
+[docs/reboot-restore.md](docs/reboot-restore.md).
+
 ## CLI reference
 
 ```bash
@@ -575,6 +585,8 @@ agent-swarm supervisor [<handle> --objective <text> | --clear]
 agent-swarm spawn [--flavor claude|codex|pi|hermes] [--model <m>] [--node <machine>]
 agent-swarm stop <handle>
 agent-swarm prune [--include-shells]   # forget agents whose pane is gone
+agent-swarm snapshot             # save tmux layout + each pane's agent session
+agent-swarm restore [--apply] [--from <file>] [--stagger 5]   # after a reboot
 agent-swarm node-token <name>    # hub: enrol or rotate a machine
 agent-swarm nodes                # hub: enrolled machines
 agent-swarm join <hub-url> --token <token> [--node <name>]
