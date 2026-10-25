@@ -1,6 +1,6 @@
 {
-  "name": "Agent Swarm",
-  "short_name": "Swarm",
+  "name": "Buzz",
+  "short_name": "Buzz",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

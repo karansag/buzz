@@ -13,7 +13,7 @@ function showError(message) {
 async function initialize() {
   if (!invoke) {
     save.disabled = true;
-    showError('Open this page in the Agent Swarm Mac app.');
+    showError('Open this page in the Buzz Mac app.');
     return;
   }
   try {

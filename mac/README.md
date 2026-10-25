@@ -1,4 +1,4 @@
-# Agent Swarm for Mac
+# Buzz for Mac
 
 The dashboard in its own Mac window. The hub keeps running where it is; the
 app only opens its URL. It adds a menu-bar icon, a Dock badge with the number
@@ -19,9 +19,12 @@ npm ci
 npm run build
 ```
 
-This makes `src-tauri/target/release/bundle/macos/Agent Swarm.app`. Copy it to
+This makes `src-tauri/target/release/bundle/macos/Buzz.app`. Copy it to
 `/Applications` (`ditto`, so the signature is kept). There is no DMG: its
 Finder step needs Automation permission and fails from a plain terminal.
+
+The app used to be called Agent Swarm. Its bundle id is unchanged, so
+Buzz.app keeps the saved hub URL; delete the old `Agent Swarm.app`.
 
 The build signs the whole app ad hoc (`signingIdentity: "-"` in
 `tauri.conf.json`). macOS refuses notifications to an app whose bundle is not
@@ -108,7 +111,7 @@ To see the notification log, quit the app, then run its binary with stderr
 saved:
 
 ```sh
-"/Applications/Agent Swarm.app/Contents/MacOS/agent-swarm-mac" 2> /tmp/agent-swarm.log
+"/Applications/Buzz.app/Contents/MacOS/agent-swarm-mac" 2> /tmp/agent-swarm.log
 ```
 
 If the log stays empty, another copy was already running: the new one hands
@@ -117,14 +120,14 @@ over to it and exits. Quit all copies first.
 `authorization granted=no error=Error Domain=UNErrorDomain Code=1 "(null)"`
 means macOS refused notifications. Check, in order:
 
-- `codesign -dv --verbose=4 "/Applications/Agent Swarm.app"` shows
+- `codesign -dv --verbose=4 "/Applications/Buzz.app"` shows
   `Identifier=com.karansag.agent-swarm` and a `Sealed Resources` line. If not,
   the bundle is not signed; rebuild.
 - Only one copy is registered with macOS. Old copies (for example on an
   unmounted DMG) can take the permission. List them with
   `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -dump | grep -B5 com.karansag.agent-swarm`
   and remove one with `lsregister -u "<path>"`.
-- Agent Swarm is allowed in System Settings → Notifications.
+- Buzz is allowed in System Settings → Notifications.
 
 A `queued` line means macOS accepted the notification. Focus modes and
 notification settings can still hide the banner.

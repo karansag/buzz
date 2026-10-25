@@ -1,8 +1,12 @@
-# agent-swarm
+# Buzz
 
 Run many coding agents in tmux and let them talk to each other.
 
-agent-swarm is a small server that knows every agent you run (Claude Code,
+Buzz was called agent-swarm, and its commands, Python package, settings
+(`AGENT_SWARM_*`), and data directory (`~/.agent-swarm`) still use that name.
+You run `agent-swarm` and `agent-swarm-server` as before.
+
+Buzz is a small server that knows every agent you run (Claude Code,
 Codex, Pi, Hermes, or any terminal program) and the tmux pane it lives in.
 When one agent sends another a message, the server pastes it into the
 recipient's prompt, so it arrives as the agent's next turn. Agents never

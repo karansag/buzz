@@ -12,14 +12,14 @@ static void (*openAgent)(const char *) = NULL;
 static SwarmNotificationDelegate *notificationDelegate;
 
 static void logError(const char *operation, NSError *error) {
-    fprintf(stderr, "Agent Swarm notifications: %s error=%s\n", operation,
+    fprintf(stderr, "Buzz notifications: %s error=%s\n", operation,
             error ? error.description.UTF8String : "none");
     fflush(stderr);
 }
 
 static BOOL hasBundle(void) {
     if (NSBundle.mainBundle.bundleIdentifier.length) return YES;
-    fprintf(stderr, "Agent Swarm notifications: no bundle identifier; run the built .app\n");
+    fprintf(stderr, "Buzz notifications: no bundle identifier; run the built .app\n");
     fflush(stderr);
     return NO;
 }
@@ -33,7 +33,7 @@ static void authorize(BOOL logResult, BOOL openSettingsIfDenied, void (^completi
                                             UNAuthorizationOptionBadge)
                          completionHandler:^(BOOL granted, NSError *error) {
         if (logResult || !granted) {
-            fprintf(stderr, "Agent Swarm notifications: authorization granted=%s error=%s\n",
+            fprintf(stderr, "Buzz notifications: authorization granted=%s error=%s\n",
                     granted ? "yes" : "no", error ? error.description.UTF8String : "none");
             fflush(stderr);
         }
@@ -80,7 +80,7 @@ static void sendNotification(NSString *agent) {
     authorize(NO, NO, ^(BOOL granted) {
         if (!granted) return;
         UNMutableNotificationContent *content = [UNMutableNotificationContent new];
-        content.title = agent ? @"Agent needs attention" : @"Agent Swarm notifications";
+        content.title = agent ? @"Agent needs attention" : @"Buzz notifications";
         content.body = agent ? [NSString stringWithFormat:@"%@ is waiting for you.", agent]
                              : @"Notifications are enabled. Your swarm can reach you here.";
         content.sound = UNNotificationSound.defaultSound;
@@ -92,7 +92,7 @@ static void sendNotification(NSString *agent) {
             withCompletionHandler:^(NSError *error) {
                 if (error) logError("delivery", error);
                 else {
-                    fprintf(stderr, "Agent Swarm notifications: queued %s\n",
+                    fprintf(stderr, "Buzz notifications: queued %s\n",
                             agent ? agent.UTF8String : "test");
                     fflush(stderr);
                 }

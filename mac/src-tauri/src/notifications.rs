@@ -26,7 +26,7 @@ extern "C" fn open_agent(name: *const c_char) {
     if let Some(app) = APP.get() {
         let target = app.clone();
         if let Err(error) = app.run_on_main_thread(move || crate::app::show_agent(&target, &name)) {
-            eprintln!("Agent Swarm notifications: could not open agent: {error}");
+            eprintln!("Buzz notifications: could not open agent: {error}");
         }
     }
 }

@@ -1664,7 +1664,7 @@ function App() {
   };
 
   const header = html`<header class="top">
-    <h1 style="cursor:pointer" onClick=${() => { location.hash = "#/"; }}>Agent Swarm Dashboard</h1>
+    <h1 style="cursor:pointer" onClick=${() => { location.hash = "#/"; }}>Buzz</h1>
     <nav class="views" aria-label="views" title=${`Switch views: ${mac ? "⌘⇧[ / ⌘⇧]" : "Ctrl+Shift+[ / ]"}`}>
       <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${mac ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
       <a href=${CHATS_ROUTE} class=${onChats ? "on" : ""}>chats</a>

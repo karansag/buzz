@@ -1,7 +1,7 @@
 [project]
 name = "agent-swarm"
 version = "0.1.0"
-description = "Tiny agent-to-agent message bus (SQLite + tmux delivery)"
+description = "Buzz: run many coding agents in tmux and let them talk to each other"
 requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -18,9 +18,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/karansag/agent-swarm"
-Repository = "https://github.com/karansag/agent-swarm"
-Issues = "https://github.com/karansag/agent-swarm/issues"
+Homepage = "https://github.com/karansag/buzz"
+Repository = "https://github.com/karansag/buzz"
+Issues = "https://github.com/karansag/buzz/issues"
 
 [build-system]
 requires = ["setuptools>=77"]
