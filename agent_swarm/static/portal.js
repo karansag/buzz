@@ -8922,15 +8922,6 @@ function TeamManage({ team, members, refresh, onDone }) {
 		onDone();
 		refresh();
 	};
-	const disband = async () => {
-		if (!confirm(`Disband team ${team.name}? Its agents keep running.`)) return;
-		if (!(await fetch(`/teams/${team.id}`, { method: "DELETE" }).catch(() => null))?.ok) {
-			alert(`Could not disband ${team.name}.`);
-			return;
-		}
-		onDone();
-		refresh();
-	};
 	const offlineQueen = team.queen && !members.some((r) => r.user_id === team.queen);
 	return m$1`<form class="team-manage" onSubmit=${save}>
     <label>queen <select aria-label=${`Queen of ${team.name}`} value=${queen} disabled=${busy} onChange=${(e) => setQueen(e.target.value)}>
@@ -8943,9 +8934,16 @@ function TeamManage({ team, members, refresh, onDone }) {
     <div class="team-manage-actions">
       <button class="act" disabled=${busy}>${busy ? "saving…" : "save"}</button>
       <button type="button" class="mini" onClick=${onDone}>cancel</button>
-      <button type="button" class="mini disband" onClick=${disband}>disband team</button>
     </div>
   </form>`;
+}
+async function removeTeam(team, refresh) {
+	if (!confirm(`Remove team ${team.name}? Its agents keep running.`)) return;
+	if (!(await fetch(`/teams/${team.id}`, { method: "DELETE" }).catch(() => null))?.ok) {
+		alert(`Could not remove ${team.name}.`);
+		return;
+	}
+	refresh();
 }
 function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUser = null }) {
 	const [dragging, setDragging] = d(null);
@@ -9007,12 +9005,19 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       <summary><span class="team-bees-name">${g.name}</span>
         <span class="team-bees-counts">${g.members.length}${busy ? m$1` · <span class="working">${busy} working</span>` : ""}${attention ? m$1` · <span class="attn">${attention} need you</span>` : ""}</span>
         ${team && m$1`<button type="button" class="team-bees-manage" aria-pressed=${managing === g.key}
-          aria-label=${`Queen and settings for ${g.name}`} title=${team.queen ? `queen: ${team.queen} · change queen or disband` : "pick a queen or disband"}
+          aria-label=${`Pick queen for ${g.name}`} title=${team.queen ? `queen: ${team.queen} · change queen` : "pick a queen"}
           onClick=${(e) => {
 			e.preventDefault();
 			e.stopPropagation();
 			setManaging((m) => m === g.key ? null : g.key);
-		}}>♛</button>`}</summary>
+		}}>♛</button>`}
+        ${team && m$1`<button type="button" class="team-bees-manage team-bees-remove"
+          aria-label=${`Remove team ${g.name}`} title="remove team (its agents keep running)"
+          onClick=${(e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			removeTeam(team, refresh);
+		}}>✕</button>`}</summary>
       ${managing === g.key && team && m$1`<${TeamManage} key=${`${g.key}:${team.queen}`} team=${team} members=${g.members} refresh=${refresh} onDone=${() => setManaging(null)} />`}
       <div class="team-bees-chips">${empty && dragging && m$1`<span class="team-bees-empty">drop here</span>`}${g.members.map((r) => {
 			const st = STATE[agentStatus(r)] || STATE.unknown;

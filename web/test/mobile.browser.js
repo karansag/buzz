@@ -626,7 +626,7 @@ test('desktop sidebar opens on the team view, which holds new team and spawn', a
   } finally { await page.close(); }
 });
 
-test('team view: the crown button picks a queen or disbands the team', async () => {
+test('team view: the crown button picks a queen and the ✕ removes the team', async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   const patches = [], deletes = [];
   await page.route('**/teams/1', async route => {
@@ -645,7 +645,7 @@ test('team view: the crown button picks a queen or disbands the team', async () 
   try {
     await page.goto(base + '#/');
     const team = page.locator('#agent-sidebar .team-bees-group', { has: page.locator('.team-bees-name', { hasText: /^agent-swarm$/ }) });
-    await team.getByRole('button', { name: 'Queen and settings for agent-swarm' }).click();
+    await team.getByRole('button', { name: 'Pick queen for agent-swarm' }).click();
     const pick = team.getByRole('combobox', { name: 'Queen of agent-swarm' });
     assert.equal(await pick.inputValue(), 'stoat');
     const other = (await pick.locator('option').allTextContents()).find(o => o !== 'no queen' && o !== 'stoat');
@@ -657,11 +657,10 @@ test('team view: the crown button picks a queen or disbands the team', async () 
     await team.locator(`.team-mate[href="#/agent/${other}"] .crown`).waitFor();
     // Clicking the crown button does not fold the team.
     assert.equal(await team.evaluate(d => d.open), true);
-    await team.getByRole('button', { name: 'Queen and settings for agent-swarm' }).click();
-    await team.getByRole('button', { name: 'disband team' }).click();
+    await team.getByRole('button', { name: 'Remove team agent-swarm' }).click();
     await team.waitFor({ state: 'detached' });
     assert.deepEqual(deletes, [1]);
-    assert.match(dialogs[0], /Disband team agent-swarm\? Its agents keep running\./);
+    assert.match(dialogs[0], /Remove team agent-swarm\? Its agents keep running\./);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });

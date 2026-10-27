@@ -730,8 +730,7 @@ form.team-manage label { display: flex; align-items: center; gap: 6px; flex: 1 1
 form.team-manage select, form.team-manage input { flex: 1; min-width: 0; width: 100%; box-sizing: border-box; }
 form.team-manage input { flex-basis: 100%; }
 .team-manage-actions { display: flex; align-items: center; gap: 8px; flex: 1 1 100%; }
-.team-manage-actions .disband { margin-left: auto; }
-.team-manage-actions .disband:hover { color: var(--alert); border-color: var(--alert); }
+.team-bees-remove:hover { color: var(--alert); border-color: var(--alert); }
 .team-bees-stop { border: 1px dashed var(--alert); border-radius: 10px; padding: 14px; text-align: center; color: var(--alert); font-size: 11px; }
 .team-bees-stop.over { background: color-mix(in srgb, var(--alert) 14%, transparent); }
 .team-bees > form.newteam { margin: 6px 0 0; }

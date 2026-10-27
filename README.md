@@ -213,8 +213,8 @@ The sidebar lists agents in two views: **teams** (the default) and
 - Each agent is a chip that opens its page. Drag a chip onto another team
   to move it, or onto the "drop here to stop" zone that shows during a drag
   to stop it. On a touch screen, stop an agent from its page.
-- Each team's ♛ button picks the queen (with an optional objective) or
-  disbands the team.
+- Each team's ♛ button picks the queen (with an optional objective), and
+  its ✕ button removes the team. Its agents keep running, outside any team.
 - New teams and spawning sit at the bottom.
 
 On a phone, the same views sit at the top of the overview.
@@ -624,7 +624,7 @@ token may call it; "owner" means a node token is refused (see
 | PATCH | `/tasks/{id}` | agent | `{status?, assignee?, worktree?, team_id?, depends_on?, note?}` |
 | DELETE | `/tasks/{id}` | owner | |
 | GET, POST | `/teams` | owner | list; create `{name}` |
-| PATCH, DELETE | `/teams/{id}` | owner | rename, crown a queen, set an objective; disband |
+| PATCH, DELETE | `/teams/{id}` | owner | rename, crown a queen, set an objective; remove |
 | POST | `/agents/{handle}/team` | owner | `{team_id}`, or null for no team |
 | GET | `/api/spawn-options` | owner | harnesses and known models per machine |
 | POST | `/agents/spawn` | owner | `{flavor, model?, node?}` |

@@ -587,7 +587,7 @@ function readJSON(key, fallback) {
 }
 
 // A team's ♛ button opens this: pick the queen from its running members
-// (with an optional objective for her), or disband the team.
+// (with an optional objective for her).
 function TeamManage({ team, members, refresh, onDone }) {
   const [queen, setQueen] = useState(team.queen || "");
   const [objective, setObjective] = useState("");
@@ -603,13 +603,6 @@ function TeamManage({ team, members, refresh, onDone }) {
     onDone();
     refresh();
   };
-  const disband = async () => {
-    if (!confirm(`Disband team ${team.name}? Its agents keep running.`)) return;
-    const res = await fetch(`/teams/${team.id}`, { method: "DELETE" }).catch(() => null);
-    if (!res?.ok) { alert(`Could not disband ${team.name}.`); return; }
-    onDone();
-    refresh();
-  };
   const offlineQueen = team.queen && !members.some(r => r.user_id === team.queen);
   return html`<form class="team-manage" onSubmit=${save}>
     <label>queen <select aria-label=${`Queen of ${team.name}`} value=${queen} disabled=${busy} onChange=${e => setQueen(e.target.value)}>
@@ -622,9 +615,16 @@ function TeamManage({ team, members, refresh, onDone }) {
     <div class="team-manage-actions">
       <button class="act" disabled=${busy}>${busy ? "saving…" : "save"}</button>
       <button type="button" class="mini" onClick=${onDone}>cancel</button>
-      <button type="button" class="mini disband" onClick=${disband}>disband team</button>
     </div>
   </form>`;
+}
+
+// Removing a team leaves its agents running, outside any team.
+async function removeTeam(team, refresh) {
+  if (!confirm(`Remove team ${team.name}? Its agents keep running.`)) return;
+  const res = await fetch(`/teams/${team.id}`, { method: "DELETE" }).catch(() => null);
+  if (!res?.ok) { alert(`Could not remove ${team.name}.`); return; }
+  refresh();
 }
 
 // Every agent control lives here. Running agents sit in outlined,
@@ -632,7 +632,7 @@ function TeamManage({ team, members, refresh, onDone }) {
 // agent is one small chip that opens its page (which has "stop agent", the
 // way to stop one on a touch screen). Chips drag between groups to change
 // team, or onto the stop zone that shows during a drag. Each team's ♛
-// button picks its queen or disbands it. Offline agents can be retired.
+// button picks its queen, and its ✕ removes the team. Offline agents can be retired.
 // New teams and spawning sit at the bottom.
 function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUser = null }) {
   const [dragging, setDragging] = useState(null);
@@ -692,8 +692,11 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       <summary><span class="team-bees-name">${g.name}</span>
         <span class="team-bees-counts">${g.members.length}${busy ? html` · <span class="working">${busy} working</span>` : ""}${attention ? html` · <span class="attn">${attention} need you</span>` : ""}</span>
         ${team && html`<button type="button" class="team-bees-manage" aria-pressed=${managing === g.key}
-          aria-label=${`Queen and settings for ${g.name}`} title=${team.queen ? `queen: ${team.queen} · change queen or disband` : "pick a queen or disband"}
-          onClick=${e => { e.preventDefault(); e.stopPropagation(); setManaging(m => m === g.key ? null : g.key); }}>♛</button>`}</summary>
+          aria-label=${`Pick queen for ${g.name}`} title=${team.queen ? `queen: ${team.queen} · change queen` : "pick a queen"}
+          onClick=${e => { e.preventDefault(); e.stopPropagation(); setManaging(m => m === g.key ? null : g.key); }}>♛</button>`}
+        ${team && html`<button type="button" class="team-bees-manage team-bees-remove"
+          aria-label=${`Remove team ${g.name}`} title="remove team (its agents keep running)"
+          onClick=${e => { e.preventDefault(); e.stopPropagation(); removeTeam(team, refresh); }}>✕</button>`}</summary>
       ${managing === g.key && team && html`<${TeamManage} key=${`${g.key}:${team.queen}`} team=${team} members=${g.members} refresh=${refresh} onDone=${() => setManaging(null)} />`}
       <div class="team-bees-chips">${empty && dragging && html`<span class="team-bees-empty">drop here</span>`}${g.members.map(r => {
         const st = STATE[agentStatus(r)] || STATE.unknown;
