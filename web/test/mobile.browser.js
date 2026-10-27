@@ -1124,3 +1124,28 @@ for (const platform of ['MacIntel', 'Linux x86_64']) {
     } finally { await page.close(); }
   });
 }
+
+test('waggle dance button sends every bee round a figure eight, then home', async () => {
+  const { page, errors } = await setup(1440, 900, false);
+  try {
+    await page.goto(base);
+    await page.waitForFunction(() => window.__hive && window.__hive.bees().size > 1);
+    const spots = () => page.evaluate(() =>
+      [...window.__hive.bees()].map(([name, b]) => ({ name, x: b.x, y: b.y })));
+    const before = await spots();
+    await page.getByRole('button', { name: /waggle dance/ }).click();
+    assert.equal(await page.evaluate(() => window.__hive.dancing()), true);
+    await page.waitForTimeout(2500);
+    const mid = await spots();
+    // Mid-dance the bees share one figure eight around the canvas middle.
+    const width = await page.evaluate(() => document.querySelector('canvas').clientWidth);
+    const rx = Math.min(width * .38, 300);
+    for (const b of mid) {
+      assert.ok(Math.abs(b.x - width / 2) <= rx + 10, `${b.name} x ${b.x}`);
+      assert.ok(Math.abs(b.y - 128) <= rx * .32 + 10, `${b.name} y ${b.y}`);
+    }
+    assert.ok(mid.some((b, i) => Math.hypot(b.x - before[i].x, b.y - before[i].y) > 40));
+    await page.waitForFunction(() => !window.__hive.dancing(), null, { timeout: 8000 });
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});

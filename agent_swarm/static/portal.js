@@ -1285,6 +1285,7 @@ function AttachmentPicker({ files, controls, disabled = false }) {
 //#region web/src/hive.js
 var TASK_CELL_RADIUS = 18;
 var TASK_CELL_CLEARANCE = 22;
+var DANCE_MS = 7e3;
 function taskCellClearsTeams(point, boxes) {
 	return boxes.every((box) => point.x <= box.x - TASK_CELL_CLEARANCE || point.x >= box.x + box.w + TASK_CELL_CLEARANCE || point.y <= box.y - TASK_CELL_CLEARANCE || point.y >= box.y + box.h + TASK_CELL_CLEARANCE);
 }
@@ -1402,6 +1403,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 	const dragBoxRef = A(null);
 	const teamBoxesRef = A([]);
 	const drawRef = A(null);
+	const danceRef = A(null);
 	const [dropStatus, setDropStatus] = d("");
 	stateRef.current = state;
 	const legendHarnesses = harnessChoices(state.recipients);
@@ -1777,8 +1779,51 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				bee.x = Math.max(16, Math.min(width - 16, bee.x));
 				bee.y = Math.max(34, Math.min(bee.picked || bee.working ? 208 : 224, bee.y));
 			}
+			const dance = danceRef.current;
+			if (dance && !still) {
+				const u = (now - dance.start) / DANCE_MS;
+				if (u >= 1) danceRef.current = null;
+				else if (u >= 0) {
+					const ease = (v) => v * v * (3 - 2 * v);
+					const mix = ease(Math.min(1, u / .15, (1 - u) / .15));
+					const rx = Math.min(width * .38, 300);
+					const loop = (t) => {
+						const s = Math.sin(t), c = Math.cos(t), k = 1 + s * s;
+						return {
+							x: center.x + rx * c / k,
+							y: 128 + rx * .62 * s * c / k
+						};
+					};
+					ctx.save();
+					ctx.strokeStyle = `rgba(242,169,59,${.28 * mix})`;
+					ctx.setLineDash([2, 5]);
+					ctx.beginPath();
+					for (let k = 0; k <= 96; k++) {
+						const p = loop(k / 96 * Math.PI * 2);
+						k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+					}
+					ctx.stroke();
+					ctx.restore();
+					beeData.forEach((bee, i) => {
+						const t = u * Math.PI * 4 + i / (beeData.length + .5) * Math.PI * 2;
+						const a = loop(t), b = loop(t + .01);
+						const tx = b.x - a.x, ty = b.y - a.y;
+						const len = Math.hypot(tx, ty) || 1;
+						const middle = Math.exp(-(((a.x - center.x) / 60) ** 2));
+						const shimmy = Math.sin(now / 35) * 7 * middle;
+						const fx = a.x - ty / len * shimmy, fy = a.y + tx / len * shimmy;
+						bee.x += (fx - bee.x) * mix;
+						bee.y += (fy - bee.y) * mix;
+						if (mix > .5) {
+							bee.dx = tx;
+							bee.dy = ty;
+						}
+						bee.dancing = true;
+					});
+				}
+			}
 			for (const bee of beeData) {
-				const { r, name, harness, x, y, dx, dy, q, picked, assigned, primary, extras, working, busy } = bee;
+				const { r, name, harness, x, y, dx, dy, q, picked, assigned, primary, extras, working, busy, dancing } = bee;
 				const doing = r.summaries && r.summaries[0];
 				bees.set(name, {
 					x,
@@ -1808,7 +1853,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 					ctx.stroke();
 					ctx.restore();
 				}
-				const flap = still ? 0 : Math.sin(now / 1e3 * (busy ? 44 : 30)) * .35;
+				const flap = still ? 0 : Math.sin(now / 1e3 * (dancing ? 60 : busy ? 44 : 30)) * .35;
 				ctx.fillStyle = "rgba(240,230,210,.5)";
 				ctx.beginPath();
 				ctx.ellipse(-2, -7, 6, 3, -.45 - flap, 0, Math.PI * 2);
@@ -2311,7 +2356,8 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		window.__hive = {
 			bees: () => beesRef.current,
 			teamBoxes: () => teamBoxesRef.current,
-			taskCells: () => taskCellsRef.current
+			taskCells: () => taskCellsRef.current,
+			dancing: () => danceRef.current !== null
 		};
 		canvas.addEventListener("mousemove", move);
 		canvas.addEventListener("mouseleave", leave);
@@ -2376,6 +2422,11 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
             title=${harness === h.key ? "Click to show all harnesses" : `Highlight only ${h.label} agents`}
             onClick=${() => setHarness(harness === h.key ? null : h.key)}>
             <span class="harness-swatch" style=${`--harness:${h.color}`}>${h.mark}</span>${h.label}</button>`)}
+      ${!compact && !matchMedia("(prefers-reduced-motion: reduce)").matches && m$1`<button type="button" class="hive-dance"
+        title="Every bee flies a figure eight for a few seconds"
+        onClick=${() => {
+		if (!danceRef.current) danceRef.current = { start: performance.now() };
+	}}>🐝 waggle dance</button>`}
     </div>
     <div class="hive-task-picker"><label>Expand task <select value=${selectedTask ?? ""}
       onChange=${(e) => setSelectedTask(e.target.value ? Number(e.target.value) : null)}>

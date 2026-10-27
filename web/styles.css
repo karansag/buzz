@@ -698,6 +698,8 @@ main.dashboard-layout.roster-open { grid-template-columns: minmax(0,1fr) 340px; 
 button.harness-key { padding: 2px 5px; border: 1px solid transparent; border-radius: 5px; background: none; color: inherit; font: inherit; cursor: pointer; }
 button.harness-key:hover { border-color: var(--line); color: var(--cream); }
 button.harness-key[aria-pressed=true] { border-color: var(--honey-dim); color: var(--honey); background: rgba(242,169,59,.08); }
+.hive-dance { padding: 2px 7px; border: 1px solid var(--honey-dim); border-radius: 5px; background: rgba(242,169,59,.08); color: var(--honey); font: inherit; cursor: pointer; white-space: nowrap; }
+.hive-dance:hover { background: rgba(242,169,59,.18); }
 .agents-panel .compact-hive { padding: 0; }
 .agents-panel aside.roster { padding: 0; border: 0; position: static; max-height: none; }
 .roster-drawer .agents-panel { padding: 0; }
