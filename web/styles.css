@@ -308,6 +308,7 @@
     display: flex; align-items: center; gap: 9px; margin: 8px 0 0 23px; min-width: 0;
     color: var(--cream-dim); font-size: 10.5px;
   }
+  .composer .compose-meta[hidden] { display: none; }
   .composer .context {
     width: 150px; min-width: 0; padding: 4px 7px; border-radius: 5px; font-size: 10.5px;
     background: var(--ink-2); color: var(--cream); border: 1px solid var(--line); font-family: var(--mono);
@@ -374,6 +375,7 @@
   /* ---------- threads ---------- */
   .thread { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 14px; overflow: hidden; background: var(--ink-2); animation: rise .45s ease backwards; }
   .thread-head { display: flex; align-items: stretch; }
+  .thread-participants { display: contents; }
   .thread-head > .bar:disabled { cursor: default; color: var(--cream); }
   .thread-focus {
     flex: none; border: 0; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line);
@@ -835,7 +837,48 @@ form.team-manage input { flex-basis: 100%; }
   .compose-image img { max-width: 120px; height: 64px; object-fit: contain; }
   .thread-head > .bar { flex-wrap: wrap; overflow-wrap: anywhere; font-size: 16px; }
   .thread-head > .bar .n { white-space: nowrap; }
-  .thread.focused { inset: 0; border-radius: 0; border: 0; }
+  .thread.focused {
+    inset: 0; top: var(--chat-top, 0px); bottom: auto;
+    height: var(--chat-height, 100dvh); box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px); border-radius: 0; border: 0;
+  }
+  .thread.focused .thread-head { flex: none; height: 52px; }
+  .thread.focused .thread-head > .bar { padding: 4px 12px; flex-wrap: nowrap; gap: 0; }
+  .thread.focused .thread-participants {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .thread.focused .thread-chevron, .thread.focused .thread-head .n,
+  .thread.focused .focus-key-hint, .thread.focused .focus-label { display: none; }
+  .thread.focused .thread-focus { width: 44px; padding: 0; }
+  .thread.focused .thread-focus-toggle { font-size: 18px; }
+  .thread.focused .msgs { min-height: 0; padding: 10px 8px; }
+  .thread.focused .msg .bubble { padding: .5em .65em; }
+  .thread .compact-composer {
+    flex: none; padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+    max-height: 45%; overflow-y: auto; overscroll-behavior: contain;
+  }
+  .compact-composer .compose-row { align-items: flex-end; gap: 6px; }
+  .compact-composer .compose-options-toggle {
+    flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px;
+    background: var(--ink-2); color: var(--honey); font: 24px var(--mono);
+  }
+  .thread .compact-composer textarea {
+    min-height: max(44px, calc(1.45em + 22px)); max-height: min(120px, 20dvh); resize: none;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 20px;
+    background: var(--ink-2); box-sizing: border-box;
+  }
+  .compact-composer .compose-row > .act {
+    flex: none; min-height: 44px; padding: 8px 12px; border-radius: 22px;
+  }
+  .compact-composer:not(.options-open) .attachment-tools { display: none; }
+  .compact-composer .attachment-tools { margin: 8px 0 0; }
+  .compact-composer .attachment-tools > span { display: none; }
+  .compact-composer .compose-meta { gap: 6px; }
+  .compact-composer .context { flex: 1 1 180px; width: auto; }
+  .compact-composer .count { display: none; }
+  .compact-composer .actions { width: auto; margin-left: auto; }
+  .compact-composer .compose-images { margin-top: 8px; max-height: 120px; overflow-y: auto; }
+  .compact-composer .compose-status { padding: 4px 6px 0; color: var(--cream-dim); font-size: 11px; overflow-wrap: anywhere; }
   .msgs { grid-template-columns: minmax(0, 1fr); padding: 12px; }
   .msg { min-width: 0; max-width: 100%; }
   .msg .tag { overflow-wrap: anywhere; }

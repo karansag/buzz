@@ -309,6 +309,102 @@ test('a conversation expands to fill the window and back (button, shortcut, Esc)
   } finally { await page.close(); }
 });
 
+for (const [width, height] of [[320,568], [390,844], [430,932], [844,390]]) {
+  test(`mobile focused chat gives messages most of the screen at ${width}x${height}`, async () => {
+    const { page, state, errors } = await setup(width, height);
+    state.messages.push({ id: 3, sender: names[1], recipient: 'owner', content: 'A long agent handle should leave room for messages.', ts: state.now, status: 'delivered' });
+    try {
+      await page.goto(base + `#/agent/${names[1]}`);
+      await page.getByRole('button', { name: 'Focus conversation', exact: true }).first().tap();
+      const chat = page.locator('.thread.focused');
+      const history = await chat.locator('.msgs').boundingBox();
+      const header = await chat.locator('.thread-head').boundingBox();
+      const composer = await chat.locator('.composer').boundingBox();
+      assert.ok(history.height > height * (width > height ? .7 : .75), `history only ${history.height}/${height}px`);
+      assert.ok(header.height <= 56, `header takes ${header.height}px`);
+      assert.ok(composer.height <= 80, `empty composer takes ${composer.height}px`);
+      assert.ok(Math.abs(composer.y + composer.height - height) <= 1);
+      assert.equal(await chat.locator('.composer .context').isVisible(), false);
+      assert.equal(await chat.getByRole('button', {name:'+ attach files', exact:true}).isVisible(), false);
+      assert.equal(await chat.locator('.focus-key-hint').isVisible(), false);
+      assert.equal(await chat.locator('.composer textarea').evaluate(e => document.activeElement === e), false);
+      const overflow = await chat.evaluate(e => e.scrollWidth > e.clientWidth || e.scrollHeight > e.clientHeight);
+      assert.equal(overflow, false);
+      for (let i = 0; i < 5; i++) await chat.getByRole('button', {name:'Larger text'}).tap();
+      await chat.locator('textarea').fill('Hi');
+      const input = await chat.locator('textarea').evaluate(e => ({
+        font: getComputedStyle(e).fontSize, height: e.clientHeight, content: e.scrollHeight,
+      }));
+      assert.equal(input.font, '26px');
+      assert.ok(input.content <= input.height + 1, 'large text is clipped inside the composer');
+      await chat.getByRole('button', { name: 'Close focused conversation' }).tap();
+      assert.equal(await page.locator('.thread.focused').count(), 0);
+      assert.equal(await page.locator('.thread .composer .context').first().isVisible(), true);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
+test('focused mobile chat keeps attachments, context, drafts and send accessible', async () => {
+  const { page, errors } = await setup(390,844);
+  const sent = [];
+  await page.route('**/attachments', r => r.fulfill({json:{name:file}}));
+  await page.route('**/owner/send', async r => {
+    sent.push(r.request().postDataJSON());
+    await r.fulfill({json:{ok:true,status:'delivered',message_id:3}});
+  });
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const draft = page.locator('.thread .composer textarea').first();
+    await draft.fill('Keep this draft when focusing.');
+    await page.getByRole('button', {name:'Focus conversation', exact:true}).first().tap();
+    const chat = page.locator('.thread.focused');
+    const composer = chat.locator('.composer');
+    assert.equal(await composer.locator('textarea').inputValue(), 'Keep this draft when focusing.');
+    const options = composer.getByRole('button', {name:'Message options'});
+    await options.tap();
+    assert.equal(await options.getAttribute('aria-expanded'), 'true');
+    assert.equal(await composer.getByRole('button', {name:'+ attach files', exact:true}).isVisible(), true);
+    await composer.getByRole('textbox', {name:'Optional context tag'}).fill('mobile-review');
+    await composer.locator('input[type=file]').setInputFiles({name:'review.txt',mimeType:'text/plain',buffer:Buffer.from('chat layout')});
+    await composer.getByRole('button', {name:/Remove/}).waitFor();
+    await options.tap();
+    assert.equal(await composer.getByRole('button', {name:/Remove/}).isVisible(), true);
+    await composer.getByRole('button', {name:'send', exact:true}).tap();
+    await composer.getByRole('status').filter({hasText:'delivered'}).waitFor();
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].content, 'Keep this draft when focusing.');
+    assert.equal(sent[0].context, 'mobile-review');
+    assert.deepEqual(sent[0].attachments, [file]);
+    assert.equal(await composer.locator('textarea').inputValue(), '');
+    assert.equal(await options.getAttribute('aria-expanded'), 'false');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('mobile focused composer follows a resized and panned visual viewport', async () => {
+  const { page, errors } = await setup(390,844);
+  try {
+    await page.goto(base + '#/agent/stoat');
+    await page.getByRole('button', {name:'Focus conversation', exact:true}).first().tap();
+    await page.locator('.thread.focused textarea').fill('Typing with the keyboard open');
+    // Model the viewport events iOS emits when its software keyboard opens.
+    await page.evaluate(() => {
+      Object.defineProperty(visualViewport, 'height', {configurable:true, value:420});
+      Object.defineProperty(visualViewport, 'offsetTop', {configurable:true, value:24});
+      visualViewport.dispatchEvent(new Event('resize'));
+      visualViewport.dispatchEvent(new Event('scroll'));
+    });
+    const chat = await page.locator('.thread.focused').boundingBox();
+    const composer = await page.locator('.thread.focused .composer').boundingBox();
+    assert.equal(chat.y, 24);
+    assert.equal(chat.height, 420);
+    assert.ok(Math.abs(composer.y + composer.height - 444) <= 1);
+    assert.ok((await page.locator('.thread.focused .msgs').boundingBox()).height > 250);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 test('desktop: the roster runs to the top and the header stops at its edge', async () => {
   const { page, errors } = await setup(1500, 900, false);
   try {

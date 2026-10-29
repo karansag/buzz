@@ -877,7 +877,10 @@ function newClientId() {
 // the message by its client id, so a re-send never delivers it twice.
 const RESEND_DELAYS_MS = [1000, 3000, 6000];
 
-function MessageComposer({ recipient, refresh, autoFocus = false }) {
+function MessageComposer({ recipient, refresh, autoFocus = false, focused = false }) {
+  const narrow = useMedia(COMPACT_LAYOUT);
+  const compact = focused && narrow;
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [text, setText] = useState("");
   const [context, setContext] = useState("");
   const [images, setImages] = useState([]);
@@ -914,7 +917,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false }) {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [text]);
+  }, [text, compact]);
   useEffect(() => {
     let timer;
     const onOutcome = (e) => {
@@ -959,6 +962,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false }) {
       attachments: images, ts: Date.now() / 1000,
     };
     setSending(true);
+    setOptionsOpen(false);
     setStatus("sending…");
     setText("");
     setContext("");
@@ -1025,31 +1029,38 @@ function MessageComposer({ recipient, refresh, autoFocus = false }) {
     setStatus("");
     composerRef.current?.focus();
   };
-  return html`<form class=${`composer ${dragging ? "dragging" : ""}`} onSubmit=${send} ...${sending ? {} : attachments.dropProps}>
+  const submit = html`<button class="act" type="submit" disabled=${!canSend}>
+    ${sending ? "sending…" : uploading ? "uploading…" : "send"}
+  </button>`;
+  const optionsId = `compose-options-${encodeURIComponent(recipient)}`;
+  return html`<form class=${`composer ${compact ? "compact-composer" : ""} ${optionsOpen ? "options-open" : ""} ${dragging ? "dragging" : ""}`} onSubmit=${send} ...${sending ? {} : attachments.dropProps}>
     <div class="compose-row">
-      <span class="mark">❯</span>
-      <textarea ref=${composerRef} value=${text} rows="2"
+      ${compact ? html`<button type="button" class="compose-options-toggle" aria-label="Message options"
+        aria-expanded=${optionsOpen} aria-controls=${optionsId}
+        onClick=${() => setOptionsOpen(v => !v)}>${optionsOpen ? "×" : "+"}</button>`
+        : html`<span class="mark">❯</span>`}
+      <textarea ref=${composerRef} value=${text} rows=${compact ? 1 : 2}
         onInput=${e => setText(e.target.value)}
         onPaste=${sending ? undefined : attachments.onPaste}
         onKeyDown=${e => {
           if (e.key === "Enter" && !e.shiftKey && !(e.metaKey || e.ctrlKey)) send(e);
         }}
-        placeholder=${`Message ${recipient}… (paste or drop files)`} aria-label=${`Message ${recipient} as owner`} />
+        placeholder=${compact ? "Message…" : `Message ${recipient}… (paste or drop files)`} aria-label=${`Message ${recipient} as owner`} />
+      ${compact && submit}
     </div>
     <${AttachmentPicker} files=${images} controls=${attachments} disabled=${sending} />
-    <div class="compose-meta">
+    <div id=${optionsId} class="compose-meta" hidden=${compact && !optionsOpen}>
       <input class="context" type="text" value=${context} onInput=${e => setContext(e.target.value)}
         placeholder="context tag (optional)" aria-label="Optional context tag" />
       <span class="count">${text.length} character${text.length === 1 ? "" : "s"}${images.length > 0 ? ` · ${images.length} file${images.length === 1 ? "" : "s"}` : ""}</span>
-      <span class="hint">Enter to send · Shift + Enter for a new line</span>
+      ${!compact && html`<span class="hint">Enter to send · Shift + Enter for a new line</span>`}
       <div class="actions">
-        ${status && html`<span class=${status.startsWith("delivery failed") || status.startsWith("image not added") ? "error" : "sent"} role="status">${status}</span>`}
+        ${!compact && status && html`<span class=${status.startsWith("delivery failed") || status.startsWith("image not added") ? "error" : "sent"} role="status">${status}</span>`}
         ${(text || context || images.length > 0) && html`<button type="button" class="mini" onClick=${clearDraft}>clear</button>`}
-        <button class="act" type="submit" disabled=${!canSend}>
-          ${sending ? "sending…" : uploading ? "uploading…" : "send"}
-        </button>
+        ${!compact && submit}
       </div>
     </div>
+    ${compact && status && html`<div class="compose-status" role="status">${status}</div>`}
   </form>`;
 }
 
@@ -1084,6 +1095,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   // also answers to Cmd/Ctrl+Shift+L, including from the reply box; Esc leaves.
   // A teammate switch made in focus mode lands in focus mode.
   const [focused, setFocused] = useState(() => !!(recipient && switchCarry?.focus));
+  const threadRef = useRef(null);
   const focusMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const focusShortcut = focusMac ? "⌘⇧L" : "Ctrl+Shift+L";
   const [focusFont, setFocusFont] = useState(() => {
@@ -1129,6 +1141,24 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   useEffect(() => {
     document.documentElement.classList.toggle("thread-focus-open", focused);
     return () => document.documentElement.classList.remove("thread-focus-open");
+  }, [focused]);
+  // Mobile keyboards shrink/pan the visual viewport without necessarily
+  // resizing the layout viewport. Keep the bottom composer above the keyboard.
+  useLayoutEffect(() => {
+    const viewport = window.visualViewport;
+    if (!focused || !viewport) return;
+    const el = threadRef.current;
+    const fitViewport = () => {
+      el.style.setProperty("--chat-top", `${viewport.offsetTop}px`);
+      el.style.setProperty("--chat-height", `${viewport.height}px`);
+    };
+    fitViewport();
+    viewport.addEventListener("resize", fitViewport);
+    viewport.addEventListener("scroll", fitViewport);
+    return () => {
+      viewport.removeEventListener("resize", fitViewport);
+      viewport.removeEventListener("scroll", fitViewport);
+    };
   }, [focused]);
   useLayoutEffect(() => {
     const onKey = (e) => {
@@ -1187,14 +1217,14 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     e.preventDefault();
     resizeTo(next);
   };
-  return html`<div class=${`thread ${focused ? "focused" : ""}`} role=${focused ? "dialog" : null}
+  return html`<div ref=${threadRef} class=${`thread ${focused ? "focused" : ""}`} role=${focused ? "dialog" : null}
       style=${focused ? { "--focus-font": `${focusFont}px` } : null}
       aria-label=${focused ? `Conversation ${a} and ${b}` : null}>
     <div class="thread-head">
       <button type="button" class="bar thread-toggle" aria-expanded=${expanded} aria-controls=${bodyId}
           disabled=${focused} onClick=${() => setExpanded(v => !v)}>
         <span class="thread-chevron" aria-hidden="true">${expanded ? "▾" : "▸"}</span>
-        ${disp(a)} <span class="swap">⇄</span> ${disp(b)}
+        <span class="thread-participants">${disp(a)} <span class="swap">⇄</span> ${disp(b)}</span>
         <span class="n">${msgs.length} msg${msgs.length === 1 ? "" : "s"}</span>
       </button>
       ${focused && html`
@@ -1204,9 +1234,10 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
           disabled=${focusFont >= FOCUS_FONT.max} onClick=${() => stepFont(FOCUS_FONT.step)}>A+</button>`}
       ${peer && !focused && html`<a class="thread-focus thread-goto" href=${`#/agent/${encodeURIComponent(peer)}`}
         title=${`Go to ${peer}'s page to message them`}>open ${peer} →</a>`}
-      <button type="button" class="thread-focus" aria-pressed=${focused} onClick=${toggleFocus}
+      <button type="button" class="thread-focus thread-focus-toggle" aria-pressed=${focused} onClick=${toggleFocus}
+        aria-label=${focused ? "Close focused conversation" : "Focus conversation"}
         title=${focused ? `Back to the page (Esc or ${focusShortcut})` : `Expand this conversation to fill the window${recipient ? ` (${focusShortcut})` : ""}`}>
-        ${focused ? "✕ close" : "⤢ focus"}${recipient && html` <span class="focus-key-hint">${focusShortcut}</span>`}</button>
+        <span aria-hidden="true">${focused ? "✕" : "⤢"}</span><span class="focus-label">${focused ? " close" : " focus"}</span>${recipient && html` <span class="focus-key-hint">${focusShortcut}</span>`}</button>
     </div>
     <div id=${bodyId} class="thread-body" hidden=${!expanded}>
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
@@ -1235,7 +1266,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       onPointerUp=${resizeEnd} onPointerCancel=${resizeEnd} onKeyDown=${resizeKey}>
       <span>drag to resize history</span>
     </button>
-    ${recipient && html`<${MessageComposer} recipient=${recipient} refresh=${refresh} autoFocus=${!!page} />`}
+    ${recipient && html`<${MessageComposer} recipient=${recipient} refresh=${refresh} autoFocus=${!!page} focused=${focused} />`}
     </div>
   </div>`;
 }

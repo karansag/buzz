@@ -9190,7 +9190,10 @@ var RESEND_DELAYS_MS = [
 	3e3,
 	6e3
 ];
-function MessageComposer({ recipient, refresh, autoFocus = false }) {
+function MessageComposer({ recipient, refresh, autoFocus = false, focused = false }) {
+	const narrow = useMedia(COMPACT_LAYOUT);
+	const compact = focused && narrow;
+	const [optionsOpen, setOptionsOpen] = d(false);
 	const [text, setText] = d("");
 	const [context, setContext] = d("");
 	const [images, setImages] = d([]);
@@ -9221,7 +9224,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false }) {
 		if (!el) return;
 		el.style.height = "auto";
 		el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-	}, [text]);
+	}, [text, compact]);
 	h(() => {
 		let timer;
 		const onOutcome = (e) => {
@@ -9299,6 +9302,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false }) {
 			ts: Date.now() / 1e3
 		};
 		setSending(true);
+		setOptionsOpen(false);
 		setStatus("sending…");
 		setText("");
 		setContext("");
@@ -9374,31 +9378,37 @@ function MessageComposer({ recipient, refresh, autoFocus = false }) {
 		setStatus("");
 		composerRef.current?.focus();
 	};
-	return m$1`<form class=${`composer ${dragging ? "dragging" : ""}`} onSubmit=${send} ...${sending ? {} : attachments.dropProps}>
+	const submit = m$1`<button class="act" type="submit" disabled=${!canSend}>
+    ${sending ? "sending…" : uploading ? "uploading…" : "send"}
+  </button>`;
+	const optionsId = `compose-options-${encodeURIComponent(recipient)}`;
+	return m$1`<form class=${`composer ${compact ? "compact-composer" : ""} ${optionsOpen ? "options-open" : ""} ${dragging ? "dragging" : ""}`} onSubmit=${send} ...${sending ? {} : attachments.dropProps}>
     <div class="compose-row">
-      <span class="mark">❯</span>
-      <textarea ref=${composerRef} value=${text} rows="2"
+      ${compact ? m$1`<button type="button" class="compose-options-toggle" aria-label="Message options"
+        aria-expanded=${optionsOpen} aria-controls=${optionsId}
+        onClick=${() => setOptionsOpen((v) => !v)}>${optionsOpen ? "×" : "+"}</button>` : m$1`<span class="mark">❯</span>`}
+      <textarea ref=${composerRef} value=${text} rows=${compact ? 1 : 2}
         onInput=${(e) => setText(e.target.value)}
         onPaste=${sending ? void 0 : attachments.onPaste}
         onKeyDown=${(e) => {
 		if (e.key === "Enter" && !e.shiftKey && !(e.metaKey || e.ctrlKey)) send(e);
 	}}
-        placeholder=${`Message ${recipient}… (paste or drop files)`} aria-label=${`Message ${recipient} as owner`} />
+        placeholder=${compact ? "Message…" : `Message ${recipient}… (paste or drop files)`} aria-label=${`Message ${recipient} as owner`} />
+      ${compact && submit}
     </div>
     <${AttachmentPicker} files=${images} controls=${attachments} disabled=${sending} />
-    <div class="compose-meta">
+    <div id=${optionsId} class="compose-meta" hidden=${compact && !optionsOpen}>
       <input class="context" type="text" value=${context} onInput=${(e) => setContext(e.target.value)}
         placeholder="context tag (optional)" aria-label="Optional context tag" />
       <span class="count">${text.length} character${text.length === 1 ? "" : "s"}${images.length > 0 ? ` · ${images.length} file${images.length === 1 ? "" : "s"}` : ""}</span>
-      <span class="hint">Enter to send · Shift + Enter for a new line</span>
+      ${!compact && m$1`<span class="hint">Enter to send · Shift + Enter for a new line</span>`}
       <div class="actions">
-        ${status && m$1`<span class=${status.startsWith("delivery failed") || status.startsWith("image not added") ? "error" : "sent"} role="status">${status}</span>`}
+        ${!compact && status && m$1`<span class=${status.startsWith("delivery failed") || status.startsWith("image not added") ? "error" : "sent"} role="status">${status}</span>`}
         ${(text || context || images.length > 0) && m$1`<button type="button" class="mini" onClick=${clearDraft}>clear</button>`}
-        <button class="act" type="submit" disabled=${!canSend}>
-          ${sending ? "sending…" : uploading ? "uploading…" : "send"}
-        </button>
+        ${!compact && submit}
       </div>
     </div>
+    ${compact && status && m$1`<div class="compose-status" role="status">${status}</div>`}
   </form>`;
 }
 var FOCUS_FONT = {
@@ -9425,6 +9435,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	const peer = other && agents?.has(other) ? other : null;
 	const [expanded, setExpanded] = d(!!recipient);
 	const [focused, setFocused] = d(() => !!(recipient && switchCarry?.focus));
+	const threadRef = A(null);
 	const focusMac = /Mac|iPhone|iPad/.test(navigator.platform);
 	const focusShortcut = focusMac ? "⌘⇧L" : "Ctrl+Shift+L";
 	const [focusFont, setFocusFont] = d(() => {
@@ -9478,6 +9489,22 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	h(() => {
 		document.documentElement.classList.toggle("thread-focus-open", focused);
 		return () => document.documentElement.classList.remove("thread-focus-open");
+	}, [focused]);
+	_(() => {
+		const viewport = window.visualViewport;
+		if (!focused || !viewport) return;
+		const el = threadRef.current;
+		const fitViewport = () => {
+			el.style.setProperty("--chat-top", `${viewport.offsetTop}px`);
+			el.style.setProperty("--chat-height", `${viewport.height}px`);
+		};
+		fitViewport();
+		viewport.addEventListener("resize", fitViewport);
+		viewport.addEventListener("scroll", fitViewport);
+		return () => {
+			viewport.removeEventListener("resize", fitViewport);
+			viewport.removeEventListener("scroll", fitViewport);
+		};
 	}, [focused]);
 	_(() => {
 		const onKey = (e) => {
@@ -9537,14 +9564,14 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		e.preventDefault();
 		resizeTo(next);
 	};
-	return m$1`<div class=${`thread ${focused ? "focused" : ""}`} role=${focused ? "dialog" : null}
+	return m$1`<div ref=${threadRef} class=${`thread ${focused ? "focused" : ""}`} role=${focused ? "dialog" : null}
       style=${focused ? { "--focus-font": `${focusFont}px` } : null}
       aria-label=${focused ? `Conversation ${a} and ${b}` : null}>
     <div class="thread-head">
       <button type="button" class="bar thread-toggle" aria-expanded=${expanded} aria-controls=${bodyId}
           disabled=${focused} onClick=${() => setExpanded((v) => !v)}>
         <span class="thread-chevron" aria-hidden="true">${expanded ? "▾" : "▸"}</span>
-        ${disp(a)} <span class="swap">⇄</span> ${disp(b)}
+        <span class="thread-participants">${disp(a)} <span class="swap">⇄</span> ${disp(b)}</span>
         <span class="n">${msgs.length} msg${msgs.length === 1 ? "" : "s"}</span>
       </button>
       ${focused && m$1`
@@ -9554,9 +9581,10 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
           disabled=${focusFont >= FOCUS_FONT.max} onClick=${() => stepFont(FOCUS_FONT.step)}>A+</button>`}
       ${peer && !focused && m$1`<a class="thread-focus thread-goto" href=${`#/agent/${encodeURIComponent(peer)}`}
         title=${`Go to ${peer}'s page to message them`}>open ${peer} →</a>`}
-      <button type="button" class="thread-focus" aria-pressed=${focused} onClick=${toggleFocus}
+      <button type="button" class="thread-focus thread-focus-toggle" aria-pressed=${focused} onClick=${toggleFocus}
+        aria-label=${focused ? "Close focused conversation" : "Focus conversation"}
         title=${focused ? `Back to the page (Esc or ${focusShortcut})` : `Expand this conversation to fill the window${recipient ? ` (${focusShortcut})` : ""}`}>
-        ${focused ? "✕ close" : "⤢ focus"}${recipient && m$1` <span class="focus-key-hint">${focusShortcut}</span>`}</button>
+        <span aria-hidden="true">${focused ? "✕" : "⤢"}</span><span class="focus-label">${focused ? " close" : " focus"}</span>${recipient && m$1` <span class="focus-key-hint">${focusShortcut}</span>`}</button>
     </div>
     <div id=${bodyId} class="thread-body" hidden=${!expanded}>
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
@@ -9585,7 +9613,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       onPointerUp=${resizeEnd} onPointerCancel=${resizeEnd} onKeyDown=${resizeKey}>
       <span>drag to resize history</span>
     </button>
-    ${recipient && m$1`<${MessageComposer} recipient=${recipient} refresh=${refresh} autoFocus=${!!page} />`}
+    ${recipient && m$1`<${MessageComposer} recipient=${recipient} refresh=${refresh} autoFocus=${!!page} focused=${focused} />`}
     </div>
   </div>`;
 }
