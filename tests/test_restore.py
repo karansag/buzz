@@ -68,7 +68,7 @@ def test_resume_commands_match_spawn_flags():
         "claude --resume abc --permission-mode auto")
     assert cmd({"flavor": "codex", "agent_id": "t1", "model": "astra"}) == (
         "codex resume t1 -c check_for_update_on_startup=false --model astra --yolo --no-daemon")
-    assert cmd({"flavor": "pi", "agent_id": "p1", "model": None}) == "pi --session p1"
+    assert cmd({"flavor": "pi", "agent_id": "p1", "model": "/m/bonsai.gguf"}) == "pi --session p1"
     assert cmd({"flavor": "hermes", "agent_id": "h1", "model": None}) == (
         "hermes --resume h1 --yolo --accept-hooks")
     assert cmd({"flavor": "unknown", "agent_id": "x", "model": None}) is None

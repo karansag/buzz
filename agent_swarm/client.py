@@ -18,6 +18,7 @@
     agent-swarm stop HANDLE   # kill that agent's tmux pane
     agent-swarm snapshot      # save this machine's tmux layout and the agent in each pane
     agent-swarm restore [--from FILE] [--apply] [--stagger SECONDS]   # after a reboot
+    agent-swarm restart HANDLE... | --all [--flavor F] [--force] [--apply]   # e.g. after a harness upgrade
 
 Defaults:
     --pane            current shell's tmux pane (via `TMUX_PANE`-targeted `tmux display-message`)
@@ -31,6 +32,7 @@ import json
 import os
 import shlex
 import sys
+import time
 import tomllib
 from urllib.parse import quote, urlparse
 
@@ -38,7 +40,7 @@ import httpx
 
 from pathlib import Path
 
-from . import bundle, config, restore, tmux
+from . import bundle, config, restart, restore, tmux
 from .tmux import current_pane, local_node
 
 
@@ -508,6 +510,56 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_restart(args: argparse.Namespace) -> int:
+    if not args.handles and not args.all:
+        print("name the agents to restart, or pass --all (optionally with --flavor)", file=sys.stderr)
+        return 2
+    server = tmux.server_id()
+    if server is None:
+        print("no tmux server is running here", file=sys.stderr)
+        return 1
+    r = httpx.get(f"{base_url()}/api/state", headers=_headers(), timeout=10)
+    if r.status_code in (401, 403):
+        # Activity, which says whether an agent is busy, is owner-only.
+        print("the hub shares agent activity only with the owner; run restart on the hub's machine",
+              file=sys.stderr)
+        return 1
+    r.raise_for_status()
+    items = restart.plan(
+        r.json()["recipients"], restore.read_layout(), local_node(), server,
+        handles=args.handles or None, flavor=args.flavor, force=args.force,
+    )
+    if not items:
+        print("no agents to restart")
+        return 0
+    own = os.environ.get("TMUX_PANE")
+    # The caller's own pane goes last: restarting it ends this command.
+    items.sort(key=lambda i: i.pane == own)
+    failed = 0
+    started = 0
+    for item in items:
+        if item.skip:
+            print(f"  skip {item.handle}: {item.skip}")
+            continue
+        if not args.apply:
+            print(f"  restart {item.handle} in {item.pane}\n      $ {item.launch}")
+            continue
+        if started and args.stagger > 0:
+            time.sleep(args.stagger)
+        if item.pane == own:
+            print(f"  restart {item.handle} (this pane): handed to tmux; this command ends here", flush=True)
+        err = restart.apply(item, own)
+        started += 1
+        if err:
+            failed += 1
+            print(f"  FAILED {item.handle}: {err}")
+        elif item.pane != own:
+            print(f"  restarted {item.handle}", flush=True)
+    if not args.apply:
+        print("dry run: nothing changed. Run again with --apply to do this.")
+    return 1 if failed else 0
+
+
 def cmd_restore(args: argparse.Namespace) -> int:
     directory = Path(args.dir).expanduser()
     path = Path(args.from_file).expanduser() if args.from_file else restore.pick(directory, tmux.server_id())
@@ -864,6 +916,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     snap.add_argument("--dir", default=str(restore.SNAPSHOT_DIR))
     snap.set_defaults(func=cmd_snapshot)
+
+    rsa = sub.add_parser(
+        "restart", help="restart agents in place with their harness's resume command, e.g. after an upgrade"
+    )
+    rsa.add_argument("handles", nargs="*", help="agents to restart")
+    rsa.add_argument("--all", action="store_true", help="every agent on this machine")
+    rsa.add_argument("--flavor", help="with --all: only this harness (claude, codex, pi, hermes)")
+    rsa.add_argument("--force", action="store_true", help="also restart agents that are working or waiting on you")
+    rsa.add_argument("--apply", action="store_true", help="do it; without this, only print the plan")
+    rsa.add_argument("--stagger", type=float, default=3.0, help="seconds between restarts")
+    rsa.set_defaults(func=cmd_restart)
 
     rst = sub.add_parser(
         "restore", help="after a reboot, recreate tmux sessions from a snapshot and resume the agents"

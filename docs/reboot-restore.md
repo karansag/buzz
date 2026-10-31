@@ -1,4 +1,4 @@
-# Coming back after a reboot
+# Coming back after a reboot, or a harness upgrade
 
 After the hub machine reboots, the hub comes back on its own: it is a systemd
 user service, and lingering is on, so it starts at boot without a login. Its
@@ -99,3 +99,33 @@ older snapshot.
   agent running `agent-swarm snapshot`.
 - It does not start at boot by itself: an agent coming back costs memory and
   tokens, so restoring is a command you run.
+
+## Restarting agents after a harness upgrade
+
+Upgrading Claude Code, Codex, or Pi does not change agents that are already
+running; each keeps the old binary until it restarts. `agent-swarm restart`
+restarts them in place, with the same resume commands restore uses:
+
+```bash
+agent-swarm restart --all                  # dry run: who, and the command for each
+agent-swarm restart --all --flavor codex   # only Codex agents
+agent-swarm restart otter tapir --apply    # named agents, for real
+```
+
+For each agent it runs `tmux respawn-pane -k` on the agent's pane: the
+pane's processes are killed and a fresh shell starts in the same pane (same
+pane id), in the directory the harness ran in. Then it types the resume
+command. The agent comes back with its conversation and re-registers under
+its handle.
+
+- Agents the hub sees working or waiting on you are skipped; `--force`
+  restarts them anyway, losing the turn in progress.
+- Anything else in the pane dies with it: background shells, watchers,
+  servers. Agents that keep long-running jobs in their pane should hand
+  them to a scheduler (Iris, systemd) or be restarted by hand.
+- Restarts are 3 seconds apart (`--stagger`).
+- An agent running `restart` on itself is restarted last, by the tmux
+  server, since its own command ends when its pane is respawned.
+- It runs on the hub's machine, for agents in that machine's tmux: it
+  needs the hub's view of who is busy, which only the owner gets. Agents
+  on another node are listed as skipped.

@@ -570,6 +570,15 @@ recreates the layout and resumes each agent by its session id (`claude
 back as themselves and get their handles back. See
 [docs/reboot-restore.md](docs/reboot-restore.md).
 
+**After a harness upgrade.** Running agents keep the old harness until
+they restart. `agent-swarm restart --all` (or `--all --flavor codex`, or
+named handles) shows which agents it would restart and the command for
+each; add `--apply` to do it. Each agent's pane is respawned in place (same
+pane, same directory) and the harness resumes the agent's session, so it
+keeps its conversation and handle. Agents that are working or waiting on
+you are skipped unless you pass `--force`; anything else running in the
+pane, such as background shells, is lost.
+
 ## CLI reference
 
 ```bash
@@ -593,6 +602,7 @@ agent-swarm stop <handle>
 agent-swarm prune [--include-shells]   # forget agents whose pane is gone
 agent-swarm snapshot             # save tmux layout + each pane's agent session
 agent-swarm restore [--apply] [--from <file>] [--stagger 5]   # after a reboot
+agent-swarm restart <handle>... | --all [--flavor <f>] [--force] [--apply]   # after a harness upgrade
 agent-swarm node-token <name>    # hub: enrol or rotate a machine
 agent-swarm nodes                # hub: enrolled machines
 agent-swarm join <hub-url> --token <token> [--node <name>]

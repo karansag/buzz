@@ -159,7 +159,9 @@ def resume_command(agent: dict) -> str | None:
         parts = ["hermes", "--resume", sid]
     if spec.startup_args:
         parts.append(spec.startup_args)
-    if model:
+    # A Pi session file records its model, and Pi's registered model can be a
+    # local file path that --model does not take.
+    if model and flavor != "pi":
         parts += [spec.model_flag, model]
     if flavor == "codex":
         # Restored Codex agents must use --yolo even if dashboard defaults change.
