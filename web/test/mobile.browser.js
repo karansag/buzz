@@ -683,6 +683,43 @@ test('chats tab lists owner conversations newest first and searches them', async
   } finally { await page.close(); }
 });
 
+test('chats tab: between agents groups talk into bursts and broadcasts, filters by team', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  const t = state.now;
+  const talk = [
+    { id: 90, sender: 'tapir', recipient: 'jerboa', content: 'can you review **#12**?', ts: t - 7200 },
+    { id: 91, sender: 'jerboa', recipient: 'tapir', content: 'on it', ts: t - 7100 },
+    { id: 92, sender: 'stoat', recipient: 'ferret', content: 'lock busy', ts: t - 60 },
+    { id: 93, sender: 'stoat', recipient: 'hedgehog', content: 'lock busy', ts: t - 59 },
+    { id: 94, sender: 'stoat', recipient: 'stoat', content: 'wake up', ts: t - 30 },
+  ].map(m => ({ ...m, status: 'delivered', attachments: [] }));
+  await page.route('**/messages?limit=*', route => route.fulfill({ json: { messages: [...talk].reverse() } }));
+  try {
+    await page.goto(base + '#/chats');
+    await page.getByRole('button', { name: 'between agents' }).click();
+    await page.waitForSelector('.agent-talk-thread');
+    assert.equal(await page.evaluate(() => location.hash), '#/chats?view=agents');
+    const rows = () => page.locator('.agent-talk-thread > summary .chat-who').evaluateAll(els => els.map(e => e.childNodes.length && e.textContent.split(/\d{1,2}:\d{2}/)[0].replace(/\s+/g, ' ').trim()));
+    assert.deepEqual(await rows(), ['stoat → ferret, hedgehog', 'jerboa ↔ tapir']);
+    assert.match(await page.locator('.agent-talk-note').innerText(), /1 notes agents left themselves are hidden/);
+    const pair = page.locator('.agent-talk-thread').nth(1);
+    await pair.locator('summary').click();
+    assert.equal(await pair.locator('.agent-talk-msg').count(), 2);
+    assert.equal(await pair.locator('.agent-talk-msg strong').first().innerText(), '#12');
+    // Team agent-swarm is stoat, numbat and hoopoe: only stoat's broadcast stays.
+    await page.getByRole('combobox', { name: 'Team' }).selectOption('1');
+    await page.waitForFunction(() => document.querySelectorAll('.agent-talk-thread').length === 1);
+    await page.getByRole('combobox', { name: 'Team' }).selectOption('');
+    await page.locator('.chats-search').fill('review');
+    await page.waitForFunction(() => document.querySelectorAll('.agent-talk-thread').length === 1);
+    assert.deepEqual(await rows(), ['jerboa ↔ tapir']);
+    await page.reload();
+    await page.waitForSelector('.agent-talk-thread');
+    assert.equal(await page.locator('.chats-search').inputValue(), 'review');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 test('phone agents panel: team view groups and collapses, and the view choice sticks', async () => {
   const { page, errors } = await setup(390, 844);
   try {

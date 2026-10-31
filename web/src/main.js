@@ -40,7 +40,7 @@ import { renderMarkdown } from "./markdown.js";
 import "../styles.css";
 import { stepTeammate, teammates } from "./teammates.js";
 import { shellNewlines } from "./newlines.js";
-import { ownerChats } from "./chats.js";
+import { agentThreads, ownerChats } from "./chats.js";
 
 /* ---------- agent controls ---------- */
 
@@ -1369,11 +1369,17 @@ function TeamStrip({ crew, user, unreadFor }) {
   </nav>`;
 }
 
-// Every conversation the owner has had, one row per agent, newest first, to
-// find whom you asked about something that never became a task. The full
-// history loads once when the tab opens; new messages come from the poll.
+// Two views. "with you": every conversation the owner has had, one row per
+// agent, newest first, to find whom you asked about something that never
+// became a task. "between agents": the agents' talk with each other, as
+// bursts per pair and broadcasts (see agentThreads), newest first under day
+// headings. Each view's history loads once when it opens; new messages come
+// from the poll.
 const CHATS_ROUTE = "#/chats";
-const chatsQuery = () => new URLSearchParams(location.hash.split("?")[1] || "").get("q") || "";
+const chatsParams = () => new URLSearchParams(location.hash.split("?")[1] || "");
+const chatsQuery = () => chatsParams().get("q") || "";
+// Agent talk beyond this many recent messages stays in each agent's own page.
+const AGENT_TALK_LIMIT = 4000;
 
 function snippet(text, words, width = 240) {
   const flat = (text || "").replace(/\s+/g, " ").trim();
@@ -1390,6 +1396,97 @@ function marked(text, words) {
 }
 
 function ChatsView({ state, unreadFor }) {
+  const [view, setView] = useState(() => (chatsParams().get("view") === "agents" ? "agents" : "you"));
+  const pick = (v) => {
+    setView(v);
+    history.replaceState(null, "", v === "agents" ? `${CHATS_ROUTE}?view=agents` : CHATS_ROUTE);
+  };
+  return html`<div class="chats">
+    <div class="agents-view-switch chats-switch" role="group" aria-label="Which chats">
+      <button type="button" aria-pressed=${view === "you"} onClick=${() => pick("you")}>with you</button>
+      <button type="button" aria-pressed=${view === "agents"} onClick=${() => pick("agents")}>between agents</button>
+    </div>
+    ${view === "agents"
+      ? html`<${AgentTalk} state=${state} />`
+      : html`<${OwnerChats} state=${state} unreadFor=${unreadFor} />`}
+  </div>`;
+}
+
+const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const dayOf = (ts) => new Date(ts * 1000).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+
+function AgentTalk({ state }) {
+  const [full, setFull] = useState(null);
+  const [query, setQuery] = useState(chatsQuery);
+  const [team, setTeam] = useState("");
+  useEffect(() => {
+    let live = true;
+    fetch(`/messages?limit=${AGENT_TALK_LIMIT}`)
+      .then(r => r.json())
+      .then(d => { if (live) setFull(d.messages || []); })
+      .catch(() => { if (live) setFull([]); });
+    return () => { live = false; };
+  }, []);
+  const update = (q) => {
+    setQuery(q);
+    history.replaceState(null, "", `${CHATS_ROUTE}?view=agents${q ? `&q=${encodeURIComponent(q)}` : ""}`);
+  };
+  const teams = state.teams || [];
+  const members = useMemo(
+    () => (team ? new Set(state.recipients.filter(r => String(r.team_id) === team).map(r => r.user_id)) : null),
+    [team, state.recipients],
+  );
+  const { threads, selfNotes } = useMemo(
+    () => agentThreads([...state.messages, ...(full || [])], { query, members }),
+    [state.messages, full, query, members],
+  );
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const oldest = full && full.length >= AGENT_TALK_LIMIT ? full[full.length - 1].ts : null;
+  let day = null;
+  return html`
+    <h2>between agents <span class="count">· ${threads.length} conversation${threads.length === 1 ? "" : "s"}${full === null ? " · loading…" : ""}</span></h2>
+    <div class="agent-talk-filters">
+      <input type="text" class="h-search chats-search" value=${query} autofocus
+        placeholder="search agent talk: a name, a task, a word…"
+        aria-label="Search agent talk" onInput=${e => update(e.target.value)}
+        onKeyDown=${e => { if (e.key === "Escape" && query) { e.stopPropagation(); update(""); } }} />
+      ${teams.length > 0 && html`<select aria-label="Team" value=${team} onChange=${e => setTeam(e.target.value)}>
+        <option value="">all teams</option>
+        ${teams.map(t => html`<option key=${t.id} value=${String(t.id)}>${t.name}</option>`)}
+      </select>`}
+    </div>
+    <p class="agent-talk-note">Grouped by pair: a quiet gap of 15 min starts a new conversation. The same text sent to several agents shows once.
+      ${selfNotes > 0 && ` ${selfNotes} notes agents left themselves are hidden.`}
+      ${oldest && ` Showing talk since ${dayOf(oldest)} ${clock(oldest)}.`}</p>
+    ${threads.length === 0
+      ? html`<div class="empty">${full === null ? "Loading…" : query || team ? "No agent talk matches." : "No agent talk yet."}</div>`
+      : html`<div class="agent-talk">${threads.map(t => {
+          const d = dayOf(t.end);
+          const heading = d !== day ? (day = d, html`<h3 class="agent-talk-day">${d}</h3>`) : null;
+          return html`${heading}<${TalkThread} key=${t.key} t=${t} words=${words} />`;
+        })}</div>`}`;
+}
+
+// One burst of agent talk; its messages render only while it is open.
+function TalkThread({ t, words }) {
+  const [open, setOpen] = useState(false);
+  const last = t.items[t.items.length - 1];
+  const title = t.broadcast
+    ? html`${t.people[0]} <span class="agent-talk-arrow">→</span> ${t.to.join(", ")}`
+    : html`${t.people[0]} <span class="agent-talk-arrow">↔</span> ${t.people[1]}`;
+  return html`<details class="agent-talk-thread" onToggle=${e => setOpen(e.currentTarget.open)}>
+    <summary>
+      <span class="chat-who">${title}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
+      <span class="chat-line"><b>${last.m.sender}:</b> ${marked(snippet(last.m.content, words, 200), words)}</span>
+    </summary>
+    ${open && html`<div class="agent-talk-msgs">${t.items.map(i => html`<div key=${i.ids[0]} class="agent-talk-msg">
+      <div class="agent-talk-hdr"><b>${i.m.sender}</b> → ${i.to.join(", ")} · ${clock(i.m.ts)}${i.m.context ? ` · ${i.m.context}` : ""}</div>
+      <div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(i.m.content)) }} />
+    </div>`)}</div>`}
+  </details>`;
+}
+
+function OwnerChats({ state, unreadFor }) {
   const [full, setFull] = useState(null);
   const [query, setQuery] = useState(chatsQuery);
   useEffect(() => {
@@ -1410,8 +1507,8 @@ function ChatsView({ state, unreadFor }) {
     [state.messages, full, query],
   );
   const byId = new Map(state.recipients.map(r => [r.user_id, r]));
-  return html`<div class="chats">
-    <h2>chats <span class="count">· ${chats.length}${full === null ? " · loading full history…" : ""}</span></h2>
+  return html`
+    <h2>with you <span class="count">· ${chats.length}${full === null ? " · loading full history…" : ""}</span></h2>
     <input type="text" class="h-search chats-search" value=${query} autofocus
       placeholder="search your conversations: who did I ask about…"
       aria-label="Search your conversations" onInput=${e => update(e.target.value)}
@@ -1432,8 +1529,7 @@ function ChatsView({ state, unreadFor }) {
               <span class="chat-line"><b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
             </span>
           </a>`;
-        })}</div>`}
-  </div>`;
+        })}</div>`}`;
 }
 
 function FocusView({ user, state, refresh, freshIds, unreadFor }) {

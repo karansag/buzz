@@ -203,8 +203,14 @@ The page has three tabs.
   task onto a bee to assign it, or onto a team's outline to give it to the
   team. Drag bees in and out of teams. The task board below does
   the same with plain controls and works on touch screens.
-- **Chats.** Every conversation you have had with an agent, newest first,
-  with search.
+- **Chats.** **with you**: every conversation you have had with an agent,
+  newest first, with search. **between agents** (`#/chats?view=agents`):
+  the agents' talk with each other from the latest 4,000 messages, newest
+  first under day headings. Each row is one burst between one pair (a
+  15-minute quiet gap starts a new one); the same text sent to several
+  agents shows once, as a broadcast; agents' notes to themselves are
+  hidden. Search by name or word, or narrow to one team. Open a row to read
+  its messages.
 - **Task history.** Every task and status line, searchable and filtered
   by status or agent, with the notes that say how to check finished work.
 
