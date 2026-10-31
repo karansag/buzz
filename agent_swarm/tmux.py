@@ -513,8 +513,14 @@ def spawn_window(
 ) -> tuple[Created | None, str | None]:
     """Create a detached tmux window (and session if needed) and optionally
     launch a command in it. Returns (Created, None) or (None, error) when
-    tmux answered; raises Uncertain when it did not report back."""
+    tmux answered; raises Uncertain when it did not report back.
+
+    The window starts in the home directory. Without -c, tmux uses the
+    session's directory, which for a session the node created is the
+    node's own: `/` under launchd.
+    """
     fmt = "#{pane_id}\t#S:#I.#P\t#{pid}:#{start_time}"
+    home = str(Path.home())
     try:
         has = subprocess.run(
             ["tmux", "has-session", "-t", session],
@@ -527,7 +533,7 @@ def spawn_window(
     try:
         if has.returncode != 0:
             out = subprocess.run(
-                ["tmux", "new-session", "-d", "-s", session,
+                ["tmux", "new-session", "-d", "-s", session, "-c", home,
                  "-x", "220", "-y", "50", "-P", "-F", fmt],
                 capture_output=True,
                 text=True,
@@ -536,7 +542,7 @@ def spawn_window(
             )
         else:
             out = subprocess.run(
-                ["tmux", "new-window", "-d", "-t", session, "-P", "-F", fmt],
+                ["tmux", "new-window", "-d", "-t", session, "-c", home, "-P", "-F", fmt],
                 capture_output=True,
                 text=True,
                 check=True,

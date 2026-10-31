@@ -212,3 +212,27 @@ def test_spawn_window_reports_the_pane_with_the_server_that_made_it(monkeypatch)
 def test_login_shell_falls_back_to_the_account_shell(monkeypatch):
     monkeypatch.delenv("SHELL", raising=False)  # launchd gives none
     assert tmux.login_shell().startswith("/")
+
+
+def test_spawn_window_starts_in_the_home_directory(monkeypatch):
+    # A node under launchd runs in /, and tmux would start the window there.
+    import subprocess
+    from pathlib import Path
+
+    calls = []
+    outcomes = iter([
+        subprocess.CompletedProcess([], 1, "", ""),  # has-session: no session yet
+        subprocess.CompletedProcess([], 0, "%9\tagents:0.0\t4242:1700000000\n", ""),
+        subprocess.CompletedProcess([], 0, "", ""),
+        subprocess.CompletedProcess([], 0, "%10\tagents:1.0\t4242:1700000000\n", ""),
+    ])
+    def run(cmd, **kw):
+        calls.append(cmd)
+        return next(outcomes)
+    monkeypatch.setattr(tmux.subprocess, "run", run)
+    home = str(Path.home())
+    tmux.spawn_window()
+    tmux.spawn_window()
+    created = [c for c in calls if c[1] in ("new-session", "new-window")]
+    assert [c[1] for c in created] == ["new-session", "new-window"]
+    assert all(c[c.index("-c") + 1] == home for c in created)
