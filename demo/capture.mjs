@@ -3,7 +3,7 @@
 // same way web/test/mobile.browser.js does, so it never contacts a hub.
 //
 //   npm ci && npm run build
-//   npx playwright install chromium   # once
+//   google-chrome --version          # patched stable Chrome required
 //   node demo/capture.mjs              # needs ffmpeg and ImageMagick
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
@@ -116,7 +116,7 @@ async function mock(page, state) {
 const out = new URL('.', import.meta.url).pathname;
 const server = await preview({ preview: { host: '127.0.0.1', port: 0, open: false } });
 const base = `http://127.0.0.1:${server.httpServer.address().port}/portal.html`;
-const browser = await chromium.launch();
+const browser = await chromium.launch({ channel: 'chrome', chromiumSandbox: true });
 
 async function open(viewport, hash, extra = {}) {
   const state = makeState();

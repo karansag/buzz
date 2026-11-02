@@ -1,4 +1,4 @@
-// Run `npx playwright install chromium` once, then `npm run test:browser`.
+// Uses installed stable Chrome with its sandbox enabled: `npm run test:browser`.
 // Uses the production bundle and isolated API fixtures; never contacts a hub.
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
@@ -10,7 +10,7 @@ let browser, server, base;
 before(async () => {
   server = await preview({ preview: { host: '127.0.0.1', port: 0, open: false } });
   base = `http://127.0.0.1:${server.httpServer.address().port}/portal.html`;
-  browser = await chromium.launch();
+  browser = await chromium.launch({ channel: 'chrome', chromiumSandbox: true });
 });
 after(async () => {
   await browser?.close();

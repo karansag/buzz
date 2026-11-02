@@ -16,7 +16,7 @@ the script adds messages and finishes tasks.
 
 ```bash
 npm ci && npm run build
-npx playwright install chromium   # once
+google-chrome --version          # patched stable Chrome required
 node demo/capture.mjs             # needs ffmpeg and ImageMagick (convert)
 ```
 
