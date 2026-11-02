@@ -4,9 +4,9 @@ A snapshot records every tmux session, window, and pane, with each pane's
 working directory, and for each pane running a registered agent the harness
 session id that resumes it (`claude --resume ID`, `codex resume ID`, ...).
 The session id, not the directory, says which conversation a pane held, so
-agents sharing a directory come back as themselves. A resumed harness
-re-registers from its startup hook with the same session id, and the hub
-gives it its old handle, so new pane ids do not matter.
+agents sharing a directory come back as themselves. Restore registers each
+resumed agent to its new pane with the same session id, and the hub gives it
+its old handle, so new pane ids do not matter.
 
 Restoring creates what is missing and launches the agents. It never touches
 a pane that is running something: it only types into a bare shell, such as
@@ -183,6 +183,8 @@ class Step:
     place: tuple[str, int] | None = None
     # A failed creation/split must prevent launches into an incomplete window.
     window: str | None = None
+    # For a launch: the agent it resumes, registered to its new pane afterwards.
+    agent: dict | None = None
 
 
 def _target(session: str, window: int, pane: int | None = None) -> str:
@@ -291,6 +293,7 @@ def plan(snapshot: dict, live: list[dict], running: set[str] = frozenset()) -> l
                     f"resume {who}",
                     target=_target(name, idx, pane["index"]),
                     launch=f"cd {shlex.quote(pane['cwd'])} && {command}",
+                    agent=agent,
                 ))
                 scheduled.add(agent["agent_id"])
             for step in steps[first_step:]:
@@ -311,10 +314,31 @@ def _place_first_window(session: str, index: int) -> None:
         )
 
 
-def apply(steps: list[Step], stagger: float, log=print) -> int:
-    """Run the plan; returns how many steps failed. Launches are `stagger` seconds apart."""
+def _wait_for_harness(pane: str, timeout: float) -> bool:
+    """Whether `pane` stops running a bare shell within `timeout` seconds."""
+    deadline = time.monotonic() + timeout
+    while True:
+        command = tmux._tmux_out("display-message", "-p", "-t", pane, "#{pane_current_command}")
+        if command is None:
+            return False
+        if command.strip() not in tmux.SHELL_COMMANDS:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.5)
+
+
+def apply(steps: list[Step], stagger: float, register=None, wait: float = 30.0, log=print) -> int:
+    """Run the plan; returns how many steps failed. Launches are `stagger` seconds apart.
+
+    After the launches, each resumed agent is registered to its new pane with
+    `register(pane_id, agent)` (returns an error or None), once its harness is
+    running. Hooks alone are not enough: Codex runs its hook at the session's
+    first turn, and an unregistered agent never gets one, since the hub
+    refuses messages to a pane from the earlier tmux server.
+    """
     failed = 0
-    launched = 0
+    launched: list[tuple[str, Step]] = []
     blocked = set()
     for step in steps:
         if step.window in blocked:
@@ -345,7 +369,7 @@ def apply(steps: list[Step], stagger: float, log=print) -> int:
             if step.launch is not None:
                 subprocess.run(["tmux", "send-keys", "-t", target, "C-m"],
                                capture_output=True, text=True, check=True, timeout=10)
-                launched += 1
+                launched.append((target, step))
         except subprocess.CalledProcessError as e:
             failed += 1
             if step.window:
@@ -359,4 +383,20 @@ def apply(steps: list[Step], stagger: float, log=print) -> int:
             log(f"FAILED {step.describe}: {e}")
             continue
         log(step.describe)
+    if register is None:
+        return failed
+    for pane, step in launched:
+        handle = step.agent["handle"]
+        # Registering a pane that still runs a shell would have the hub paste
+        # messages into that shell as commands.
+        if not _wait_for_harness(pane, wait):
+            failed += 1
+            log(f"FAILED register {handle} at {pane}: its harness did not start within {wait:.0f}s")
+            continue
+        error = register(pane, step.agent)
+        if error:
+            failed += 1
+            log(f"FAILED register {handle} at {pane}: {error}")
+        else:
+            log(f"registered {handle} at {pane}")
     return failed

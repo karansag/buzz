@@ -572,7 +572,8 @@ def cmd_restore(args: argparse.Namespace) -> int:
         return 1
     r = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5)
     r.raise_for_status()
-    running = restore.running_sessions(r.json()["recipients"], restore.agents_in(snap))
+    recipients = r.json()["recipients"]
+    running = restore.running_sessions(recipients, restore.agents_in(snap))
     steps = restore.plan(snap, restore.read_layout(), running)
     print(f"snapshot {path} (taken {snap['taken_at']}, {len(restore.agents_in(snap))} agents)")
     if not args.apply:
@@ -580,7 +581,26 @@ def cmd_restore(args: argparse.Namespace) -> int:
             print(f"  {step.describe}" + (f"\n      $ {step.launch}" if step.launch else ""))
         print("dry run: nothing changed. Run again with --apply to do this.")
         return 0
-    failed = restore.apply(steps, args.stagger, log=lambda line: print(f"  {line}", flush=True))
+    rows = {row["user_id"]: row for row in recipients}
+
+    def register(pane: str, agent: dict) -> str | None:
+        payload = {"tmux_pane": pane, "node": local_node(), "agent_id": agent["agent_id"],
+                   "flavor": agent["flavor"]}
+        if agent.get("model"):
+            payload["model"] = agent["model"]
+        # The hub resets an omitted submit key to the harness default.
+        if (rows.get(agent["handle"]) or {}).get("submit_key"):
+            payload["submit_key"] = rows[agent["handle"]]["submit_key"]
+        try:
+            response = httpx.post(f"{base_url()}/register", json=payload, headers=_headers(), timeout=5)
+        except httpx.HTTPError as e:
+            return str(e)
+        if not response.is_success:
+            return f"hub said {response.status_code}: {response.text[:200]}"
+        return None
+
+    failed = restore.apply(steps, args.stagger, register=register,
+                           log=lambda line: print(f"  {line}", flush=True))
     print(f"done, {failed} failed" if failed else "done")
     return 1 if failed else 0
 

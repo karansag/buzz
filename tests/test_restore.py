@@ -253,3 +253,28 @@ def test_restore_nine_panes_with_saved_numbering_and_directories(isolated_tmux, 
     assert [(r["window"], r["pane"], r["cwd"]) for r in after] == [
         (r["window"], r["pane"], r["cwd"]) for r in before]
     assert restore.plan(snap, restore.read_layout()) == []
+
+
+def test_apply_registers_each_resumed_agent_once_its_harness_runs(isolated_tmux):
+    t = isolated_tmux
+    t("new-session", "-d", "-s", "work")
+    t("split-window", "-d", "-t", "=work:0")
+    registered = []
+
+    def register(pane, agent):
+        registered.append((pane, agent["handle"]))
+        return None
+
+    # Made-up commands only: a real resume here would start a second copy of
+    # a live session.
+    steps = [
+        restore.Step("resume a", target="=work:0.0", launch="exec sleep 30", agent={"handle": "a"}),
+        restore.Step("resume b", target="=work:0.1", launch="true", agent={"handle": "b"}),
+    ]
+    panes = t("list-panes", "-t", "=work:0", "-F", "#{pane_id}").split()
+    lines = []
+    assert restore.apply(steps, 0, register=register, wait=2, log=lines.append) == 1
+    # b's command exits at once and leaves a shell, so it is not registered:
+    # the hub would paste messages into that shell as commands.
+    assert registered == [(panes[0], "a")]
+    assert any(line.startswith(f"FAILED register b at {panes[1]}") for line in lines)

@@ -152,7 +152,8 @@ An unavailable hub or invalid response doesn't prevent starting the harness.
 It takes the session id and model from the hook's input, not the environment,
 which a nested session inherits from its parent. Codex runs the hook at the
 session's first turn, not when the TUI opens; agents spawned from the
-dashboard are registered by the hub before that. It fires again on resume,
+dashboard are registered by the hub before that, and `agent-swarm restore`
+registers the agents it resumes. It fires again on resume,
 `/clear` and compaction, so a new session id is picked up. The new session gets
 the protocol brief in its context, without the peer list (`agent-swarm
 recipients` has it). `agent-swarm autoregister --verbose` says why it skipped.

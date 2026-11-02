@@ -44,9 +44,14 @@ skipped) and prints what it would do. `agent-swarm restore --apply` does it:
   (`--stagger`), with the same flags as a dashboard spawn: Claude in auto
   permission mode, Codex with `--yolo`.
 
-Each resumed harness re-registers from its startup hook with the same session
-id, and the hub gives it back its handle, team, and history, so the new pane
-ids do not matter.
+Once a resumed harness is running in its pane (the pane no longer runs a bare
+shell; restore waits up to 30 seconds), restore registers it to that pane with
+its session id, and the hub gives it back its handle, team, and history, so
+the new pane ids do not matter. Restore does this itself because the startup
+hooks are not enough: Codex runs its hook at the session's first turn, and an
+agent the hub still binds to the old tmux server never gets one, since the
+hub refuses to deliver to it. A harness whose hook does run at start
+(Claude) just registers again with the same id.
 
 Restore is safe to run more than once, and alongside tmux-resurrect:
 
