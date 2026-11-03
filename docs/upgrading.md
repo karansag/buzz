@@ -97,7 +97,7 @@ Three things happen on first start:
   newer server (and vice versa). Upgrade the CLI and the server together;
   `uv tool install --editable .` does both from one checkout.
 
-- **The daily cleanup runs.** Messages older than 60 days, and images whose
+- **The daily cleanup runs.** Messages older than 120 days, and images whose
   newest message is older than 30 days, are deleted. Set
   `AGENT_SWARM_MESSAGE_RETENTION_DAYS` or
   `AGENT_SWARM_ATTACHMENT_RETENTION_DAYS` (0 keeps forever) to change that.

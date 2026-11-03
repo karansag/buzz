@@ -690,7 +690,7 @@ def create_app(
     )
     # 0 (or less) keeps sent images forever; unsent drafts are still swept.
     retention = retention_days * attachments.DAY if retention_days > 0 else None
-    message_days = float(os.environ.get("AGENT_SWARM_MESSAGE_RETENTION_DAYS", "60"))
+    message_days = float(os.environ.get("AGENT_SWARM_MESSAGE_RETENTION_DAYS", "120"))
 
     def _cleanup() -> dict:
         """Daily cleanup: old messages first, then images nothing needs."""
