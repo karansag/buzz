@@ -1016,5 +1016,5 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
       ${(state.tasks || []).filter(t => t.status !== "done" || t.id === selectedTask).map(t => html`<option value=${t.id}>#${t.id} · ${t.title}</option>`)}
     </select></label></div>
     ${taskDetail && html`<${HiveTaskDetail} key=${taskDetail.id} task=${taskDetail} state=${state} refresh=${refresh} onClose=${() => setSelectedTask(null)} />`}
-    <span class="hive-drop-status" role="status">${dropStatus}</span></div>`;
+    <span class="hive-drop-status" role="status" aria-live="polite">${dropStatus}</span></div>`;
 }
