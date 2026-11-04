@@ -4,7 +4,7 @@
                          [--message-prefix TXT]
     buzz autoregister [--hook] [--verbose]   # from a harness startup hook
     buzz send --to Y [--context CTX] --message MSG
-    buzz messages [--user X] [--limit N]
+    buzz messages [--user X] [--limit N] [--id N]
     buzz recipients
     buzz whoami       # prints detected tmux pane + registered handle
     buzz status "working on X"   # what you are doing, shown on the dashboard
@@ -481,6 +481,8 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_messages(args: argparse.Namespace) -> int:
     params = {"limit": args.limit}
+    if args.id is not None:
+        params["id"] = args.id
     if args.user:
         params["user"] = args.user
     r = httpx.get(f"{base_url()}/messages", params=params, headers=_headers(), timeout=5)
@@ -970,6 +972,7 @@ def main(argv: list[str] | None = None) -> int:
     msg = sub.add_parser("messages")
     msg.add_argument("--user")
     msg.add_argument("--limit", type=int, default=20)
+    msg.add_argument("--id", type=int, help="show just this message, e.g. one a reply points at")
     msg.set_defaults(func=cmd_messages)
 
     rcp = sub.add_parser("recipients")

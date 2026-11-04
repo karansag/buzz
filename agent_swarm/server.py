@@ -1546,7 +1546,13 @@ def create_app(
         return {"ok": True, "user_id": user_id, "status": text}
 
     @app.get("/messages")
-    def messages(user: str | None = None, limit: int = 50):
+    def messages(user: str | None = None, limit: int = 50, id: int | None = None):
+        if id is not None:
+            # One message by id, e.g. the one an owner reply points at.
+            found = db.get_message(conn, id)
+            if found is None:
+                raise HTTPException(status_code=404, detail={"error": f"no message {id}"})
+            return {"messages": [found]}
         return {"messages": db.fetch_messages(conn, user, limit)}
 
     @app.get("/api/agents/{user_id}/messages")

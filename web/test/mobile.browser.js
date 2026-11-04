@@ -1377,3 +1377,33 @@ test('desktop hive task trash: cancel, failure, success, and card drop', async (
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
+
+test('reply to one agent message by button or right-click', async () => {
+  const { page, errors } = await setup(1500, 900, false);
+  const sent = [];
+  await page.route('**/owner/send', async route => {
+    sent.push(route.request().postDataJSON().content);
+    await route.fulfill({ json: { ok: true, status: 'delivered', message_id: 50 + sent.length } });
+  });
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const box = page.locator('form.composer textarea').first();
+    // Only the agent's message offers a reply; the owner's own does not.
+    assert.equal(await page.getByRole('button', { name: 'Reply to message 1' }).count(), 0);
+    await page.getByRole('button', { name: 'Reply to message 2' }).click();
+    assert.match(await page.locator('.compose-reply').innerText(), /Replying to stoat: Testing phone and tablet navigation\./);
+    // The composer takes focus after the render, so typing starts the reply.
+    await page.waitForFunction(() => document.activeElement?.matches('form.composer textarea'));
+    await box.fill('looks good');
+    await box.press('Enter');
+    await page.waitForFunction(() => !document.querySelector('.compose-reply'));
+    assert.equal(sent[0], 'looks good\n\n(reply to message 2; `buzz messages --id 2` shows it)');
+
+    await page.locator('.msg', { hasText: 'Testing phone and tablet navigation.' }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '↩ Reply' }).click();
+    await page.locator('.compose-reply').waitFor();
+    await box.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.compose-reply'));
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});

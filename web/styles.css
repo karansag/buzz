@@ -502,6 +502,17 @@
   .msg.unknown .tag .ctx { color: var(--honey); }
   .msg .resend { font-size: 10px; padding: 0 6px; margin-left: 4px; border: 1px solid var(--honey-dim); border-radius: 8px; background: transparent; color: var(--honey); cursor: pointer; }
   .msg .resend:disabled { opacity: .5; cursor: default; }
+  .msg .msg-reply { font: inherit; font-size: 11px; padding: 0 6px; margin-left: 4px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--cream-dim); cursor: pointer; opacity: .55; }
+  .msg:hover .msg-reply, .msg .msg-reply:focus-visible { opacity: 1; border-color: var(--line); color: var(--honey); }
+  @media (pointer: coarse) {
+    .msg .msg-reply { min-width: 44px; min-height: 44px; opacity: .8; }
+    .msg .msg-reply-label { display: none; }
+  }
+  .msg-menu { position: fixed; z-index: 50; display: flex; flex-direction: column; min-width: 140px; padding: 4px; background: var(--ink-2); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 20px rgb(0 0 0 / .4); }
+  .msg-menu button { font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; background: transparent; border: none; border-radius: 4px; color: var(--cream); cursor: pointer; }
+  .msg-menu button:hover, .msg-menu button:focus-visible { background: var(--ink); color: var(--honey); }
+  .compose-reply { display: flex; align-items: center; gap: 8px; justify-content: space-between; font-size: 12px; color: var(--cream-dim); border-left: 2px solid var(--honey-dim); padding: 2px 8px; margin-bottom: 6px; overflow-wrap: anywhere; }
+  .compose-reply b { color: var(--honey); }
   .msg.from-owner .bubble { border-color: var(--honey-dim); background: rgba(242,169,59,.14); }
   .owner-name { color: var(--honey); font-weight: 700; }
 

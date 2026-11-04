@@ -363,6 +363,9 @@ def test_messages_history(client):
     msgs = client.get("/messages", params={"user": recipient}).json()["messages"]
     assert [m["content"] for m in msgs] == ["m2", "m1", "m0"]
     assert all(m["sender"] == sender for m in msgs)
+    one = client.get("/messages", params={"id": msgs[1]["id"]}).json()["messages"]
+    assert [m["content"] for m in one] == ["m1"]
+    assert client.get("/messages", params={"id": 999999}).status_code == 404
 
 
 def test_portal_page_served_at_root(client):

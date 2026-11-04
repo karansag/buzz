@@ -909,6 +909,11 @@ def record_message(
 
 
 @_serialized
+def get_message(conn: sqlite3.Connection, message_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM messages WHERE id=?", (message_id,)).fetchone()
+    return _message(row) if row else None
+
+
 def message_by_client_id(conn: sqlite3.Connection, sender: str, client_id: str) -> dict | None:
     row = conn.execute(
         "SELECT * FROM messages WHERE sender=? AND client_id=?", (sender, client_id)

@@ -877,7 +877,19 @@ function newClientId() {
 // the message by its client id, so a re-send never delivers it twice.
 const RESEND_DELAYS_MS = [1000, 3000, 6000];
 
-function MessageComposer({ recipient, refresh, autoFocus = false, focused = false }) {
+// What a reply adds to the message: the id, and how the agent can read it.
+export function withReply(content, replyTo) {
+  if (!replyTo) return content;
+  const ref = `(reply to message ${replyTo.id}; \`buzz messages --id ${replyTo.id}\` shows it)`;
+  return content ? `${content}\n\n${ref}` : ref;
+}
+
+function replySnippet(m) {
+  const text = (m.content || "").replace(/\s+/g, " ").trim();
+  return text.length > 90 ? `${text.slice(0, 90)}…` : text || "(files)";
+}
+
+function MessageComposer({ recipient, refresh, autoFocus = false, focused = false, replyTo = null, clearReply = () => {} }) {
   const narrow = useMedia(COMPACT_LAYOUT);
   const compact = focused && narrow;
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -919,6 +931,9 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [text, compact]);
   useEffect(() => {
+    if (replyTo) composerRef.current?.focus({ preventScroll: true });
+  }, [replyTo]);
+  useEffect(() => {
     let timer;
     const onOutcome = (e) => {
       if (e.detail.draftKey !== draftKey) return;
@@ -950,8 +965,9 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
   const canSend = !sending && uploading === 0 && (text.trim() || images.length > 0);
   const send = async (e) => {
     e.preventDefault();
-    const content = text.trim();
     if (!canSend) return;
+    const content = withReply(text.trim(), replyTo);
+    clearReply();
     // Clear the composer and show the message in the thread right away; the
     // server confirms delivery afterwards, and a failure restores the draft.
     const clientId = draftClientId({ text, context, images }, retryOf, newClientId);
@@ -1034,6 +1050,10 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
   </button>`;
   const optionsId = `compose-options-${encodeURIComponent(recipient)}`;
   return html`<form class=${`composer ${compact ? "compact-composer" : ""} ${optionsOpen ? "options-open" : ""} ${dragging ? "dragging" : ""}`} onSubmit=${send} ...${sending ? {} : attachments.dropProps}>
+    ${replyTo && html`<div class="compose-reply">
+      <span>Replying to <b>${replyTo.sender}</b>: ${replySnippet(replyTo)}</span>
+      <button type="button" class="mini" aria-label="Cancel reply" onClick=${clearReply}>×</button>
+    </div>`}
     <div class="compose-row">
       ${compact ? html`<button type="button" class="compose-options-toggle" aria-label="Message options"
         aria-expanded=${optionsOpen} aria-controls=${optionsId}
@@ -1044,6 +1064,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
         onPaste=${sending ? undefined : attachments.onPaste}
         onKeyDown=${e => {
           if (e.key === "Enter" && !e.shiftKey && !(e.metaKey || e.ctrlKey)) send(e);
+          else if (e.key === "Escape" && replyTo) { e.stopPropagation(); clearReply(); }
         }}
         placeholder=${compact ? "Message…" : `Message ${recipient}… (paste or drop files)`} aria-label=${`Message ${recipient} as owner`} />
       ${compact && submit}
@@ -1085,6 +1106,31 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   const previousHistory = useRef(null);
   const [historyHeight, setHistoryHeight] = useState(null);
   const recipient = a === "owner" ? b : b === "owner" ? a : null;
+  // Replying to one message: a ↩ button on each agent message, or right-click
+  // (Shift + right-click keeps the browser's own menu).
+  const [replyTo, setReplyTo] = useState(null);
+  const [menu, setMenu] = useState(null);
+  const canReply = (m) => !!recipient && !m.pending && typeof m.id === "number" && m.sender !== "owner";
+  const openMenu = (e, m) => {
+    if (e.shiftKey || !canReply(m)) return;
+    e.preventDefault();
+    setMenu({ m, x: Math.min(e.clientX, innerWidth - 160), y: Math.min(e.clientY, innerHeight - 90) });
+  };
+  // A layout effect, so the listeners go as soon as the menu closes: a late
+  // cleanup would swallow the Escape that cancels the reply.
+  useLayoutEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    addEventListener("click", close);
+    addEventListener("scroll", close, true);
+    addEventListener("keydown", onKey, true);
+    return () => {
+      removeEventListener("click", close);
+      removeEventListener("scroll", close, true);
+      removeEventListener("keydown", onKey, true);
+    };
+  }, [menu]);
   // In a thread between two agents, the one whose page this is not: a link
   // in the header goes to that agent's page to message them.
   const other = recipient || a === b ? null : page === a ? b : page === b ? a : null;
@@ -1243,7 +1289,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
       ${msgs.map(m => html`
-        <div key=${m.id} class=${[
+        <div key=${m.id} onContextMenu=${e => openMenu(e, m)} class=${[
             "msg",
             sentByViewer(m.sender, a, b, page) ? "right" : "",
             freshIds.has(m.id) ? "fresh" : "",
@@ -1255,9 +1301,15 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}${m.attachments?.length > 0 && html`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map(name => html`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
-          <div class="tag">${disp(m.sender)}${m.context && html` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && html` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && html` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>${m.sender === "owner" && html` <${Resend} m=${m} refresh=${refresh} />`}`}</div>
+          <div class="tag">${disp(m.sender)}${m.context && html` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && html` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && html` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>${m.sender === "owner" && html` <${Resend} m=${m} refresh=${refresh} />`}`}${canReply(m) && html` <button type="button" class="msg-reply"
+            title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}</div>
         </div>`)}
     </div>
+    ${menu && html`<div class="msg-menu" role="menu" style=${{ left: `${menu.x}px`, top: `${menu.y}px` }}
+        onClick=${e => e.stopPropagation()}>
+      <button type="button" role="menuitem" autofocus onClick=${() => { setReplyTo(menu.m); setMenu(null); }}>↩ Reply</button>
+      <button type="button" role="menuitem" onClick=${() => { navigator.clipboard?.writeText(menu.m.content || ""); setMenu(null); }}>Copy text</button>
+    </div>`}
     <button type="button" class="history-resizer" role="separator" aria-orientation="horizontal"
       aria-label="Resize conversation history"
       aria-valuemin="120" aria-valuemax=${resizeBounds().max}
@@ -1266,7 +1318,8 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       onPointerUp=${resizeEnd} onPointerCancel=${resizeEnd} onKeyDown=${resizeKey}>
       <span>drag to resize history</span>
     </button>
-    ${recipient && html`<${MessageComposer} recipient=${recipient} refresh=${refresh} autoFocus=${!!page} focused=${focused} />`}
+    ${recipient && html`<${MessageComposer} recipient=${recipient} refresh=${refresh} autoFocus=${!!page} focused=${focused}
+      replyTo=${replyTo} clearReply=${() => setReplyTo(null)} />`}
     </div>
   </div>`;
 }
