@@ -564,6 +564,11 @@
   .h-more { background: none; border: 0; padding: 0; cursor: pointer; font-family: var(--mono); font-size: 10px; color: var(--honey-dim); }
   .h-more:hover { color: var(--honey); }
   .h-meta { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 10px; color: var(--cream-dim); border-top: 1px solid var(--line); padding-top: 6px; }
+  .h-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; }
+  .h-edit { display: flex; flex-direction: column; gap: 8px; }
+  .h-edit label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--cream-dim); }
+  .h-edit input, .h-edit textarea { font: inherit; font-size: 13px; color: var(--cream); background: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 6px; }
+  .h-edit-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .h-meta .h-wt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
   .history mark { background: rgba(242,169,59,.35); color: var(--cream); border-radius: 2px; padding: 0 1px; }
 

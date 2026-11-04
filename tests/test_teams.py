@@ -246,3 +246,15 @@ def test_a_spawned_agent_never_gets_a_retired_agents_name(client, monkeypatch):
     assert r.status_code == 200
     assert r.json()["user_id"] == f"{c}-2"
     assert not client.get(f"/api/agents/{c}-2/messages?limit=50").json().get("messages")
+
+
+def test_task_title_and_description_can_be_edited(client):
+    task = client.post("/tasks", json={"title": "draft", "description": "old"}).json()["task"]
+    r = client.patch(f"/tasks/{task['id']}", json={"title": "  final title ", "description": "new words"})
+    assert r.status_code == 200
+    assert (r.json()["task"]["title"], r.json()["task"]["description"]) == ("final title", "new words")
+    # An empty description clears it; a blank title is refused.
+    r = client.patch(f"/tasks/{task['id']}", json={"description": "  "})
+    assert r.json()["task"]["description"] is None
+    assert client.patch(f"/tasks/{task['id']}", json={"title": "   "}).status_code == 422
+    assert client.get("/tasks").json()["tasks"][0]["title"] == "final title"

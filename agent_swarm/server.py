@@ -319,6 +319,8 @@ class TaskUpdateReq(ActorFields):
     model_config = ConfigDict(extra="forbid")
 
     status: Literal["open", "picked_up", "done"] | None = None
+    title: str | None = Field(default=None, min_length=1)
+    description: str | None = None
     assignee: str | None = None
     worktree: str | None = Field(default=None, min_length=1)
     worktree_node: str | None = Field(
@@ -1751,6 +1753,12 @@ def create_app(
         kwargs = {}
         if req.status is not None:
             kwargs["status"] = req.status
+        if req.title is not None:
+            if not req.title.strip():
+                raise HTTPException(status_code=422, detail={"error": "a task needs a title"})
+            kwargs["title"] = req.title.strip()
+        if "description" in req.model_fields_set:
+            kwargs["description"] = (req.description or "").strip() or None
         if "assignee" in req.model_fields_set:
             _require_registered_assignee(req.assignee)
             kwargs["assignee"] = req.assignee or None

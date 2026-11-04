@@ -1833,7 +1833,7 @@ function App() {
       ${focusUser
         ? html`<${FocusView} key=${focusUser} user=${focusUser} state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor} />`
         : onHistory
-          ? html`<${HistoryView} state=${state} />`
+          ? html`<${HistoryView} state=${state} refresh=${poll} />`
           : onChats
             ? html`<${ChatsView} state=${state} unreadFor=${unreadFor} />`
             : onTab !== null

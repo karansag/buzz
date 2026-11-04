@@ -685,6 +685,8 @@ def update_task(
     conn: sqlite3.Connection,
     task_id: int,
     status: str | None = None,
+    title: str | None = None,
+    description: str | None | object = _UNSET,
     assignee: str | None | object = _UNSET,
     worktree: str | None | object = _UNSET,
     team_id: int | None | object = _UNSET,
@@ -698,6 +700,10 @@ def update_task(
         if status not in TASK_STATUSES:
             raise ValueError(f"invalid status: {status}")
         task["status"] = status
+    if title is not None:
+        task["title"] = title
+    if description is not _UNSET:
+        task["description"] = description
     # A task is owned by an individual or a team, never both; setting one
     # side clears the other.
     if assignee is not _UNSET:
@@ -719,10 +725,12 @@ def update_task(
     if note is not _UNSET:
         task["note"] = note
     conn.execute(
-        "UPDATE tasks SET status=?, assignee=?, team_id=?, worktree=?, worktree_node=?, note=?, "
-        "updated_at=? WHERE id=?",
+        "UPDATE tasks SET status=?, title=?, description=?, assignee=?, team_id=?, worktree=?, "
+        "worktree_node=?, note=?, updated_at=? WHERE id=?",
         (
             task["status"],
+            task["title"],
+            task["description"],
             task["assignee"],
             task["team_id"],
             task["worktree"],

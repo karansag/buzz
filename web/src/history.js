@@ -2,8 +2,10 @@ import { AttachmentList } from "./attachments.js";
 import { html } from "htm/preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
-import { Avatar, SUMMARY_SOURCE, focusHash, hue, rel } from "./shared.js";
+import { Avatar, SUMMARY_SOURCE, focusHash, hue, patchTask, rel } from "./shared.js";
 import { agentChips } from "./agent-chips.js";
+import { TaskStatusActions } from "./task-status.js";
+import { TaskTrash } from "./task-trash.js";
 
 /* The history view: every task as a tile, newest first, with a live text
    search. Its main job is to answer "who was working on X".
@@ -144,9 +146,42 @@ function Clipped({ label, text, re }) {
   </div>`;
 }
 
-function TaskTile({ rec, re, now, filterAgent }) {
+function TaskEdit({ task, refresh, done }) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError("");
+    const result = await patchTask(task.id, { title, description });
+    setBusy(false);
+    if (!result.ok) { setError(result.error); return; }
+    done();
+    await refresh();
+  };
+  return html`<form class="h-edit" onSubmit=${save}>
+    <label>Title <input value=${title} required autofocus onInput=${e => setTitle(e.target.value)} /></label>
+    <label>Description <textarea rows="5" value=${description}
+      onInput=${e => setDescription(e.target.value)}></textarea></label>
+    <div class="h-edit-actions">
+      <button type="submit" class="mini" disabled=${busy || !title.trim()}>${busy ? "Saving…" : "Save"}</button>
+      <button type="button" class="mini" disabled=${busy} onClick=${done}>Cancel</button>
+      ${error && html`<span class="task-action-error" role="alert">${error}</span>`}
+    </div>
+  </form>`;
+}
+
+function TaskTile({ rec, re, now, filterAgent, refresh }) {
   const t = rec.src;
   const f = rec.fields;
+  const [editing, setEditing] = useState(false);
+  if (editing) {
+    return html`<article class=${`htile ${t.status}`}>
+      <div class="h-title"><span class="h-id">#${t.id}</span> editing</div>
+      <${TaskEdit} task=${t} refresh=${refresh} done=${() => setEditing(false)} />
+    </article>`;
+  }
   return html`<article class=${`htile ${t.status}`}>
     <div class="h-who">
       ${t.assignee
@@ -169,6 +204,12 @@ function TaskTile({ rec, re, now, filterAgent }) {
         : html`<span>updated ${rel(t.updated_at, now)}</span>`}
       ${f.team && html`<span>team ${hl(f.team, re)}</span>`}
       ${f.worktree && html`<span class="h-wt" title=${f.worktree}>${hl(f.worktree, re)}</span>`}
+    </div>
+    <div class="h-actions">
+      <button type="button" class="mini" onClick=${() => setEditing(true)}
+        aria-label=${`Edit task #${t.id}`}>Edit</button>
+      <${TaskStatusActions} task=${t} refresh=${refresh} />
+      <${TaskTrash} task=${t} refresh=${refresh} />
     </div>
   </article>`;
 }
@@ -194,7 +235,7 @@ function StatusTile({ rec, re, now, filterAgent }) {
 
 const TILE = { task: TaskTile, status: StatusTile };
 
-export function HistoryView({ state }) {
+export function HistoryView({ state, refresh }) {
   const [s, setS] = useState(() => parseHash(location.hash));
   const inputRef = useRef(null);
 
@@ -284,7 +325,7 @@ export function HistoryView({ state }) {
       : html`<div class="h-grid">
           ${shown.map(r => {
             const Tile = TILE[r.kind];
-            return html`<${Tile} key=${r.key} rec=${r} re=${re} now=${state.now} filterAgent=${filterAgent} />`;
+            return html`<${Tile} key=${r.key} rec=${r} re=${re} now=${state.now} filterAgent=${filterAgent} refresh=${refresh} />`;
           })}
         </div>`}
   </div>`;

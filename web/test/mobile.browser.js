@@ -704,6 +704,8 @@ test('chats tab: between agents groups talk into bursts and broadcasts, filters 
     assert.match(await page.locator('.agent-talk-note').innerText(), /1 notes agents left themselves are hidden/);
     const pair = page.locator('.agent-talk-thread').nth(1);
     await pair.locator('summary').click();
+    // Messages render on the toggle event, after the click returns.
+    await pair.locator('.agent-talk-msg').nth(1).waitFor();
     assert.equal(await pair.locator('.agent-talk-msg').count(), 2);
     assert.equal(await pair.locator('.agent-talk-msg strong').first().innerText(), '#12');
     // Team agent-swarm is stoat, numbat and hoopoe: only stoat's broadcast stays.
@@ -1278,6 +1280,39 @@ test('waggle dance button sends every bee round a figure eight, then home', asyn
     }
     assert.ok(mid.some((b, i) => Math.hypot(b.x - before[i].x, b.y - before[i].y) > 40));
     await page.waitForFunction(() => !window.__hive.dancing(), null, { timeout: 8000 });
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('task history tiles edit, complete, and reopen a task', async () => {
+  const { page, state, errors } = await setup(390,844);
+  const patches = [];
+  await page.route('**/tasks/*', async route => {
+    if (route.request().method() !== 'PATCH') return route.continue();
+    const id = Number(route.request().url().split('/').pop());
+    const patch = route.request().postDataJSON();
+    patches.push({ id, ...patch });
+    Object.assign(state.tasks.find(t => t.id === id), patch);
+    await route.fulfill({ json: { ok: true } });
+  });
+  try {
+    await page.goto(base + '#/tasks');
+    const tile = () => page.locator('.htile').filter({ has: page.locator('.h-id', { hasText: '#73' }) });
+    await tile().getByRole('button', { name: 'Edit task #73' }).tap();
+    await tile().getByLabel('Title').fill('Mobile dashboard, renamed');
+    await tile().getByLabel('Description').fill('New description');
+    await tile().getByRole('button', { name: 'Save' }).tap();
+    await page.waitForFunction(() => document.querySelector('.h-grid').textContent.includes('Mobile dashboard, renamed'));
+    assert.deepEqual(patches[0], { id: 73, title: 'Mobile dashboard, renamed', description: 'New description' });
+    await tile().getByRole('button', { name: 'Complete task' }).tap();
+    await tile().locator('.task-verification textarea').fill('Open #/tasks at 390px.');
+    await tile().getByRole('button', { name: 'Complete task' }).tap();
+    await tile().getByRole('button', { name: 'Reopen' }).waitFor();
+    assert.deepEqual(patches[1], { id: 73, status: 'done', note: 'Open #/tasks at 390px.' });
+    await tile().getByRole('button', { name: 'Reopen' }).tap();
+    await tile().getByRole('button', { name: 'Complete task' }).waitFor();
+    assert.deepEqual(patches[2], { id: 73, status: 'picked_up' });
+    await fit(page);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
