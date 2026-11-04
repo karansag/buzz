@@ -946,17 +946,21 @@ function useAgentHistory(user) {
 }
 //#endregion
 //#region web/src/task-trash.js
+async function trashTask(task) {
+	if (!confirm(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files will remain.`)) return false;
+	const response = await fetch(`/tasks/${task.id}`, { method: "DELETE" });
+	const body = await response.json();
+	if (!response.ok) throw new Error(body.detail?.error || "Could not trash task.");
+	return true;
+}
 function TaskTrash({ task, refresh, onDeleted }) {
 	const [busy, setBusy] = d(false);
 	const [error, setError] = d("");
 	const remove = async () => {
-		if (!confirm(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files will remain.`)) return;
 		setBusy(true);
 		setError("");
 		try {
-			const response = await fetch(`/tasks/${task.id}`, { method: "DELETE" });
-			const body = await response.json();
-			if (!response.ok) throw new Error(body.detail?.error || "Could not trash task.");
+			if (!await trashTask(task)) return;
 			onDeleted?.();
 			refresh();
 		} catch (err) {
@@ -1986,7 +1990,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				ctx.restore();
 				dropLabel(`assign #${dragTaskRef.current} to ${dropTargetRef.current}`, dropTarget.x, Math.max(5, dropTarget.y - 43));
 			} else if (dragTaskRef.current && targetBox) dropLabel(`assign #${dragTaskRef.current} to team ${targetBox.name}`, targetBox.x + targetBox.w / 2, Math.max(5, targetBox.y - 26));
-			else if (dragTaskRef.current) banner(`drop task #${dragTaskRef.current} on a bee or a team`);
+			else if (dragTaskRef.current) banner(`drop task #${dragTaskRef.current} on a bee, team, or trash corner`);
 			else if (dragBeeRef.current && targetBox) dropLabel(`move ${dragBeeRef.current} to team ${targetBox.name}`, targetBox.x + targetBox.w / 2, Math.max(5, targetBox.y - 26));
 			else if (dragBeeRef.current) {
 				const r = grouped.find((x) => x.user_id === dragBeeRef.current);
@@ -2109,11 +2113,33 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 			const p = at(e);
 			return teamBoxesRef.current.find((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) || null;
 		};
+		const trashZone = canvas.parentElement.querySelector(".hive-trash-zone");
+		const hitTrash = (e) => {
+			const r = trashZone.getBoundingClientRect();
+			return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+		};
+		const highlightTrash = (e, task) => {
+			trashZone.classList.toggle("active", !!task);
+			trashZone.classList.toggle("over", !!task && hitTrash(e));
+		};
+		const removeTask = async (id) => {
+			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
+			if (!task) return;
+			try {
+				if (!await trashTask(task)) return;
+				setSelectedTask((selected) => selected === id ? null : selected);
+				setDropStatus(`Trashed task #${id}.`);
+				refresh();
+			} catch (err) {
+				setDropStatus(`${err.message} Refresh to check the task before retrying.`);
+			}
+		};
 		const taskId = (e) => {
 			const raw = e.dataTransfer?.getData("application/x-agent-swarm-task") || e.dataTransfer?.getData("text/plain");
 			return /^\d+$/.test(raw || "") ? Number(raw) : null;
 		};
 		const clearDrop = () => {
+			trashZone.classList.remove("active", "over");
 			dragTaskRef.current = null;
 			dragBeeRef.current = null;
 			dragPointRef.current = null;
@@ -2254,6 +2280,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				return;
 			}
 			dragPointRef.current = p;
+			highlightTrash(e, press.id);
 			if (press.bee) {
 				dragBeeRef.current = press.bee;
 				const box = hitTeam(e);
@@ -2264,7 +2291,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				dropTargetRef.current = hit(e);
 				const box = dropTargetRef.current ? null : hitTeam(e);
 				dropTeamRef.current = box ? box.id : null;
-				canvas.style.cursor = dropTargetRef.current || dropTeamRef.current != null ? "copy" : "grabbing";
+				canvas.style.cursor = hitTrash(e) || dropTargetRef.current || dropTeamRef.current != null ? "copy" : "grabbing";
 			}
 			if (reduced) draw(performance.now(), true);
 		};
@@ -2279,9 +2306,14 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				clearDrop();
 				return;
 			}
+			const trash = !bee && hitTrash(e);
 			const targetBee = hit(e);
 			const box = hitTeam(e);
 			clearDrop();
+			if (trash) {
+				await removeTask(id);
+				return;
+			}
 			if (bee) {
 				const r = (stateRef.current.recipients || []).find((x) => x.user_id === bee);
 				const teams = stateRef.current.teams || [];
@@ -2330,14 +2362,15 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		};
 		const dragOver = (e) => {
 			const id = taskId(e);
-			if (id === null) return;
+			if (id === null && !Array.from(e.dataTransfer?.types || []).includes("application/x-agent-swarm-task")) return;
 			e.preventDefault();
 			e.dataTransfer.dropEffect = "move";
 			dragTaskRef.current = id;
+			highlightTrash(e, true);
 			dropTargetRef.current = hit(e);
 			const box = dropTargetRef.current ? null : hitTeam(e);
 			dropTeamRef.current = box ? box.id : null;
-			canvas.style.cursor = dropTargetRef.current || dropTeamRef.current != null ? "copy" : "not-allowed";
+			canvas.style.cursor = hitTrash(e) || dropTargetRef.current || dropTeamRef.current != null ? "copy" : "not-allowed";
 			if (reduced) draw(performance.now(), true);
 		};
 		const dragLeave = (e) => {
@@ -2345,12 +2378,14 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		};
 		const drop = async (e) => {
 			const id = taskId(e);
+			const trash = hitTrash(e);
 			const assignee = hit(e);
 			const box = hitTeam(e);
 			e.preventDefault();
 			clearDrop();
 			if (id === null) return;
-			if (assignee) await assign(id, assignee);
+			if (trash) await removeTask(id);
+			else if (assignee) await assign(id, assignee);
 			else if (box) await assignTeam(id, box);
 		};
 		window.__hive = {
@@ -2413,7 +2448,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		harness
 	]);
 	return m$1`<div class="hive-panel">${compact ? compactBody || m$1`<${CompactBees} state=${state} machine=${machine} harness=${harness} />` : m$1`<div class="hive-scroll"><canvas ref=${canvasRef} tabindex="0"
-    aria-label="Live activity. Bee body color and the machine name below each bee identify its machine, matching the machine selector. Stripe color and the symbol beside the agent name identify its harness. Drag a comb cell or a task card onto a bee or a team outline to assign the task; drag a bee into or out of a team outline to change its team; drag a team outline by its empty space to move the whole team somewhere else. Bees outside a team are kept out of team outlines. The task assignee select and the sidebar team boxes are the keyboard and touch alternatives."></canvas></div>`}
+    aria-label="Live activity. Bee body color and the machine name below each bee identify its machine, matching the machine selector. Stripe color and the symbol beside the agent name identify its harness. Drag a comb cell or a task card onto a bee or a team outline to assign the task, or onto the trash corner to permanently delete it after confirmation; drag a bee into or out of a team outline to change its team; drag a team outline by its empty space to move the whole team somewhere else. Bees outside a team are kept out of team outlines. The task assignee select and the sidebar team boxes are the keyboard and touch alternatives."></canvas><div class="hive-trash-zone" aria-hidden="true"><strong>⌫ Trash task</strong><span>Drag a task here</span></div></div>`}
     <div class="harness-legend" aria-label="Bee harness legend">
       <span class="legend-title">Body = machine · stripes + symbol = harness</span>
       <span class="working-halo-key" style=${`--working:${WORKING_HALO.color}`}><span aria-hidden="true"></span>Green halo = working</span>
@@ -2434,7 +2469,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
       ${(state.tasks || []).filter((t) => t.status !== "done" || t.id === selectedTask).map((t) => m$1`<option value=${t.id}>#${t.id} · ${t.title}</option>`)}
     </select></label></div>
     ${taskDetail && m$1`<${HiveTaskDetail} key=${taskDetail.id} task=${taskDetail} state=${state} refresh=${refresh} onClose=${() => setSelectedTask(null)} />`}
-    <span class="sr-only" aria-live="polite">${dropStatus}</span></div>`;
+    <span class="hive-drop-status" role="status">${dropStatus}</span></div>`;
 }
 //#endregion
 //#region web/src/tabs.js

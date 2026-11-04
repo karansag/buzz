@@ -1316,3 +1316,64 @@ test('task history tiles edit, complete, and reopen a task', async () => {
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
+
+test('desktop hive task trash: cancel, failure, success, and card drop', async () => {
+  const { page, state, errors } = await setup(1440, 1000, false);
+  const deleted = [];
+  let fail = false;
+  await page.route('**/tasks/74', async route => {
+    assert.equal(route.request().method(), 'DELETE');
+    deleted.push(74);
+    if (fail) return route.fulfill({status:409,json:{detail:{error:'Task has dependent tasks'}}});
+    state.tasks = state.tasks.filter(t => t.id !== 74);
+    await route.fulfill({json:{ok:true}});
+  });
+  const drag = async () => {
+    await page.waitForFunction(() => window.__hive?.taskCells().some(c => c.task.id === 74));
+    const cell = await page.evaluate(() => {
+      const c = window.__hive.taskCells().find(c => c.task.id === 74);
+      const r = document.querySelector('canvas').getBoundingClientRect();
+      return {x:r.left+c.x,y:r.top+c.y};
+    });
+    const zone = await page.locator('.hive-trash-zone').boundingBox();
+    await page.mouse.move(cell.x, cell.y);
+    await page.mouse.down();
+    await page.mouse.move(zone.x+zone.width/2, zone.y+zone.height/2, {steps:12});
+    assert.ok(await page.locator('.hive-trash-zone.over').count());
+    await page.mouse.up();
+  };
+  try {
+    await page.goto(base+'#/');
+    await page.locator('canvas').waitFor();
+    if (process.env.TASK339_SCREENSHOT) await page.locator('.hive-panel').screenshot({path:process.env.TASK339_SCREENSHOT});
+    page.once('dialog', d => { assert.match(d.message(), /#74: Long path regression/); d.dismiss(); });
+    await drag();
+    assert.deepEqual(deleted, []);
+    fail = true;
+    page.once('dialog', d => d.accept());
+    await drag();
+    await page.getByRole('status').filter({hasText:'Task has dependent tasks'}).waitFor();
+    assert.equal(state.tasks.some(t => t.id === 74), true);
+    fail = false;
+    page.once('dialog', d => d.accept());
+    await drag();
+    await page.waitForFunction(() => !window.__hive.taskCells().some(c => c.task.id === 74));
+    assert.deepEqual(deleted, [74,74]);
+    // HTML task-card drops use the same corner and confirmation.
+    state.tasks.push({id:74,title:'Long path regression',status:'open',created_at:state.now,depends_on:[]});
+    await page.reload();
+    await page.locator('canvas').waitFor();
+    page.once('dialog', d => d.accept());
+    await page.evaluate(() => {
+      const canvas = document.querySelector('canvas');
+      const r = document.querySelector('.hive-trash-zone').getBoundingClientRect();
+      const dataTransfer = new DataTransfer();
+      dataTransfer.setData('application/x-agent-swarm-task','74');
+      canvas.dispatchEvent(new DragEvent('dragover',{bubbles:true,clientX:r.x+10,clientY:r.y+10,dataTransfer}));
+      canvas.dispatchEvent(new DragEvent('drop',{bubbles:true,clientX:r.x+10,clientY:r.y+10,dataTransfer}));
+    });
+    await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent.includes('Trashed task #74'));
+    assert.deepEqual(deleted, [74,74,74]);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});

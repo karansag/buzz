@@ -939,3 +939,14 @@ dialog.quick-switch { margin: auto; width: min(680px, calc(100vw - 24px)); max-h
 .tab-bar a.mini { color: var(--honey-dim); text-decoration: none; font-size: 11px; }
 .tab-bar a.mini:hover { color: var(--honey); }
 .tab-frame { display: block; width: 100%; height: max(480px, calc(100dvh - 190px)); border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+
+/* Canvas keeps pointer capture while a task crosses this visual drop target. */
+.hive-scroll { position:relative; }
+.hive-trash-zone { position:absolute; bottom:14px; right:14px; z-index:1; pointer-events:none;
+  display:grid; gap:4px; padding:14px 20px; border:2px dashed #b87166; border-radius:12px;
+  background:#271d20; color:#efb3a8; text-align:center; font-size:12px; }
+.hive-trash-zone span { font-size:11px; }
+.hive-trash-zone.active { border-color:#ed8c7d; background:#43262a; }
+.hive-trash-zone.over { border-style:solid; background:#792e35; color:#fff; box-shadow:0 0 20px #d9696755; }
+.hive-drop-status { display:block; padding:0 12px; color:var(--cream-dim); font-size:12px; }
+.hive-drop-status:empty { display:none; }
