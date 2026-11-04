@@ -734,6 +734,16 @@ def test_spawn_pi_launches_pi_binary(client):
     assert r.json()["model"] is None
 
 
+def test_spawn_uses_configured_command_and_records_selected_model(client, monkeypatch):
+    monkeypatch.setenv("AGENT_SWARM_CLAUDE_COMMAND", 'env ACCOUNT=work "/custom path/claude"')
+    r = client.post("/agents/spawn", json={"flavor": "claude", "model": "opus"})
+    assert r.status_code == 200
+    command = 'env ACCOUNT=work "/custom path/claude" --model opus'
+    assert r.json()["command"] == command
+    assert r.json()["model"] == "opus"
+    assert client._spawns[-1] == (tmux.AGENTS_SESSION, command)
+
+
 def test_spawn_codex_runs_yolo_and_permission_choice_is_gone(client, codex_catalog):
     r = client.post("/agents/spawn", json={"flavor": "codex", "model": "gpt-5.6-luna"})
     assert r.status_code == 200

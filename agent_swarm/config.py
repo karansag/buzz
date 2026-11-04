@@ -1,5 +1,4 @@
-"""Per-machine settings: where the hub is, what this machine is called, and
-the token that proves it.
+"""Per-machine settings: hub, node identity, token, and harness commands.
 
 Read from the environment first, then from ~/.agent-swarm/node.toml, then
 defaults. The file exists so that an agent already running in a tmux pane,
@@ -41,6 +40,22 @@ def _file() -> dict:
         return tomllib.loads(path.read_text())
     except (OSError, tomllib.TOMLDecodeError):
         return {}
+
+
+def harness_command(flavor: str) -> str | None:
+    """An owner-configured shell command, before model/resume arguments.
+
+    Blank overrides fall back to the file, then to the built-in command.
+    Read on demand so editing the file affects the next launch.
+    """
+    value = os.environ.get(f"AGENT_SWARM_{flavor.upper()}_COMMAND", "").strip()
+    if value:
+        return value
+    commands = _file().get("harness_commands", {})
+    value = commands.get(flavor) if isinstance(commands, dict) else None
+    if isinstance(value, str):
+        return value.strip() or None
+    return None
 
 
 def hostname() -> str:
@@ -107,6 +122,14 @@ def write(hub: str, token: str | None, node: str) -> Path:
     ]
     if token:
         lines.append(f"token = {_toml_string(token)}")
+    # Joining a hub or remembering our hostname must not erase launch settings.
+    commands = _file().get("harness_commands", {})
+    if isinstance(commands, dict) and commands:
+        lines.extend(["", "[harness_commands]"])
+        lines.extend(
+            f"{_toml_string(key)} = {_toml_string(value)}"
+            for key, value in commands.items() if isinstance(value, str)
+        )
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".node.toml.")
     try:
         with os.fdopen(fd, "w") as f:

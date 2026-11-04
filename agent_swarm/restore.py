@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from . import tmux
+from . import config, tmux
 
 SNAPSHOT_DIR = Path("~/.agent-swarm/snapshots").expanduser()
 KEEP = 100
@@ -149,6 +149,14 @@ def resume_command(agent: dict) -> str | None:
     spec = tmux.HARNESS_SPAWN.get(flavor or "")
     if spec is None:
         return None
+    command = config.harness_command(flavor)
+    if command is not None:
+        resume_flag = {"claude": "--resume", "codex": "resume", "pi": "--session",
+                       "hermes": "--resume"}[flavor]
+        parts = [command, resume_flag, sid]
+        if model and flavor != "pi":
+            parts += [spec.model_flag, model]
+        return " ".join(parts)
     if flavor == "claude":
         parts = ["claude", "--resume", sid]
     elif flavor == "codex":

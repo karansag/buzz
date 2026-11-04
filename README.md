@@ -284,6 +284,41 @@ supports it, so its commands run in the agent's own pane. Codex needs
 Claude runs in auto mode: it approves routine commands itself and still
 asks about risky ones, which the dashboard shows as needs attention.
 
+**Custom harness commands.** To bypass shell aliases or account pickers, or
+choose your own startup flags, add a `[harness_commands]` table to
+`~/.agent-swarm/node.toml` (or the file named by `AGENT_SWARM_CONFIG`). Keep
+any existing `hub`, `node`, and `token` settings above the table:
+
+```toml
+[harness_commands]
+claude = 'env -u CLAUDE_CONFIG_DIR /Users/you/.local/bin/claude --permission-mode auto'
+codex = 'env CODEX_HOME="$HOME/.codex-personal" /opt/homebrew/bin/codex --yolo -c check_for_update_on_startup=false'
+pi = '/usr/local/bin/pi'
+hermes = 'hermes --yolo --accept-hooks'
+```
+
+Each value is a shell command that **replaces the entire default launch
+command**, including its flags. Use an absolute executable path to bypass
+a shell function; quote paths containing spaces. Commands run in the tmux
+pane's shell and can use environment assignments or wrapper scripts. A
+wrapper should forward its arguments (`"$@"`). Buzz appends the selected
+model flag, if any; it does not add default permission, startup, or optional
+flags to a custom command. For Codex, include `--no-daemon` yourself if your
+installed version needs and supports it.
+
+The environment variables `AGENT_SWARM_CLAUDE_COMMAND`,
+`AGENT_SWARM_CODEX_COMMAND`, `AGENT_SWARM_PI_COMMAND`, and
+`AGENT_SWARM_HERMES_COMMAND` override the corresponding file entries. Blank
+values fall back to the file, then to the built-in defaults. File edits
+apply on the next launch; restart the hub to change its environment.
+
+Dashboard and `buzz spawn` commands are built by the **hub**, including
+when the destination is a remote node: configure these on the hub and use
+paths or wrapper names that exist on the destination. `buzz restore` and
+`buzz restart` read the configuration on the machine running those commands
+and append the harness's resume arguments and saved model to the custom
+command. Existing agents are unaffected until restarted.
+
 **From another device.** Publish the dashboard on your tailnet with
 Tailscale Serve:
 
