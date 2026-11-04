@@ -22,7 +22,7 @@ def test_one_skill_in_agent_skills_format():
 
 def test_skill_tells_agents_not_to_pass_flavor():
     text = (SKILL / "SKILL.md").read_text()
-    assert "agent-swarm register" in text
+    assert "buzz register" in text
     assert "Do not pass `--flavor`" in text
 
 

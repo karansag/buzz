@@ -1,11 +1,11 @@
 // Registers this Pi session with agent-swarm when it starts in its own tmux
 // pane, and puts the protocol brief in the session's context. The checks
-// (own pane, hub up) live in `agent-swarm autoregister`; this only feeds it
+// (own pane, hub up) live in `buzz autoregister`; this only feeds it
 // what Pi knows and never fails the session.
 import { spawn } from "node:child_process";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const BIN = process.env.AGENT_SWARM_BIN ?? "agent-swarm";
+const BIN = process.env.AGENT_SWARM_BIN ?? "buzz";
 
 function autoregister(input: object): Promise<string> {
   return new Promise((resolve) => {
@@ -26,7 +26,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (event, ctx) => {
     // print, json and rpc runs have no pane of their own to receive messages.
     if (ctx.mode !== "tui" || event.reason === "reload") return;
-    // The session id lets `agent-swarm restore` resume this session with
+    // The session id lets `buzz restore` resume this session with
     // `pi --session ID`, and gives the hub the same identity when it does.
     const out = await autoregister({
       hook_event_name: "SessionStart",

@@ -38,7 +38,7 @@ const peek = `● Read(src/checkout/retry.ts)
 ● Bash(npm test -- checkout)
   ⎿  PASS  src/checkout/retry.test.ts (14 tests)
 
-● Bash(agent-swarm send --to stoat --context task-42 --message "I now pass
+● Bash(buzz send --to stoat --context task-42 --message "I now pass
       the order's idempotency key on every retry. Does /orders dedupe on it?")
   ⎿  {"ok": true, "status": "delivered"}
 

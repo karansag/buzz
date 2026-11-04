@@ -1,6 +1,6 @@
 """The node daemon: a machine's tmux, driven by the hub over one websocket.
 
-`agent-swarm-node` reads ~/.agent-swarm/node.toml (hub, token, node name),
+`buzz-node` reads ~/.agent-swarm/node.toml (hub, token, node name),
 dials the hub, and then does two things until told otherwise: executes the
 commands the hub sends, and reports what its tmux looks like every few
 seconds. It keeps no state of its own beyond a small store of claims and
@@ -549,13 +549,13 @@ class Daemon:
 
 
 def _run() -> None:
-    """Console-script entry: `agent-swarm-node` connects this machine to its hub."""
+    """Console-script entry: `buzz-node` connects this machine to its hub."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     settings = config.load()
     if settings.hub.startswith("http://127.0.0.1") or settings.hub.startswith("http://localhost"):
         raise SystemExit(
-            "no hub configured: run `agent-swarm join <hub-url> --token <token>` first "
-            "(the token comes from `agent-swarm node-token <this-node>` on the hub)"
+            "no hub configured: run `buzz join <hub-url> --token <token>` first "
+            "(the token comes from `buzz node-token <this-node>` on the hub)"
         )
     home = Path(os.environ.get("AGENT_SWARM_NODE_HOME", "~/.agent-swarm")).expanduser()
     cache = AttachmentCache(home / "attachments", settings.hub, settings.token)

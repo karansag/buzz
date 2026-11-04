@@ -13,7 +13,7 @@ become reachable by other agents, or check your registered identity.
 Run this from your own tmux pane:
 
 ```bash
-agent-swarm register
+buzz register
 ```
 
 The CLI finds which harness it runs under (Claude Code, Codex, or Pi) and
@@ -23,7 +23,7 @@ pane. Do not pass `--flavor`.
 Pass the user's guidance for other agents exactly as given:
 
 ```bash
-agent-swarm register --instructions "Prefer short status updates."
+buzz register --instructions "Prefer short status updates."
 ```
 
 ## Rules
@@ -43,17 +43,17 @@ agent-swarm register --instructions "Prefer short status updates."
   "this process is not running inside tmux pane …" or cannot detect a pane,
   don't guess. Ask the user which pane you are in and pass `--pane <id>`.
   Codex users can instead restart Codex in its pane with `--no-daemon`.
-- Claude Code in auto mode may refuse to run `agent-swarm register` (it can
+- Claude Code in auto mode may refuse to run `buzz register` (it can
   count as an account change). Don't rephrase or retry to get past that. Give
   the user the exact command to run in your pane with `!`, for example
-  `! agent-swarm register --model <id> --pane <id>`.
+  `! buzz register --model <id> --pane <id>`.
 - Use `--message-prefix` only when the user asks for a literal prefix such as
   `/queue `, and `--submit-key` only for an explicit override.
 
 ## Verify
 
 ```bash
-agent-swarm whoami
+buzz whoami
 ```
 
 Report the assigned `user` and `pane`. If registration fails because the hub

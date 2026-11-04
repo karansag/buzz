@@ -579,5 +579,5 @@ def register_commands(plan_result: dict) -> list[str]:
         # A handle held for a named conversation is given only to that
         # conversation, so the line has to carry its id.
         agent_id = f" --agent-id {agent['agent_id']}" if agent.get("agent_id") else ""
-        lines.append(f"agent-swarm register --name {agent['user_id']}{flavor}{agent_id}")
+        lines.append(f"buzz register --name {agent['user_id']}{flavor}{agent_id}")
     return lines

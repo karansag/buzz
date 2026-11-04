@@ -60,9 +60,9 @@ NOTE_GUIDANCE = (
 # The dashboard shows each agent's latest status line, so the owner can see
 # what everyone is doing (and did last) without a task to go by.
 STATUS_GUIDANCE = (
-    "Whenever you start on something new, run `agent-swarm status \"working on "
+    "Whenever you start on something new, run `buzz status \"working on "
     "<what, in a few words>\"` so the owner's dashboard shows what you are "
-    "doing; say when you finish, e.g. `agent-swarm status \"done: <what>\"`."
+    "doing; say when you finish, e.g. `buzz status \"done: <what>\"`."
 )
 
 
@@ -160,7 +160,7 @@ class ImportReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     node: str = Field(min_length=1, description="the machine these agents run on")
-    bundle: dict = Field(description="what `agent-swarm export` wrote on that machine")
+    bundle: dict = Field(description="what `buzz export` wrote on that machine")
     dry_run: bool = Field(default=False, description="decide and report, write nothing")
     again: bool = Field(
         default=False,
@@ -416,7 +416,7 @@ def _queen_prompt(team: dict, objective: str) -> str:
         "queen-status, that you coordinate this team for this objective and that "
         "their task coordination should route through you.\n\n"
         "Decompose the objective into concrete tasks; create and assign them to "
-        "teammates with agent-swarm task-create and agent-swarm task-update, and "
+        "teammates with buzz task-create and buzz task-update, and "
         "record ordering with --depends-on <ids> so the board shows the "
         "dependency graph. Tasks "
         "the owner assigns to the team are delivered to you: parcel them out by "
@@ -441,30 +441,30 @@ def _supervisor_prompt(user_id: str, objective: str, peers: list[dict]) -> str:
         f"asks about the whole swarm. Live agents right now: {roster}.\n\n"
         f"Objective: {objective}\n\n"
         "What you do:\n"
-        "- Answer the owner. When asked what is going on, run `agent-swarm digest` "
+        "- Answer the owner. When asked what is going on, run `buzz digest` "
         "(`--minutes N` for a window, or `--after-message ID` from the end of your "
         "last digest) and reply in a few lines: what changed, who needs attention, "
-        "what is done, what is stalled. For one task, read `agent-swarm tasks` and "
-        "the messages tagged `task-N` (`agent-swarm messages --user <handle>`); "
-        "if the board does not say, ask the assignee with `agent-swarm send` and "
+        "what is done, what is stalled. For one task, read `buzz tasks` and "
+        "the messages tagged `task-N` (`buzz messages --user <handle>`); "
+        "if the board does not say, ask the assignee with `buzz send` and "
         "relay the answer.\n"
-        "- Delegate when asked. File work with `agent-swarm task-create \"title\" "
+        "- Delegate when asked. File work with `buzz task-create \"title\" "
         "--description ... --assignee <handle>`; the assignee is notified in your "
         "name. Prefer an idle agent of a suitable harness; when none is free, "
-        "`agent-swarm spawn --flavor claude|codex|pi|hermes` starts one, then assign "
+        "`buzz spawn --flavor claude|codex|pi|hermes` starts one, then assign "
         "to the handle it prints. Record ordering with --depends-on.\n"
         "- Watch the swarm. The hub sends you a message from `hub` tagged `digest` "
         "when there is new traffic or task changes you were not party to; read the "
         "digest it names and tell the owner only what matters. Agents whose pane "
         "shows an approval prompt appear as `needs attention`; you cannot answer "
         "the prompt, but you can tell the owner which agent and why.\n"
-        "- Admin. `agent-swarm stop <handle>` kills an agent's pane: ask the owner "
+        "- Admin. `buzz stop <handle>` kills an agent's pane: ask the owner "
         "first unless they already told you to. Never delete tasks or change team "
         "membership on your own.\n\n"
         "Report facts, not guesses: a delivery marked unknown may or may not have "
         "arrived, so say so and never resend on your own. Keep replies to the owner "
-        "short; they land on the dashboard via `agent-swarm send --to owner`. "
-        "Set `agent-swarm status \"supervising: ...\"` so the dashboard shows the "
+        "short; they land on the dashboard via `buzz send --to owner`. "
+        "Set `buzz status \"supervising: ...\"` so the dashboard shows the "
         "role.\n\n"
         "This is a prompt-driven role, not special server authority. The owner "
         "retains every right and can end the role at any time."
@@ -517,7 +517,7 @@ def _protocol_brief(user_id: str, peers: list[dict]) -> str:
         f"supply a context tag. Reply to the sender through the agent-swarm API "
         f"so the response reaches their inbox.\n"
         f"\n"
-        f"To reply or initiate, POST to /send (or use the `agent-swarm send` "
+        f"To reply or initiate, POST to /send (or use the `buzz send` "
         f"CLI). Currently registered peers:\n"
         f"{peer_lines}\n"
         f"\n"
@@ -537,13 +537,13 @@ def _protocol_brief(user_id: str, peers: list[dict]) -> str:
         f"\n"
         f"The owner can assign you tasks. They arrive as messages tagged "
         f"'task #N'. When you start one, run "
-        f"`agent-swarm task-update N --status picked_up`; when you finish, "
-        f"run `agent-swarm task-update N --status done --note \"...\"`. "
+        f"`buzz task-update N --status picked_up`; when you finish, "
+        f"run `buzz task-update N --status done --note \"...\"`. "
         f"The note is required: closing without one is refused. {NOTE_GUIDANCE} "
         f"It stays on the task, so the owner can open it later and see how to "
         f"check the work. "
-        f"List tasks anytime: `agent-swarm tasks`. You can file work for the "
-        f"shared board with `agent-swarm task-create \"title\"` (optionally "
+        f"List tasks anytime: `buzz tasks`. You can file work for the "
+        f"shared board with `buzz task-create \"title\"` (optionally "
         f"add `--description`, `--assignee`, or `--depends-on 3,5` to record "
         f"ordering; dependencies show as a graph on the dashboard).\n"
         f"\n"
@@ -553,7 +553,7 @@ def _protocol_brief(user_id: str, peers: list[dict]) -> str:
         f"coordinates that team's work. Tasks can be assigned to a team; "
         f"they reach the queen, who parcels them out. The owner may also "
         f"appoint one agent as swarm supervisor, the agent they ask about the "
-        f"whole swarm; `agent-swarm supervisor` says who, if anyone, holds it."
+        f"whole swarm; `buzz supervisor` says who, if anyone, holds it."
     )
 
 
@@ -776,7 +776,7 @@ def create_app(
             node = db.node_for_token(conn, auth[7:].strip())
             if node is None:
                 return JSONResponse(
-                    {"detail": {"error": "unknown token; enrol the machine with `agent-swarm node-token`"}},
+                    {"detail": {"error": "unknown token; enrol the machine with `buzz node-token`"}},
                     status_code=401,
                 )
             request.state.principal = Principal("node", node)
@@ -803,7 +803,7 @@ def create_app(
             request.state.principal = Principal("owner")
         else:
             return JSONResponse(
-                {"detail": {"error": "authentication required", "hint": "set AGENT_SWARM_TOKEN or run `agent-swarm join`"}},
+                {"detail": {"error": "authentication required", "hint": "set AGENT_SWARM_TOKEN or run `buzz join`"}},
                 status_code=401,
             )
         return await call_next(request)
@@ -837,7 +837,7 @@ def create_app(
         CLI found the pane's own process among its ancestors (pane_in_tree)
         and its harness is the registration's flavor: then it is the same
         agent after a /clear or a fresh session in its pane, and the
-        registration moves to the new id, as `agent-swarm register` would.
+        registration moves to the new id, as `buzz register` would.
         A background host is never inside the pane's process tree. Without an
         id, a pane the CLI says it is not in is refused; an older CLI, which
         says nothing (None), is identified by its pane as before.
@@ -853,7 +853,7 @@ def create_app(
                 return by_id, "session", None, (tmux_pane, None)
         if not tmux_pane:
             why = "this session is not registered" if agent_id else "no pane and no session id"
-            return None, "session" if agent_id else "pane", f"{why}; run `agent-swarm register` from the agent's pane", (None, None)
+            return None, "session" if agent_id else "pane", f"{why}; run `buzz register` from the agent's pane", (None, None)
         if pane_verified is False:
             # Refused before resolving: the pane isn't the caller's to vouch for.
             return None, "session" if agent_id else "pane", (
@@ -868,7 +868,7 @@ def create_app(
         if not agent_id:
             return pane_user, "pane", None if pane_user else "this pane is not registered", where
         if pane_user is None:
-            return None, "session", "this session is not registered; run `agent-swarm register`", where
+            return None, "session", "this session is not registered; run `buzz register`", where
         if not pane_verified:
             return None, "session", (
                 f"this session is not registered, and the caller is not verified to be in pane "
@@ -886,7 +886,7 @@ def create_app(
         if held and held != agent_id:
             return None, "session", (
                 f"pane {tmux_pane} is registered to {pane_user} under a different session id. If this "
-                f"is {pane_user}, run `agent-swarm register` from this pane (without --name) to move "
+                f"is {pane_user}, run `buzz register` from this pane (without --name) to move "
                 "its existing handle to this session; that is safe when this shell's TMUX_PANE is "
                 f"{tmux_pane}. Otherwise register from your own pane"
             ), where
@@ -898,7 +898,7 @@ def create_app(
                     or current.get("tmux_pane") != pane or current.get("tmux_server") != server):
                 return None, "session", (
                     f"could not record this session on {pane_user} (its registration changed); "
-                    "retry, or run `agent-swarm register`"
+                    "retry, or run `buzz register`"
                 ), where
         return pane_user, "pane", None, where
 
@@ -1642,12 +1642,12 @@ def create_app(
     def _notify_assignment(task: dict, actor: str):
         hint = (
             f"Before editing, use branch task/{task['id']} in a dedicated git worktree. "
-            f"Record it when you start: agent-swarm task-update {task['id']} "
+            f"Record it when you start: buzz task-update {task['id']} "
             f"--worktree /absolute/path --status picked_up. "
-            f"When finished: agent-swarm task-update {task['id']} --status done "
+            f"When finished: buzz task-update {task['id']} --status done "
             f"--note \"...\". The note is required and the close is refused "
             f"without one. {NOTE_GUIDANCE} "
-            f"When you start, also run agent-swarm status \"working on "
+            f"When you start, also run buzz status \"working on "
             f"#{task['id']}: <a few words>\" so the dashboard shows it."
         )
         content = f"You are assigned task #{task['id']}: {task['title']}."
@@ -1669,7 +1669,7 @@ def create_app(
             content = (
                 f"Task #{task['id']} is assigned to your team '{team['name']}': "
                 f"{task['title']}.{detail} As queen, parcel it out: split it into "
-                f"subtasks or hand it to a teammate with agent-swarm task-update "
+                f"subtasks or hand it to a teammate with buzz task-update "
                 f"{task['id']} --assignee <member>, then monitor progress."
             )
             targets = [team["queen"]]
@@ -1677,7 +1677,7 @@ def create_app(
             content = (
                 f"Task #{task['id']} is assigned to your team '{team['name']}' "
                 f"(no queen yet): {task['title']}.{detail} Coordinate with your "
-                f"teammates; whoever takes it should run agent-swarm task-update "
+                f"teammates; whoever takes it should run buzz task-update "
                 f"{task['id']} --assignee <yourself>."
             )
             targets = team["members"]
@@ -1997,7 +1997,7 @@ def create_app(
         """Appoint the swarm supervisor and deliver its role prompt.
 
         Like the queen, this is a prompt the agent is given, stored on the hub
-        so the dashboard and `agent-swarm supervisor` can say who holds it.
+        so the dashboard and `buzz supervisor` can say who holds it.
         The nudge cursor starts at the newest message: the supervisor is told
         about what happens from now on, not the whole backlog.
         """
@@ -2148,7 +2148,7 @@ def create_app(
             raise HTTPException(
                 status_code=422,
                 detail={"error": "unknown node", "node": req.node, "known": sorted(known),
-                        "hint": "enrol it first with `agent-swarm node-token`"},
+                        "hint": "enrol it first with `buzz node-token`"},
             )
         try:
             source = bundle.source_id(req.bundle)
@@ -2197,7 +2197,7 @@ def create_app(
 
     @app.get("/nodes/me")
     def nodes_me(request: Request):
-        """What the hub takes the caller for; `agent-swarm join` checks this."""
+        """What the hub takes the caller for; `buzz join` checks this."""
         p = request.state.principal
         return {"kind": p.kind, "node": p.node if p.kind == "node" else fleet.local.name}
 
@@ -2315,7 +2315,7 @@ def create_app(
 
 
 def _run() -> None:
-    """Console-script entry: `agent-swarm-server` starts uvicorn on 127.0.0.1:8765.
+    """Console-script entry: `buzz-server` starts uvicorn on 127.0.0.1:8765.
 
     The app is built here, not at import: building it opens the database and
     runs the startup reconciliation, which must happen in the one process

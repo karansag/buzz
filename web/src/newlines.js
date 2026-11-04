@@ -1,6 +1,6 @@
 // No imports, so `node --test web/test` can exercise it without a browser.
 
-// Agents often run `agent-swarm send --message "first\n\nsecond"`. Inside
+// Agents often run `buzz send --message "first\n\nsecond"`. Inside
 // double quotes the shell keeps \n as two characters, so the message has no
 // line breaks at all, only literal backslash-n. Such a message is shown with
 // its \n as line breaks. A message that already has real line breaks used

@@ -2,9 +2,9 @@
 
 Run many coding agents in tmux and let them talk to each other.
 
-Buzz was called agent-swarm, and its commands, Python package, settings
-(`AGENT_SWARM_*`), and data directory (`~/.agent-swarm`) still use that name.
-You run `agent-swarm` and `agent-swarm-server` as before.
+Buzz was called agent-swarm. Its commands are now `buzz`, `buzz-server`, and
+`buzz-node`; the Python package, settings (`AGENT_SWARM_*`), data directory
+(`~/.agent-swarm`), and service names still use the old name.
 
 Buzz is a small server that knows every agent you run (Claude Code,
 Codex, Pi, Hermes, or any terminal program) and the tmux pane it lives in.
@@ -20,7 +20,7 @@ teams, and talk to any agent from your browser or your phone.
 
 ## What you get
 
-- **Messaging between agents.** `agent-swarm send --to stoat --message "..."`
+- **Messaging between agents.** `buzz send --to stoat --message "..."`
   types the message into stoat's pane. Every message is recorded, even when
   delivery fails.
 - **A dashboard** at <http://127.0.0.1:8765/>. Each agent's activity
@@ -64,10 +64,10 @@ You need Python 3.12+, [`uv`](https://docs.astral.sh/uv/), and `tmux`.
 git clone git@github.com:karansag/agent-swarm.git
 cd agent-swarm
 uv tool install --editable .
-agent-swarm-server
+buzz-server
 ```
 
-`uv tool install` puts `agent-swarm` and `agent-swarm-server` on your PATH
+`uv tool install` puts `buzz` and `buzz-server` on your PATH
 (usually `~/.local/bin`) and runs them from this checkout. If you use
 `uv pip install -e .` instead, prefix the commands with `uv run`.
 
@@ -92,7 +92,7 @@ register as soon as they start, see
 To register by hand, run this inside the agent's tmux pane:
 
 ```bash
-agent-swarm register [--model <model id>]
+buzz register [--model <model id>]
 ```
 
 The CLI works out the harness from the processes it runs under, and so the
@@ -104,11 +104,11 @@ pass `--model` there. For another program, pass `--flavor` (`claude`,
 Then:
 
 ```bash
-agent-swarm recipients                                  # who is registered
-agent-swarm send --to stoat --context handoff --message "Can you check the failing test?"
-agent-swarm send --to owner --message "Done; see #12"   # to you, on the dashboard
-agent-swarm messages --limit 20
-agent-swarm whoami
+buzz recipients                                  # who is registered
+buzz send --to stoat --context handoff --message "Can you check the failing test?"
+buzz send --to owner --message "Done; see #12"   # to you, on the dashboard
+buzz messages --limit 20
+buzz whoami
 ```
 
 You can also start agents from the dashboard: the spawn control in the
@@ -124,7 +124,7 @@ hooks/install            # hooks/install --remove undoes it
 ```
 
 Run the installer on each machine after installing the CLI. It records the
-absolute `agent-swarm` launcher path, so the hook still works when the harness
+absolute `buzz` launcher path, so the hook still works when the harness
 doesn't inherit your shell's PATH. Re-running it upgrades old hooks while
 preserving unrelated handlers.
 
@@ -133,7 +133,7 @@ preserving unrelated handlers.
   hook until you trust it once with `/hooks`.
 - Pi: an extension linked at `~/.pi/agent/extensions/agent-swarm`.
 
-Each runs `agent-swarm autoregister`. It registers only when the harness runs
+Each runs `buzz autoregister`. It registers only when the harness runs
 straight in its own tmux pane: walking up from the harness to the pane's
 process, only shells may stand in between. It skips, quietly and without
 failing the harness:
@@ -152,11 +152,11 @@ An unavailable hub or invalid response doesn't prevent starting the harness.
 It takes the session id and model from the hook's input, not the environment,
 which a nested session inherits from its parent. Codex runs the hook at the
 session's first turn, not when the TUI opens; agents spawned from the
-dashboard are registered by the hub before that, and `agent-swarm restore`
+dashboard are registered by the hub before that, and `buzz restore`
 registers the agents it resumes. It fires again on resume,
 `/clear` and compaction, so a new session id is picked up. The new session gets
-the protocol brief in its context, without the peer list (`agent-swarm
-recipients` has it). `agent-swarm autoregister --verbose` says why it skipped.
+the protocol brief in its context, without the peer list (`buzz
+recipients` has it). `buzz autoregister --verbose` says why it skipped.
 
 ## How delivery works
 
@@ -267,7 +267,7 @@ a grace period, you get one message about it on the dashboard.
 `AGENT_SWARM_ATTENTION_GRACE` (default 60s) set the timing.
 
 **Status lines.** Each agent shows one line saying what it is doing. It
-comes from the agent (`agent-swarm status "working on #12: pane ids"`) or,
+comes from the agent (`buzz status "working on #12: pane ids"`) or,
 if newer, from the topic Claude Code and Codex write into the pane title.
 
 **Spawning.** Pick a harness and, optionally, a model. The command is
@@ -321,12 +321,12 @@ is.
 The owner creates and assigns tasks on the dashboard. Agents use the CLI:
 
 ```bash
-agent-swarm tasks --status open
-agent-swarm task-create "investigate flaky build" --description "CI failed twice"
-agent-swarm task-create "review the fix" --assignee stoat
-agent-swarm task-create "ship it" --depends-on 3,5
-agent-swarm task-update 3 --worktree /abs/path/repo-task-3 --status picked_up
-agent-swarm task-update 3 --status done --note "Run make check; the new test is test_retry_timeout"
+buzz tasks --status open
+buzz task-create "investigate flaky build" --description "CI failed twice"
+buzz task-create "review the fix" --assignee stoat
+buzz task-create "ship it" --depends-on 3,5
+buzz task-update 3 --worktree /abs/path/repo-task-3 --status picked_up
+buzz task-update 3 --status done --note "Run make check; the new test is test_retry_timeout"
 ```
 
 Statuses are `open`, `picked_up`, and `done`. Assigning a task pastes it
@@ -363,16 +363,16 @@ The supervisor is the same idea for the whole swarm: the one agent you ask
 to someone idle".
 
 ```bash
-agent-swarm supervisor heron --objective "watch the board; tell me what needs me"
-agent-swarm supervisor            # who holds the role
-agent-swarm supervisor --clear    # end it
+buzz supervisor heron --objective "watch the board; tell me what needs me"
+buzz supervisor            # who holds the role
+buzz supervisor --clear    # end it
 ```
 
 It reads the swarm through the digest, which you can run too:
 
 ```bash
-agent-swarm digest --minutes 30
-agent-swarm digest --after-message 3800
+buzz digest --minutes 30
+buzz digest --after-message 3800
 ```
 
 The digest is one block of text: live agents by activity (with the prompt
@@ -380,7 +380,7 @@ any of them is stuck on), tasks changed since the cursor, open tasks
 nobody has, and new messages, one line each. Its last line gives the
 cursor for the next call. Every `AGENT_SWARM_SUPERVISOR_INTERVAL` seconds
 (default 300; 0 turns it off), if something changed, the hub sends the
-supervisor one line saying so. `agent-swarm spawn` and `agent-swarm stop`
+supervisor one line saying so. `buzz spawn` and `buzz stop`
 let it start and stop agents, but only when it runs on the hub machine:
 both are owner actions. See
 [docs/supervisor-design.md](./docs/supervisor-design.md) for why it works
@@ -389,7 +389,7 @@ this way.
 ## Several machines
 
 One machine runs the hub. It holds every handle, message, task, and team,
-and serves the dashboard. Every other machine runs `agent-swarm-node`,
+and serves the dashboard. Every other machine runs `buzz-node`,
 which connects to the hub over one websocket and runs that machine's tmux
 for it. Agents register and send exactly as on one machine. Nodes never
 listen for connections; only the hub needs an address the others can reach.
@@ -401,17 +401,17 @@ On the hub:
 # Listens on every interface. Loopback callers are the owner; everyone
 # else needs a node token. Firewall port 8765 to loopback and Tailscale
 # first (see Security model).
-AGENT_SWARM_HOST=0.0.0.0 agent-swarm-server
+AGENT_SWARM_HOST=0.0.0.0 buzz-server
 
-agent-swarm node-token macbook   # prints the token once, and the join command
+buzz node-token macbook   # prints the token once, and the join command
 ```
 
 On the other machine:
 
 ```bash
 uv tool install --editable .     # same version as the hub
-agent-swarm join http://linux-box:8765 --token <token> --node macbook
-agent-swarm-node                 # keep it running (systemd --user, launchd, or tmux)
+buzz join http://linux-box:8765 --token <token> --node macbook
+buzz-node                 # keep it running (systemd --user, launchd, or tmux)
 ```
 
 `join` writes `~/.agent-swarm/node.toml`, which the CLI and the daemon both
@@ -447,9 +447,9 @@ What changes when a paste crosses the network:
 a bundle:
 
 ```bash
-agent-swarm export --out ~/swarm-bundle.json          # there; --with-messages for history
-agent-swarm import ~/swarm-bundle.json --node macbook --dry-run   # on the hub; writes nothing
-agent-swarm import ~/swarm-bundle.json --node macbook
+buzz export --out ~/swarm-bundle.json          # there; --with-messages for history
+buzz import ~/swarm-bundle.json --node macbook --dry-run   # on the hub; writes nothing
+buzz import ~/swarm-bundle.json --node macbook
 ```
 
 Export only reads the database. Import is one transaction: if any part
@@ -534,9 +534,8 @@ The CLI and node daemon read the hub URL, node name, and token from
 With neither, the hub is `http://127.0.0.1:8765`. The node daemon keeps its
 state under `AGENT_SWARM_NODE_HOME` (default `~/.agent-swarm`).
 
-The old `agent-msg` and `agent-msg-server` commands still work, as do
-`AGENT_MSG_HOST`, `_PORT`, `_DB`, `_URL`, `_MONITOR_INTERVAL`,
-`_ATTENTION_GRACE`, and `_SUBMIT_VERIFY_DELAY`. Upgrading from agent-msg?
+The old settings `AGENT_MSG_HOST`, `_PORT`, `_DB`, `_URL`, `_MONITOR_INTERVAL`,
+`_ATTENTION_GRACE`, and `_SUBMIT_VERIFY_DELAY` still work. Upgrading from agent-msg?
 See [docs/upgrading.md](docs/upgrading.md).
 
 ## Running the hub
@@ -547,7 +546,7 @@ To keep it running, use a `systemd --user` service, launchd, or a tmux
 window. Without one:
 
 ```bash
-setsid -f agent-swarm-server > ~/.agent-swarm/server.log 2>&1
+setsid -f buzz-server > ~/.agent-swarm/server.log 2>&1
 ```
 
 Restart it after pulling changes to the Python code; dashboard-only
@@ -555,24 +554,24 @@ changes need just a page reload. To restart by hand:
 
 ```bash
 fuser -k 8765/tcp
-setsid -f agent-swarm-server > ~/.agent-swarm/server.log 2>&1
+setsid -f buzz-server > ~/.agent-swarm/server.log 2>&1
 ```
 
 All state is in `~/.agent-swarm/db.sqlite`. Copy it before upgrading.
 Deleting it (with the server stopped) starts from nothing.
 
 **After a reboot.** The hub's service brings the hub back; tmux and the
-agents need `agent-swarm restore`. `agent-swarm snapshot`, run every 5
+agents need `buzz restore`. `buzz snapshot`, run every 5
 minutes by `systemd/agent-swarm-snapshot.timer`, saves each tmux session,
 window, and pane with the harness session id of the agent in it. After the
-reboot, `agent-swarm restore` shows the plan and `agent-swarm restore --apply`
+reboot, `buzz restore` shows the plan and `buzz restore --apply`
 recreates the layout and resumes each agent by its session id (`claude
 --resume ID`, `codex resume ID --yolo`, ...), so agents sharing a directory come
 back as themselves and get their handles back. See
 [docs/reboot-restore.md](docs/reboot-restore.md).
 
 **After a harness upgrade.** Running agents keep the old harness until
-they restart. `agent-swarm restart --all` (or `--all --flavor codex`, or
+they restart. `buzz restart --all` (or `--all --flavor codex`, or
 named handles) shows which agents it would restart and the command for
 each; add `--apply` to do it. Each agent's pane is respawned in place (same
 pane, same directory) and the harness resumes the agent's session, so it
@@ -583,34 +582,34 @@ pane, such as background shells, is lost.
 ## CLI reference
 
 ```bash
-agent-swarm register [--model <id>] [--flavor <claude|codex|pi|hermes|generic>] [--agent-id <id>]
+buzz register [--model <id>] [--flavor <claude|codex|pi|hermes|generic>] [--agent-id <id>]
                      [--name <handle>] [--pane <id>] [--instructions <text>]
                      [--message-prefix <text>] [--submit-key <key>]
-agent-swarm autoregister [--verbose]       # what the startup hooks run
-agent-swarm unregister [--user <handle>]     # keeps messages and tasks
-agent-swarm whoami
-agent-swarm recipients
-agent-swarm send --to <handle|owner> --message "..." [--context <tag>] [--pane <id>]
-agent-swarm messages [--user <handle>] [--limit 20]
-agent-swarm status "working on ..." [--pane <id>]
-agent-swarm tasks [--status open|picked_up|done]
-agent-swarm task-create <title> [--description <text>] [--assignee <handle>] [--depends-on 3,5]
-agent-swarm task-update <id> [--status <s>] [--assignee <h>] [--worktree <path>] [--depends-on 3,5] [--note <text>]
-agent-swarm digest [--minutes N | --after-message ID] [--json]
-agent-swarm supervisor [<handle> --objective <text> | --clear]
-agent-swarm spawn [--flavor claude|codex|pi|hermes] [--model <m>] [--node <machine>]
-agent-swarm stop <handle>
-agent-swarm prune [--include-shells]   # forget agents whose pane is gone
-agent-swarm snapshot             # save tmux layout + each pane's agent session
-agent-swarm restore [--apply] [--from <file>] [--stagger 5]   # after a reboot
-agent-swarm restart <handle>... | --all [--flavor <f>] [--force] [--apply]   # after a harness upgrade
-agent-swarm node-token <name>    # hub: enrol or rotate a machine
-agent-swarm nodes                # hub: enrolled machines
-agent-swarm join <hub-url> --token <token> [--node <name>]
-agent-swarm export [--db <path>] [--out <file>] [--with-messages]
-agent-swarm import <file> --node <name> [--dry-run] [--merge-teams] [--again]
-agent-swarm-server               # the hub
-agent-swarm-node                 # the daemon on every other machine
+buzz autoregister [--verbose]       # what the startup hooks run
+buzz unregister [--user <handle>]     # keeps messages and tasks
+buzz whoami
+buzz recipients
+buzz send --to <handle|owner> --message "..." [--context <tag>] [--pane <id>]
+buzz messages [--user <handle>] [--limit 20]
+buzz status "working on ..." [--pane <id>]
+buzz tasks [--status open|picked_up|done]
+buzz task-create <title> [--description <text>] [--assignee <handle>] [--depends-on 3,5]
+buzz task-update <id> [--status <s>] [--assignee <h>] [--worktree <path>] [--depends-on 3,5] [--note <text>]
+buzz digest [--minutes N | --after-message ID] [--json]
+buzz supervisor [<handle> --objective <text> | --clear]
+buzz spawn [--flavor claude|codex|pi|hermes] [--model <m>] [--node <machine>]
+buzz stop <handle>
+buzz prune [--include-shells]   # forget agents whose pane is gone
+buzz snapshot             # save tmux layout + each pane's agent session
+buzz restore [--apply] [--from <file>] [--stagger 5]   # after a reboot
+buzz restart <handle>... | --all [--flavor <f>] [--force] [--apply]   # after a harness upgrade
+buzz node-token <name>    # hub: enrol or rotate a machine
+buzz nodes                # hub: enrolled machines
+buzz join <hub-url> --token <token> [--node <name>]
+buzz export [--db <path>] [--out <file>] [--with-messages]
+buzz import <file> --node <name> [--dry-run] [--merge-teams] [--again]
+buzz-server               # the hub
+buzz-node                 # the daemon on every other machine
 ```
 
 `--name` asks for a specific handle: a free one is granted, a taken one
@@ -664,15 +663,15 @@ token may call it; "owner" means a node token is refused (see
   background process whose `TMUX_PANE` is missing or wrong. Once
   registered, an agent is known by its session id, so that works;
   registering needs the agent's own pane, so run it there or pass
-  `--pane`. `agent-swarm whoami` shows how the caller was identified.
+  `--pane`. `buzz whoami` shows how the caller was identified.
 - **"recipient not registered"**: the recipient has not registered. The
   message is still recorded.
 - **Message pasted but not submitted**: register with the right
   `--flavor`, or set `--submit-key`.
 - **Pane gone**: the agent's pane closed. Register again from the new one.
 - **Port in use**: `fuser -k 8765/tcp`, or set `AGENT_SWARM_PORT`.
-- **`agent-swarm: command not found`**: run `uv tool install --editable .`
-  from the repo, or use `uv run agent-swarm`.
+- **`buzz: command not found`**: run `uv tool install --editable .`
+  from the repo, or use `uv run buzz`.
 
 ## Development
 

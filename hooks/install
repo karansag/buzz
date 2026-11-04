@@ -5,7 +5,7 @@
   Codex        SessionStart hook in ~/.codex/hooks.json (trust it once via /hooks)
   Pi           extension linked at ~/.pi/agent/extensions/agent-swarm
 
-Each runs `agent-swarm autoregister`, which registers the session only when
+Each runs `buzz autoregister`, which registers the session only when
 its harness runs straight in its own tmux pane. JSON files are backed up to
 <file>.bak-<time> before they change.
 """
@@ -30,7 +30,7 @@ def is_our_hook(command: str) -> bool:
         words = shlex.split(command)
     except ValueError:
         return False
-    return len(words) == 3 and Path(words[0]).name == "agent-swarm" and words[1:] == ["autoregister", "--hook"]
+    return len(words) == 3 and Path(words[0]).name in ("buzz", "agent-swarm") and words[1:] == ["autoregister", "--hook"]
 
 
 def edit_hooks(path: Path, remove: bool, command: str | None) -> None:
@@ -82,10 +82,10 @@ def main() -> None:
     remove = "--remove" in sys.argv[1:]
     command = None
     if not remove:
-        executable = shutil.which("agent-swarm")
+        executable = shutil.which("buzz")
         if not executable:
-            sys.exit("agent-swarm is not on PATH; install its CLI before installing startup hooks")
-        # Keep the stable launcher path (e.g. ~/.local/bin/agent-swarm), not
+            sys.exit("buzz is not on PATH; install its CLI before installing startup hooks")
+        # Keep the stable launcher path (e.g. ~/.local/bin/buzz), not
         # its realpath into a uv environment that can change on reinstall.
         command = f"{shlex.quote(os.path.abspath(executable))} autoregister --hook"
     edit_hooks(HOME / ".claude/settings.json", remove, command)

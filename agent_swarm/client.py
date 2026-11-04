@@ -1,24 +1,24 @@
 """Tiny CLI client. Usage:
 
-    agent-swarm register [--pane Y] [--name HANDLE] [--flavor NAME] [--instructions TXT]
+    buzz register [--pane Y] [--name HANDLE] [--flavor NAME] [--instructions TXT]
                          [--message-prefix TXT]
-    agent-swarm autoregister [--hook] [--verbose]   # from a harness startup hook
-    agent-swarm send --to Y [--context CTX] --message MSG
-    agent-swarm messages [--user X] [--limit N]
-    agent-swarm recipients
-    agent-swarm whoami       # prints detected tmux pane + registered handle
-    agent-swarm status "working on X"   # what you are doing, shown on the dashboard
-    agent-swarm tasks [--status open|picked_up|done]
-    agent-swarm task-create TITLE [--description TEXT] [--assignee HANDLE] [--depends-on 3,5]
-    agent-swarm task-update ID --status open|picked_up|done [--assignee X] [--worktree PATH]
+    buzz autoregister [--hook] [--verbose]   # from a harness startup hook
+    buzz send --to Y [--context CTX] --message MSG
+    buzz messages [--user X] [--limit N]
+    buzz recipients
+    buzz whoami       # prints detected tmux pane + registered handle
+    buzz status "working on X"   # what you are doing, shown on the dashboard
+    buzz tasks [--status open|picked_up|done]
+    buzz task-create TITLE [--description TEXT] [--assignee HANDLE] [--depends-on 3,5]
+    buzz task-update ID --status open|picked_up|done [--assignee X] [--worktree PATH]
                             [--depends-on 3,5] [--note TEXT]   # --note required to close
-    agent-swarm digest [--minutes N | --after-message ID]   # what changed, as text
-    agent-swarm supervisor [HANDLE [--objective TEXT] | --clear]   # the swarm supervisor role
-    agent-swarm spawn [--flavor claude|codex|pi|hermes] [--model M] [--node N]
-    agent-swarm stop HANDLE   # kill that agent's tmux pane
-    agent-swarm snapshot      # save this machine's tmux layout and the agent in each pane
-    agent-swarm restore [--from FILE] [--apply] [--stagger SECONDS]   # after a reboot
-    agent-swarm restart HANDLE... | --all [--flavor F] [--force] [--apply]   # e.g. after a harness upgrade
+    buzz digest [--minutes N | --after-message ID]   # what changed, as text
+    buzz supervisor [HANDLE [--objective TEXT] | --clear]   # the swarm supervisor role
+    buzz spawn [--flavor claude|codex|pi|hermes] [--model M] [--node N]
+    buzz stop HANDLE   # kill that agent's tmux pane
+    buzz snapshot      # save this machine's tmux layout and the agent in each pane
+    buzz restore [--from FILE] [--apply] [--stagger SECONDS]   # after a reboot
+    buzz restart HANDLE... | --all [--flavor F] [--force] [--apply]   # e.g. after a harness upgrade
 
 Defaults:
     --pane            current shell's tmux pane (via `TMUX_PANE`-targeted `tmux display-message`)
@@ -232,7 +232,7 @@ def _identify_or_explain(who: dict) -> str | None:
     if who["pane_verified"] is False and not who["agent_id"]:
         print(f"error: {_not_in_pane_message(who)}", file=sys.stderr)
     else:
-        print(f"error: {answer.get('detail') or 'this caller is not registered'}; run `agent-swarm register`", file=sys.stderr)
+        print(f"error: {answer.get('detail') or 'this caller is not registered'}; run `buzz register`", file=sys.stderr)
     return None
 
 
@@ -368,7 +368,7 @@ def short_brief(brief: str) -> str:
     """The protocol brief without its peer list, for a session's context.
 
     A hook's output lands in every new session; the full roster would cost
-    each one a screenful, and `agent-swarm recipients` gives it on demand.
+    each one a screenful, and `buzz recipients` gives it on demand.
     """
     lines = brief.splitlines()
     peers = [line for line in lines if line.startswith("  - ")]
@@ -378,7 +378,7 @@ def short_brief(brief: str) -> str:
             continue
         out.append(line)
         if line.endswith("Currently registered peers:"):
-            out.append(f"  ({len(peers)} registered; `agent-swarm recipients` lists them)")
+            out.append(f"  ({len(peers)} registered; `buzz recipients` lists them)")
     return "\n".join(out)
 
 
@@ -391,7 +391,7 @@ def cmd_autoregister(args: argparse.Namespace) -> int:
     """
     def skip(why: str) -> int:
         if args.verbose:
-            print(f"agent-swarm autoregister: skipped: {why}", file=sys.stderr)
+            print(f"buzz autoregister: skipped: {why}", file=sys.stderr)
         return 0
 
     if os.environ.get("AGENT_SWARM_AUTOREGISTER", "1") == "0":
@@ -723,7 +723,7 @@ def cmd_supervisor(args: argparse.Namespace) -> int:
     else:
         r = httpx.get(f"{base_url()}/supervisor", headers=_headers(), timeout=5)
         if r.is_success and r.json()["supervisor"] is None:
-            print("no supervisor is set; appoint one with: agent-swarm supervisor <handle> --objective \"...\"")
+            print("no supervisor is set; appoint one with: buzz supervisor <handle> --objective \"...\"")
             return 0
     print(json.dumps(r.json(), indent=2) if r.headers.get("content-type", "").startswith("application/json") else r.text)
     return 0 if r.is_success else 1
@@ -797,7 +797,7 @@ def cmd_node_token(args: argparse.Namespace) -> int:
         hub = f"http://{config.hostname()}:{port}"
         print(f"(hub address guessed as {hub}; use this machine's tailnet name if that is wrong)", file=sys.stderr)
     print(
-        f"On {body['name']}, run:\n  agent-swarm join {shlex.quote(hub)} "
+        f"On {body['name']}, run:\n  buzz join {shlex.quote(hub)} "
         f"--token {shlex.quote(body['token'])} --node {shlex.quote(body['name'])}",
         file=sys.stderr,
     )
@@ -1067,7 +1067,7 @@ def main(argv: list[str] | None = None) -> int:
         "join", help="point this machine at a hub (writes ~/.agent-swarm/node.toml)"
     )
     join.add_argument("hub", help="hub URL, e.g. http://karans-linux:8765")
-    join.add_argument("--token", help="this machine's token, from `agent-swarm node-token` on the hub")
+    join.add_argument("--token", help="this machine's token, from `buzz node-token` on the hub")
     join.add_argument("--node", help="this machine's node name (default: short hostname)")
     join.set_defaults(func=cmd_join)
 
@@ -1092,7 +1092,7 @@ def main(argv: list[str] | None = None) -> int:
     exp.set_defaults(func=cmd_export)
 
     imp = sub.add_parser("import", help="take a bundle into this hub")
-    imp.add_argument("bundle", help="the file `agent-swarm export` wrote")
+    imp.add_argument("bundle", help="the file `buzz export` wrote")
     imp.add_argument("--node", required=True, help="the machine those agents run on")
     imp.add_argument("--dry-run", action="store_true", help="report what would happen, write nothing")
     imp.add_argument("--again", action="store_true", help="import a bundle that was imported before")

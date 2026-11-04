@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="What the agent-swarm supervisor is, what was built, and what was left out.">
+<meta name="description" content="What the buzz supervisor is, what was built, and what was left out.">
 <title>Swarm Supervisor Design</title>
 <!-- Rendered companion to supervisor-design.md. Regenerate when the markdown changes. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -108,7 +108,7 @@ holds it, with no server authority of its own.</p>
   shell; the supervisor needs nothing a normal agent lacks except
   information and a brief.</li>
 <li><strong>The owner already has a way to talk to any agent.</strong> The dashboard's
-  owner thread, and <code>agent-swarm send --to owner</code> back. The supervisor is
+  owner thread, and <code>buzz send --to owner</code> back. The supervisor is
   reached the same way, so there is no new chat surface to build or
   learn.</li>
 <li><strong>Any harness can hold the role.</strong> Claude Code today, Codex tomorrow,
@@ -116,12 +116,12 @@ holds it, with no server authority of its own.</p>
 <li><strong>The role must survive the agent.</strong> Harnesses compact or restart. The
   role is keyed by handle and stored in the hub's <code>meta</code> table, so the
   same handle in a fresh session is still the supervisor; the owner
-  re-sends the prompt with <code>agent-swarm supervisor &lt;handle&gt;</code> if the
+  re-sends the prompt with <code>buzz supervisor &lt;handle&gt;</code> if the
   agent lost it.</li>
 </ul>
 <h2>What was built</h2>
 <p>Three things, plus prompts and docs.</p>
-<h3>1. The digest: <code>agent-swarm digest</code>, <code>GET /digest</code></h3>
+<h3>1. The digest: <code>buzz digest</code>, <code>GET /digest</code></h3>
 <p>The piece that makes "ask an agent for the latest messages and tasks"
 cheap. One call returns one block of text written to be read in one go:</p>
 <pre><code>swarm digest · 14:02 · since message #3800
@@ -136,7 +136,7 @@ tasks: 2 changed, 5 in progress, 3 open and unassigned
   waiting: #151 Align lockfile ... (2d old)
 messages: 7 new (3 with owner, 4 agent to agent)
   14:01 gannet → galago [task-155]: Sounds good. A few things that may save ...
-next: agent-swarm digest --after-message 3821
+next: buzz digest --after-message 3821
 </code></pre>
 <ul>
 <li>Agents come from the same rows as the dashboard, including the
@@ -156,16 +156,16 @@ next: agent-swarm digest --after-message 3821
 <p><code>agent_swarm/digest.py</code> is pure functions over plain dicts; the endpoint
 feeds it the annotated recipients, the task board, and
 <code>db.fetch_messages_after</code>.</p>
-<h3>2. The role: <code>agent-swarm supervisor</code>, <code>PUT/GET/DELETE /supervisor</code></h3>
-<pre><code>agent-swarm supervisor gannet --objective &quot;keep the release on track&quot;
-agent-swarm supervisor            # who holds it
-agent-swarm supervisor --clear    # end it; the agent is told
+<h3>2. The role: <code>buzz supervisor</code>, <code>PUT/GET/DELETE /supervisor</code></h3>
+<pre><code>buzz supervisor gannet --objective &quot;keep the release on track&quot;
+buzz supervisor            # who holds it
+buzz supervisor --clear    # end it; the agent is told
 </code></pre>
 <p>Appointing stores <code>{user_id, objective, since, cursor}</code> and delivers the
 role prompt (<code>_supervisor_prompt</code> in <code>server.py</code>) in the owner's name,
 context <code>supervisor</code>. The prompt tells the agent how to answer the
 owner (run the digest, read task threads, ask the assignee and relay),
-how to delegate (<code>task-create --assignee</code>, <code>agent-swarm spawn</code> when
+how to delegate (<code>task-create --assignee</code>, <code>buzz spawn</code> when
 nobody is free), what the hub's nudges mean, and what to ask before
 doing (stop, delete, team changes). Owner only; a node token is refused.
 Unregistering the agent clears the role, as it does a queen.
@@ -182,13 +182,13 @@ than useless. Instead, on the monitor loop:</p>
   party to, and tasks updated since the last check,</li>
 <li>if either is non-zero, deliver one line from the reserved sender <code>hub</code>,
   context <code>digest</code>: "Since your last digest: 3 new message(s), 1 task
-  change(s). Run <code>agent-swarm digest --after-message 3800</code> ...", and</li>
+  change(s). Run <code>buzz digest --after-message 3800</code> ...", and</li>
 <li>advance the cursor either way, so a quiet spell is never reported
   late and an unknown delivery is never resent.</li>
 </ul>
 <p>The nudge is recorded like any message, so the owner sees it on the
 supervisor's page. <code>hub</code> joins <code>owner</code> as a reserved handle.</p>
-<h3>Admin hands: <code>agent-swarm spawn</code>, <code>agent-swarm stop</code></h3>
+<h3>Admin hands: <code>buzz spawn</code>, <code>buzz stop</code></h3>
 <p>Thin CLI wrappers over the existing owner-only endpoints, so the
 supervisor can start a worker when asked to delegate and nobody is idle,
 and stop one the owner asks it to. Teams stay dashboard-only for now.</p>
@@ -238,7 +238,7 @@ nothing needs it yet.</p>
 <ul>
 <li><strong>Context exhaustion.</strong> A supervisor that is asked a lot and nudged
   every five minutes will compact. The role survives (it is keyed by
-  handle), the prompt does not: re-run <code>agent-swarm supervisor &lt;handle&gt;</code>
+  handle), the prompt does not: re-run <code>buzz supervisor &lt;handle&gt;</code>
   to re-brief it. If this is frequent, raise the interval, or have the
   prompt tell the agent to keep a short running note on disk.</li>
 <li><strong>Self-triggered nudges.</strong> The task count cannot tell who updated a
@@ -255,21 +255,21 @@ nothing needs it yet.</p>
 </ul>
 <h2>How to try it</h2>
 <pre><code class="language-bash"># 1. pick an idle agent (or spawn one) and appoint it
-agent-swarm spawn --flavor claude          # prints the new handle, e.g. heron
-agent-swarm supervisor heron --objective &quot;watch the task board and tell me what needs me&quot;
+buzz spawn --flavor claude          # prints the new handle, e.g. heron
+buzz supervisor heron --objective &quot;watch the task board and tell me what needs me&quot;
 
 # 2. talk to it from the dashboard: open #/agent/heron and ask
 #    &quot;what's going on?&quot; — it runs the digest and answers in the owner thread
 
 # 3. see the digest yourself
-agent-swarm digest --minutes 30
-agent-swarm digest --after-message 3800
+buzz digest --minutes 30
+buzz digest --after-message 3800
 
 # 4. let some traffic happen; within ~5 minutes heron's pane shows
 #    [agent-msg from hub · digest] Since your last digest: ...
 
 # 5. end the role
-agent-swarm supervisor --clear
+buzz supervisor --clear
 </code></pre>
 <p>Tests: <code>tests/test_supervisor.py</code> covers appointing, clearing, the
 digest's content and cursor, attention surfacing, the nudge's throttle

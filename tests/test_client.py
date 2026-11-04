@@ -610,7 +610,7 @@ def test_node_token_asks_the_hub_and_prints_the_join_command(monkeypatch, capsys
     assert client.main(["node-token", "macbook"]) == 0
     out, err = capsys.readouterr()
     assert '"token": "tok"' in out
-    assert "agent-swarm join http://hub:8765 --token tok --node macbook" in err
+    assert "buzz join http://hub:8765 --token tok --node macbook" in err
 
 
 def test_node_token_guesses_a_reachable_hub_address_for_a_loopback_hub(monkeypatch, capsys):
@@ -626,7 +626,7 @@ def test_node_token_guesses_a_reachable_hub_address_for_a_loopback_hub(monkeypat
     )
     assert client.main(["node-token", "macbook"]) == 0
     err = capsys.readouterr().err
-    assert "agent-swarm join http://workstation:8765 --token 't k' --node macbook" in err
+    assert "buzz join http://workstation:8765 --token 't k' --node macbook" in err
     assert "guessed" in err
 
 
@@ -727,7 +727,7 @@ def test_harness_of_names_each_harness_process():
     ) == "codex"
     assert client.harness_of("pi") == "pi"
     assert client.harness_of("node /n/bin/pip install x") is None
-    assert client.harness_of("/bin/bash -c agent-swarm register") is None
+    assert client.harness_of("/bin/bash -c buzz register") is None
 
 
 def _register_under(monkeypatch, *ancestry):

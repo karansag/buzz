@@ -30,7 +30,7 @@ Hide
 
 Type `export D=$(mktemp -d) && export SWARM_ENV="-e AGENT_SWARM_URL=http://127.0.0.1:8799 -e AGENT_SWARM_CONFIG=$D/none.toml"`
 Enter
-Type `AGENT_SWARM_PORT=8799 AGENT_SWARM_DB=$D/db.sqlite setsid -f agent-swarm-server > $D/server.log 2>&1`
+Type `AGENT_SWARM_PORT=8799 AGENT_SWARM_DB=$D/db.sqlite setsid -f buzz-server > $D/server.log 2>&1`
 Enter
 Sleep 2s
 Type `tmux new-session -d -s swarm-demo -c ~/agent-swarm $SWARM_ENV && tmux split-window -v -t swarm-demo -c ~/agent-swarm $SWARM_ENV && tmux select-pane -t swarm-demo.0 && tmux attach -t swarm-demo`
@@ -51,7 +51,7 @@ Down
 Type "codex -c check_for_update_on_startup=false --yolo"
 Enter
 Sleep 6s
-Type "Register yourself with agent-swarm and reply with just your handle. If another agent then messages you, answer it in one sentence with agent-swarm send and stop."
+Type "Register yourself with agent-swarm and reply with just your handle. If another agent then messages you, answer it in one sentence with buzz send and stop."
 Enter
 Sleep 40s
 Ctrl+B

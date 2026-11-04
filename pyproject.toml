@@ -34,11 +34,9 @@ exclude = ["skills*", "tests*", "docs*"]
 agent_swarm = ["portal.html", "static/*.css", "static/*.js", "static/*.png", "static/*.svg", "static/*.webmanifest"]
 
 [project.scripts]
-agent-swarm = "agent_swarm.client:main"
-agent-swarm-server = "agent_swarm.server:_run"
-agent-swarm-node = "agent_swarm.node:_run"
-agent-msg = "agent_swarm.client:main"
-agent-msg-server = "agent_swarm.server:_run"
+buzz = "agent_swarm.client:main"
+buzz-server = "agent_swarm.server:_run"
+buzz-node = "agent_swarm.node:_run"
 
 [dependency-groups]
 dev = [

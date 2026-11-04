@@ -101,7 +101,7 @@ def write(hub: str, token: str | None, node: str) -> Path:
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
-        "# agent-swarm per-machine settings, written by `agent-swarm join`.",
+        "# agent-swarm per-machine settings, written by `buzz join`.",
         f"hub = {_toml_string(hub.rstrip('/'))}",
         f"node = {_toml_string(node)}",
     ]

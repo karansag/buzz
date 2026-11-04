@@ -1,4 +1,4 @@
-"""`agent-swarm autoregister`: registering from a harness startup hook."""
+"""`buzz autoregister`: registering from a harness startup hook."""
 
 from __future__ import annotations
 
@@ -196,7 +196,7 @@ def test_install_adds_each_hook_once_and_remove_undoes_it(tmp_path):
     assert claude["model"] == "opus" and claude["hooks"]["Stop"]
     commands = [h["command"] for g in claude["hooks"]["SessionStart"] for h in g["hooks"]]
     assert len(commands) == 1
-    assert shlex.split(commands[0]) == [os.path.abspath(shutil.which("agent-swarm")), "autoregister", "--hook"]
+    assert shlex.split(commands[0]) == [os.path.abspath(shutil.which("buzz")), "autoregister", "--hook"]
     codex = json.loads((tmp_path / ".codex/hooks.json").read_text())
     assert len(codex["hooks"]["SessionStart"]) == 1
     ext = tmp_path / ".pi/agent/extensions/agent-swarm"
@@ -213,7 +213,7 @@ def test_install_and_remove_preserve_handlers_sharing_our_group(tmp_path):
     other = {"type": "command", "command": "echo keep-me"}
     settings.write_text(json.dumps({"hooks": {"SessionStart": [{
         "matcher": "startup|resume", "hooks": [
-            other, {"type": "command", "command": "agent-swarm autoregister --hook"},
+            other, {"type": "command", "command": "/old/bin/agent-swarm autoregister --hook"},
         ],
     }]}}))
     _install(tmp_path)
@@ -226,7 +226,7 @@ def test_install_and_remove_preserve_handlers_sharing_our_group(tmp_path):
 def test_installed_hook_works_without_cli_on_path(tmp_path):
     launcher_dir = tmp_path / "tool launchers"
     launcher_dir.mkdir()
-    cli = launcher_dir / "agent-swarm"
+    cli = launcher_dir / "buzz"
     cli.write_text("#!/bin/sh\nprintf 'hook-ran\\n'\n")
     cli.chmod(0o755)
     monkey_env = {"PATH": str(launcher_dir) + os.pathsep + os.environ["PATH"], "HOME": str(tmp_path)}
@@ -239,17 +239,17 @@ def test_installed_hook_works_without_cli_on_path(tmp_path):
 
 
 def test_install_keeps_the_stable_symlink_path(tmp_path):
-    target = tmp_path / "tool-version" / "agent-swarm"
+    target = tmp_path / "tool-version" / "buzz"
     target.parent.mkdir()
     target.write_text("#!/bin/sh\nexit 0\n")
     target.chmod(0o755)
     launchers = tmp_path / "bin"
     launchers.mkdir()
-    (launchers / "agent-swarm").symlink_to(target)
+    (launchers / "buzz").symlink_to(target)
     env = {k: v for k, v in os.environ.items() if k not in ("CODEX_HOME", "PI_CODING_AGENT_DIR")}
     subprocess.run([str(INSTALL)], check=True, capture_output=True, env=env | {
         "HOME": str(tmp_path), "PATH": str(launchers) + os.pathsep + os.environ["PATH"],
     })
     config = json.loads((tmp_path / ".codex/hooks.json").read_text())
     command = config["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-    assert shlex.split(command)[0] == str(launchers / "agent-swarm")
+    assert shlex.split(command)[0] == str(launchers / "buzz")

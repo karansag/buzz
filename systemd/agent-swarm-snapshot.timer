@@ -1,5 +1,5 @@
 [Unit]
-Description=Snapshot tmux and agents every 5 minutes, for agent-swarm restore
+Description=Snapshot tmux and agents every 5 minutes, for buzz restore
 
 [Timer]
 OnBootSec=5min

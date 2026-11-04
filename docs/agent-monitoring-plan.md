@@ -105,7 +105,7 @@ allowlists), prefer configuring the harness over auto-accepting in
 tmux; this feature is for harnesses and cases where that is not
 possible.
 
-## Relationship to `agent-swarm status` self-reports
+## Relationship to `buzz status` self-reports
 
 Complementary, not competing: the loop answers "is it stuck?", the
 self-report answers "what is it working on?" (feeds roster sublines

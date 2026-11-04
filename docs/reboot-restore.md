@@ -28,15 +28,15 @@ the id `claude --resume`, `codex resume`, `pi --session`, and
 `hermes --resume` take. That id names one conversation exactly.
 Codex agents are always restarted with `codex resume ID --yolo`.
 
-`agent-swarm snapshot` saves this machine's tmux layout to
+`buzz snapshot` saves this machine's tmux layout to
 `~/.agent-swarm/snapshots/<time>.json`: every session, window (index, name,
 layout), and pane (index, working directory), and for each pane running a
 registered agent, its handle, harness, session id, and model. A snapshot
 identical to the newest one is not written again; the newest 100 are kept.
 
-`agent-swarm restore` reads the newest snapshot taken under an earlier tmux
+`buzz restore` reads the newest snapshot taken under an earlier tmux
 server (snapshots of the new, near-empty server after the reboot are
-skipped) and prints what it would do. `agent-swarm restore --apply` does it:
+skipped) and prints what it would do. `buzz restore --apply` does it:
 
 - creates each missing session and window at its old index, splits it into
   its old panes in their old directories, and applies the saved layout;
@@ -75,18 +75,18 @@ Install once (the timer takes a snapshot every 5 minutes):
 cp ~/agent-swarm/systemd/agent-swarm-snapshot.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now agent-swarm-snapshot.timer
-agent-swarm snapshot          # take one now; prints sessions, panes, agents
+buzz snapshot          # take one now; prints sessions, panes, agents
 ```
 
 After a reboot:
 
 ```bash
-agent-swarm restore           # dry run: the plan and each resume command
-agent-swarm restore --apply   # do it
+buzz restore           # dry run: the plan and each resume command
+buzz restore --apply   # do it
 tmux attach
 ```
 
-`agent-swarm restore --from ~/.agent-swarm/snapshots/<time>.json` restores an
+`buzz restore --from ~/.agent-swarm/snapshots/<time>.json` restores an
 older snapshot.
 
 ## Limits
@@ -101,20 +101,20 @@ older snapshot.
   minutes before the reboot is missed; one stopped in that window comes back.
 - Restore runs on the machine whose tmux it restores; each node keeps its own
   snapshots. The timer here is for Linux; a Mac node would need a launchd
-  agent running `agent-swarm snapshot`.
+  agent running `buzz snapshot`.
 - It does not start at boot by itself: an agent coming back costs memory and
   tokens, so restoring is a command you run.
 
 ## Restarting agents after a harness upgrade
 
 Upgrading Claude Code, Codex, or Pi does not change agents that are already
-running; each keeps the old binary until it restarts. `agent-swarm restart`
+running; each keeps the old binary until it restarts. `buzz restart`
 restarts them in place, with the same resume commands restore uses:
 
 ```bash
-agent-swarm restart --all                  # dry run: who, and the command for each
-agent-swarm restart --all --flavor codex   # only Codex agents
-agent-swarm restart otter tapir --apply    # named agents, for real
+buzz restart --all                  # dry run: who, and the command for each
+buzz restart --all --flavor codex   # only Codex agents
+buzz restart otter tapir --apply    # named agents, for real
 ```
 
 For each agent it runs `tmux respawn-pane -k` on the agent's pane: the

@@ -223,8 +223,8 @@ def test_a_bundle_becomes_reservations_teams_and_tasks(live):
     report = r.json()["report"]
     assert (report["agents"], report["teams"], report["tasks"]) == (2, 1, 2)
     assert r.json()["register"] == [
-        "agent-swarm register --name otter --flavor claude --agent-id conv-otter",
-        "agent-swarm register --name tapir --flavor codex",
+        "buzz register --name otter --flavor claude --agent-id conv-otter",
+        "buzz register --name tapir --flavor codex",
     ]
     rows = {x["user_id"]: x for x in owner.get("/recipients").json()["recipients"]}
     assert set(rows) == {"otter", "tapir"}
@@ -349,8 +349,8 @@ def test_the_same_bundle_plans_the_same_names_every_time():
 def test_the_line_to_run_carries_the_id_the_handle_is_held_for():
     lines = bundle.register_commands(bundle.plan(make(), "laptop", hub()))
     assert lines == [
-        "agent-swarm register --name otter --flavor claude --agent-id conv-otter",
-        "agent-swarm register --name tapir --flavor codex",
+        "buzz register --name otter --flavor claude --agent-id conv-otter",
+        "buzz register --name tapir --flavor codex",
     ]
 
 

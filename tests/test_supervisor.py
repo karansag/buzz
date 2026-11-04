@@ -34,7 +34,7 @@ def test_appoint_delivers_prompt_and_shows_on_state(client):
     assert "[agent-msg from owner · supervisor]" in prompt
     assert "swarm supervisor" in prompt and "watch the release" in prompt
     assert "vole" in prompt  # the live roster is in the prompt
-    assert "agent-swarm digest" in prompt and "agent-swarm spawn" in prompt
+    assert "buzz digest" in prompt and "buzz spawn" in prompt
 
     state = client.get("/api/state").json()
     assert state["supervisor"]["user_id"] == "heron"
@@ -103,7 +103,7 @@ def test_digest_lists_new_traffic_and_task_changes_with_a_cursor(client):
     assert "owner → vole: how is it going?" in text
     assert "vole → owner: nearly there" in text
     assert "3 with owner, 1 agent to agent" in text  # the task assignment notice is from the owner too
-    assert text.splitlines()[-1] == f"next: agent-swarm digest --after-message {d['cursor']['message_id']}"
+    assert text.splitlines()[-1] == f"next: buzz digest --after-message {d['cursor']['message_id']}"
     assert d["cursor"]["message_id"] > first_id
 
     # The cursor is exact: nothing before it is repeated.
@@ -180,7 +180,7 @@ def test_nudge_is_throttled_and_only_about_other_peoples_traffic(client, monkeyp
     asyncio.run(tick())
     nudge = _pasted(client, "0:0.0")[-1]
     assert nudge.startswith("[agent-msg from hub · digest] Since your last digest: 1 new message(s).")
-    assert "agent-swarm digest --after-message" in nudge
+    assert "buzz digest --after-message" in nudge
     cursor = int(nudge.split("--after-message ")[1].split("`")[0])
     # The named cursor reads exactly that traffic.
     assert "vole → owner: done with it" in client.get("/digest", params={"after_message": cursor}).json()["text"]

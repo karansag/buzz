@@ -1,4 +1,4 @@
-"""Pure tests for choosing which agents `agent-swarm restart` restarts."""
+"""Pure tests for choosing which agents `buzz restart` restarts."""
 
 import pytest
 

@@ -1,7 +1,7 @@
 """A compact, text-first summary of what changed in the swarm.
 
 Written for an LLM to read in one go: the supervisor agent runs
-`agent-swarm digest` when the owner asks what is going on, and the hub
+`buzz digest` when the owner asks what is going on, and the hub
 nudges it when there is something new. Pure functions over the same rows
 the dashboard shows, so tests never need the server.
 """
@@ -65,9 +65,9 @@ def nudge_text(counts: dict, after_id: int) -> str:
         parts.append(f"{counts['tasks']} task change(s)")
     return (
         f"Since your last digest: {', '.join(parts)}. "
-        f"Run `agent-swarm digest --after-message {after_id}` to read them, then tell "
+        f"Run `buzz digest --after-message {after_id}` to read them, then tell "
         f"the owner only what matters (attention, done, failed, stalled). "
-        f"Reply via `agent-swarm send --to owner`."
+        f"Reply via `buzz send --to owner`."
     )
 
 
@@ -133,7 +133,7 @@ def render(
             line += f"\n      verify: {_clip(t['note'], 140)}"
         lines.append(line)
     if len(touched) > MAX_TASKS:
-        lines.append(f"  … {len(touched) - MAX_TASKS} more changed; see agent-swarm tasks")
+        lines.append(f"  … {len(touched) - MAX_TASKS} more changed; see buzz tasks")
     for t in waiting[:MAX_TASKS]:
         if t["updated_at"] <= since_ts:
             lines.append(f"  waiting: #{t['id']} {_clip(t['title'], 90)} ({_ago(now - t['created_at'])} old)")
@@ -159,7 +159,7 @@ def render(
         mark = "" if m["status"] == "delivered" else f" ({m['status']}: {_clip(m.get('delivery_error') or '', 60)})"
         lines.append(f"  {_clock(m['ts'])} {m['sender']} → {m['recipient']}{ctx}{mark}: {_clip(m['content'])}")
 
-    lines.append(f"next: agent-swarm digest --after-message {cursor}")
+    lines.append(f"next: buzz digest --after-message {cursor}")
     counts = changed(messages, tasks, since_ts, supervisor)
     return {
         "text": "\n".join(lines),

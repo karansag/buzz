@@ -116,7 +116,7 @@
 </ul>
 
 <h2><span class="num">Decision 1</span>Topology</h2>
-<div class="chosen"><span class="label">chosen</span><p>One hub, thin nodes. The server keeps handles, messages, tasks, teams, monitor state, and the dashboard. Every other machine runs <code>agent-swarm-node</code>, a small daemon from the same package that drives its local tmux and nothing else. The hub's own tmux is served in-process through the same interface. Run the hub on the machine that stays on; here that is karans-linux.</p></div>
+<div class="chosen"><span class="label">chosen</span><p>One hub, thin nodes. The server keeps handles, messages, tasks, teams, monitor state, and the dashboard. Every other machine runs <code>buzz-node</code>, a small daemon from the same package that drives its local tmux and nothing else. The hub's own tmux is served in-process through the same interface. Run the hub on the machine that stays on; here that is karans-linux.</p></div>
 
 <figure>
 <svg viewBox="0 0 720 330" role="img" aria-label="Hub on karans-linux with its own panes; node daemon on karans-macbook-pro dials out to the hub over one websocket; a CLI on any pane sends to the hub">
@@ -125,7 +125,7 @@
   </defs>
   <rect x="20" y="30" width="300" height="170" rx="6" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.5"/>
   <text x="36" y="56" font-family="var(--sans)" font-size="15" font-weight="600" fill="var(--hub)">hub · karans-linux</text>
-  <text x="36" y="76" font-family="var(--mono)" font-size="12" fill="var(--ink-2)">agent-swarm-server · always on</text>
+  <text x="36" y="76" font-family="var(--mono)" font-size="12" fill="var(--ink-2)">buzz-server · always on</text>
   <text x="36" y="104" font-family="var(--serif)" font-size="13" fill="var(--ink)">SQLite: handles, messages, tasks,</text>
   <text x="36" y="122" font-family="var(--serif)" font-size="13" fill="var(--ink)">teams, monitor state · dashboard at /</text>
   <rect x="36" y="140" width="268" height="40" rx="4" fill="var(--surface)" stroke="var(--rule)"/>
@@ -134,7 +134,7 @@
 
   <rect x="400" y="30" width="300" height="170" rx="6" fill="var(--node-soft)" stroke="var(--node)" stroke-width="1.5"/>
   <text x="416" y="56" font-family="var(--sans)" font-size="15" font-weight="600" fill="var(--node)">node · karans-macbook-pro</text>
-  <text x="416" y="76" font-family="var(--mono)" font-size="12" fill="var(--ink-2)">agent-swarm-node · same package</text>
+  <text x="416" y="76" font-family="var(--mono)" font-size="12" fill="var(--ink-2)">buzz-node · same package</text>
   <text x="416" y="104" font-family="var(--serif)" font-size="13" fill="var(--ink)">no listener, no state of its own</text>
   <text x="416" y="122" font-family="var(--serif)" font-size="13" fill="var(--ink)">dials the hub, keeps one socket open</text>
   <rect x="416" y="140" width="268" height="40" rx="4" fill="var(--surface)" stroke="var(--rule)"/>
@@ -163,7 +163,7 @@
   <text x="610" y="258" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="var(--ink)">ibis</text>
   <text x="610" y="272" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--ink-2)">%12</text>
 
-  <text x="360" y="316" text-anchor="middle" font-family="var(--mono)" font-size="11.5" fill="var(--ink-2)">any pane, any machine:  agent-swarm send --to puffin  →  hub records pending  →  node pastes into %10 (server id checked)</text>
+  <text x="360" y="316" text-anchor="middle" font-family="var(--mono)" font-size="11.5" fill="var(--ink-2)">any pane, any machine:  buzz send --to puffin  →  hub records pending  →  node pastes into %10 (server id checked)</text>
 </svg>
 <figcaption>Pane ids repeat across machines, so an address is node, pane id, and tmux server id. Handles stay global because the hub assigns them from one pool.</figcaption>
 </figure>
@@ -197,7 +197,7 @@
 
 <h2><span class="num">Decision 5</span>Auth</h2>
 <p>Today there is no auth and the server binds loopback. Once the hub listens on the tailnet, anyone who reaches it can type into every registered pane on every machine, so the deferred tailnet-auth item stops being deferrable.</p>
-<div class="chosen"><span class="label">chosen</span><p>Per-node bearer tokens bound to node identity. <code>agent-swarm node-token &lt;name&gt;</code> on the hub creates or rotates a token, prints it once, and stores a hash. The node daemon and the CLI on that machine send it. The hub derives the node from the token and rejects a register or send whose claimed node differs, so one node cannot impersonate another. Revoking a laptop is deleting its row. Owner operations are authorized separately; a node token cannot act as the owner.</p></div>
+<div class="chosen"><span class="label">chosen</span><p>Per-node bearer tokens bound to node identity. <code>buzz node-token &lt;name&gt;</code> on the hub creates or rotates a token, prints it once, and stores a hash. The node daemon and the CLI on that machine send it. The hub derives the node from the token and rejects a register or send whose claimed node differs, so one node cannot impersonate another. Revoking a laptop is deleting its row. Owner operations are authorized separately; a node token cannot act as the owner.</p></div>
 <div class="review"><span class="label">changed in review</span><p>Hoopoe found a contradiction in the first draft, which let announce overwrite an address while a second machine with the same name got a 409. Identity is now the token, not the name: the same token reconnecting fences the previous connection; a different token claiming an enrolled name is refused. It also caught that binding only the Tailscale IP drops the loopback listener the local dashboard uses, and that a reverse proxy makes remote requests look local.</p></div>
 <ul>
   <li><b>Listeners.</b> The hub listens on loopback and its Tailscale IP. Binding all interfaces is acceptable only because every non-loopback request requires a token.</li>
@@ -242,19 +242,19 @@
 
 <h2>Per-machine setup</h2>
 <p>The CLI and the node daemon read one per-machine config file, written once:</p>
-<pre><code>agent-swarm join http://karans-linux:8765 --token &lt;from: agent-swarm node-token karans-macbook-pro&gt;
+<pre><code>buzz join http://karans-linux:8765 --token &lt;from: buzz node-token karans-macbook-pro&gt;
 # writes ~/.agent-swarm/node.toml: hub url, token, node name (short hostname unless --node)</code></pre>
 <p>Environment variables override the file when set, and the loopback default applies when neither exists, so a single-machine install needs no file. A file rather than shell-profile exports because an agent already running in a tmux pane inherited its environment at launch and cannot pick up new exports; its harness runs the register command as a subprocess, which reads the file. That is what makes migration a re-register rather than a restart. The bundled register skills work unchanged.</p>
 
 <h2>Migrating existing machines</h2>
 <p>Two kinds of machine exist today, and the hub cannot tell which from outside because a local server binds loopback.</p>
-<p><b>Agents in tmux, no server of its own.</b> Nothing to migrate. Install the package, run <code>agent-swarm join</code>, start the node daemon, and have each agent register with the hub. Each gets a handle from the hub pool.</p>
+<p><b>Agents in tmux, no server of its own.</b> Nothing to migrate. Install the package, run <code>buzz join</code>, start the node daemon, and have each agent register with the hub. Each gets a handle from the hub pool.</p>
 <p><b>A machine running its own agent-swarm server.</b> It has its own handles, messages, tasks, teams, and attachments. Its agents were registered by a stable agent id the hub has never seen, so re-registration creates a fresh hub row with no clash, and registering twice returns the same hub handle. The old database is archived, not merged:</p>
 <ol>
-  <li>On the hub, once the naming prerequisite and the first two implementation steps are deployed: <code>agent-swarm node-token karans-macbook-pro</code>.</li>
-  <li>On the machine: pull, reinstall, stop its server, rename its database to <code>db.sqlite.pre-hub</code>, run <code>agent-swarm join</code> with the token, start <code>agent-swarm-node</code> as a launchd or systemd user service.</li>
+  <li>On the hub, once the naming prerequisite and the first two implementation steps are deployed: <code>buzz node-token karans-macbook-pro</code>.</li>
+  <li>On the machine: pull, reinstall, stop its server, rename its database to <code>db.sqlite.pre-hub</code>, run <code>buzz join</code> with the token, start <code>buzz-node</code> as a launchd or systemd user service.</li>
   <li>Ask each live agent to register. It keeps running in its pane; the CLI reads the new config file. An agent that wants its old handle asks for it with <code>--name</code>; the hub grants it when free and refuses it when a live hub agent holds it, in which case the agent takes the assigned one. The protocol brief lists its peers under their hub handles.</li>
-  <li>Open tasks are the one thing worth carrying over. <code>agent-swarm import-tasks db.sqlite.pre-hub --node karans-macbook-pro</code> creates them on the hub with new ids, keeps title, description, status, worktree with its node, and dependencies, and sets the assignee only when an agent has re-registered under the same handle. Task numbers inside old message text are not rewritten; they refer to the archive.</li>
+  <li>Open tasks are the one thing worth carrying over. <code>buzz import-tasks db.sqlite.pre-hub --node karans-macbook-pro</code> creates them on the hub with new ids, keeps title, description, status, worktree with its node, and dependencies, and sets the assignee only when an agent has re-registered under the same handle. Task numbers inside old message text are not rewritten; they refer to the archive.</li>
   <li>Teams are few; re-create them on the dashboard. Message history and closed tasks stay in the archive, readable any time by pointing a scratch server at it.</li>
 </ol>
 <p>Rollback on that machine is stopping the node daemon, restoring the archived database, and starting its old server; nothing in the archive was modified. Why not merge the databases: handle, task id, and team id collisions would each need rewriting across messages and task references, and the text of old messages cannot be rewritten reliably. The live board is what matters, and open tasks carry it.</p>

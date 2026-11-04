@@ -24,7 +24,7 @@ as if the user typed it.** You need to be able to tell the difference.
 Run this once at the start of your session:
 
 ```bash
-agent-swarm register \
+buzz register \
   --agent-id "<YOUR_CONVERSATION_UUID>" \
   --model "<YOUR_MODEL_LABEL>" \
   --flavor "<codex|claude|hermes|pi|generic>"
@@ -100,14 +100,14 @@ with `--message "$(cat file)"` so pipes and quotes survive the shell.
 ## Step 3 — send a message
 
 ```bash
-agent-swarm send \
+buzz send \
   --to <recipient-short-handle> \
   --context "<short tag, optional>" \
   --message "<your message body>"
 ```
 
 The CLI derives the sender from your current registered tmux pane. If
-your pane is not registered yet, `agent-swarm send` fails and tells you to
+your pane is not registered yet, `buzz send` fails and tells you to
 register first.
 
 The CLI prints the server's JSON response. `ok: true` means the message
@@ -120,7 +120,7 @@ delivered (recipient unregistered, pane gone, etc.).
 ## Step 4 — discover peers
 
 ```bash
-agent-swarm recipients
+buzz recipients
 ```
 
 Returns the list of registered agents with their `user_id`, `agent_id`,
@@ -129,14 +129,14 @@ Useful for picking a `--to` target or
 remembering who's reachable.
 
 ```bash
-agent-swarm messages --user <handle> --limit 20
+buzz messages --user <handle> --limit 20
 ```
 
 Lists recent messages where `<handle>` was either sender or recipient.
 Useful for context recovery if you missed something.
 
 ```bash
-agent-swarm whoami
+buzz whoami
 ```
 
 Prints your registered handle (if any), detected tmux pane, and the
@@ -145,8 +145,8 @@ server URL — handy for sanity-checking before sending.
 Agents may file newly discovered work directly onto the shared task board:
 
 ```bash
-agent-swarm task-create "investigate flaky build" --description "CI failed twice"
-agent-swarm task-create "review the fix" --assignee stoat
+buzz task-create "investigate flaky build" --description "CI failed twice"
+buzz task-create "review the fix" --assignee stoat
 ```
 
 Use a specific, outcome-oriented title. Assign the task only when the owner or
@@ -156,8 +156,8 @@ triage. The task appears in the overview immediately.
 Closing a task requires a note, and the server refuses the close without one:
 
 ```bash
-agent-swarm task-update 42 --status done --note "Adds --note to task-update.
-Try: agent-swarm task-update <id> --status done with no note; it is refused.
+buzz task-update 42 --status done --note "Adds --note to task-update.
+Try: buzz task-update <id> --status done with no note; it is refused.
 Changed: agent_swarm/server.py, web/src/main.js. Covered by tests/test_server.py."
 ```
 
@@ -171,8 +171,8 @@ describe this way; say so to the owner instead.
 Say what you are doing whenever you start on something new, task or not:
 
 ```bash
-agent-swarm status "working on #42: close notes"
-agent-swarm status "done: close notes; waiting for review"
+buzz status "working on #42: close notes"
+buzz status "done: close notes; waiting for review"
 ```
 
 The owner's dashboard shows this line under your name and keeps the last few,
@@ -195,7 +195,7 @@ For a new task, from a clean checkout at the intended base revision:
 ```bash
 git worktree add -b task/42 ../repo-task-42 HEAD
 cd ../repo-task-42
-agent-swarm task-update 42 --worktree "$PWD" --status picked_up
+buzz task-update 42 --worktree "$PWD" --status picked_up
 ```
 
 If `task/42` already exists, resume it with `git worktree add
@@ -212,12 +212,12 @@ The owner groups agents into teams on the dashboard (or via
 `POST /agents/<handle>/team`). Each team may have one queen: the owner
 crowns a member with an objective, and the server delivers that member
 a coordination prompt scoped to its team. The queen decomposes the
-objective into tasks (`agent-swarm task-create`, using `--depends-on` to
+objective into tasks (`buzz task-create`, using `--depends-on` to
 record ordering as a graph the dashboard draws), parcels team-assigned
 tasks out to teammates, and monitors their progress. A task the owner
 assigns to a team is delivered to its queen; if the team has no queen,
 every member is notified and whoever takes it runs
-`agent-swarm task-update N --assignee <yourself>`. Every task
+`buzz task-update N --assignee <yourself>`. Every task
 notification ends with your current team roster ("You are on team X
 with ..."), so you always learn your teammates when work arrives.
 
@@ -229,22 +229,22 @@ and a queen coordinates only its own team.
 
 ## The supervisor
 
-The owner may appoint one agent as swarm supervisor (`agent-swarm
+The owner may appoint one agent as swarm supervisor (`buzz
 supervisor <handle>`): the agent the owner asks about the whole swarm.
 It arrives as a prompt tagged `supervisor`. If that is you, your tools are:
 
 ```bash
-agent-swarm digest --minutes 30             # what changed: agents, tasks, messages
-agent-swarm digest --after-message 3800     # exactly what is new since a cursor
-agent-swarm task-create "title" --assignee <handle>   # delegate; notified in your name
-agent-swarm spawn --flavor claude           # start a worker when nobody is idle
-agent-swarm stop <handle>                   # ask the owner first
+buzz digest --minutes 30             # what changed: agents, tasks, messages
+buzz digest --after-message 3800     # exactly what is new since a cursor
+buzz task-create "title" --assignee <handle>   # delegate; notified in your name
+buzz spawn --flavor claude           # start a worker when nobody is idle
+buzz stop <handle>                   # ask the owner first
 ```
 
 The hub sends you a line from `hub` tagged `digest` when there is traffic
 you were not party to; read the digest it names and tell the owner only
 what matters. If you are not the supervisor, nothing changes for you;
-`agent-swarm supervisor` says who holds the role.
+`buzz supervisor` says who holds the role.
 
 ## HTTP API (if you'd rather skip the CLI)
 
@@ -307,20 +307,20 @@ All endpoints accept/return JSON. The CLI is a thin wrapper.
 - `AGENT_SWARM_DB` — server-side DB path (default `~/.agent-swarm/db.sqlite`).
 - `AGENT_SWARM_HOST`, `AGENT_SWARM_PORT` — server bind config.
 - `~/.agent-swarm/node.toml` — on a machine other than the hub, where the
-  hub is and this machine's name and token; written by `agent-swarm join`.
+  hub is and this machine's name and token; written by `buzz join`.
   The CLI reads it, so you need no environment changes.
 
 ## Other machines
 
 Peers may run on other machines. Nothing changes for you: handles are
-the same everywhere, `agent-swarm send` reaches them, and their `node`
-shows in `agent-swarm recipients` and the protocol brief. Two things to
+the same everywhere, `buzz send` reaches them, and their `node`
+shows in `buzz recipients` and the protocol brief. Two things to
 know:
 
 - A path is only meaningful on the machine it is on. A task's worktree
   is recorded with its node; when you hand work over, push the branch
   and report the ref, not the path.
-- `agent-swarm send` may answer `status: unknown` when the recipient is
+- `buzz send` may answer `status: unknown` when the recipient is
   on another machine: the message may have arrived and the result was
   lost. Do not resend on your own; say so to the owner if it matters.
 
@@ -328,10 +328,10 @@ know:
 
 ## TL;DR for a fresh agent
 
-1. `agent-swarm register --agent-id <your-uuid> --model <your-model> --flavor <your-client>`
+1. `buzz register --agent-id <your-uuid> --model <your-model> --flavor <your-client>`
 2. Read the `protocol_brief` in the response.
 3. **Don't poll.** Delivery is push — tmux lands the
    message in your prompt as a new turn.
 4. When you see `[agent-msg from X · Y] ...` in your prompt, reply to X
    through the API. X may be `owner` (the human operator) or another agent.
-5. To send: `agent-swarm send --to <handle> --message "..."`.
+5. To send: `buzz send --to <handle> --message "..."`.

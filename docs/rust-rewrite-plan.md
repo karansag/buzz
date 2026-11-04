@@ -1,6 +1,6 @@
 # Rust Rewrite Plan
 
-The Rust version should make `agent-swarm` a small, typed coordination
+The Rust version should make `buzz` a small, typed coordination
 component with first-class agent interfaces.
 
 The goal is not to build another full orchestrator. The goal is a
@@ -25,7 +25,7 @@ call over HTTP/MCP.
 - No required cloud relay.
 - No remote multi-user auth in v1.
 
-Those belong in layers above `agent-swarm`.
+Those belong in layers above `buzz`.
 
 ## Crate Layout
 
@@ -34,7 +34,7 @@ crates/
   agent-swarm-core/       domain types, registry, routing, protocol
   agent-swarm-store/      SQLite persistence
   agent-swarm-transport/  tmux, process/PTY, HTTP/MCP delivery traits
-  agent-swarm-server/     Axum HTTP server
+  buzz-server/     Axum HTTP server
   agent-swarm-cli/        CLI binary
   agent-swarm-interfaces/
     codex/
@@ -217,10 +217,10 @@ If both `interface` and `flavor` are present, `interface` wins.
 
 ```bash
 agent-swarm serve
-agent-swarm register --interface codex --agent-id ...
-agent-swarm send --to <handle> --context <tag> --message "..."
-agent-swarm recipients
-agent-swarm messages
+buzz register --interface codex --agent-id ...
+buzz send --to <handle> --context <tag> --message "..."
+buzz recipients
+buzz messages
 agent-swarm interfaces
 agent-swarm interface show codex
 ```
@@ -228,7 +228,7 @@ agent-swarm interface show codex
 Helper scripts can become thin wrappers:
 
 ```bash
-agent-swarm register --interface codex --model "${CODEX_MODEL:-gpt-5-codex}"
+buzz register --interface codex --model "${CODEX_MODEL:-gpt-5-codex}"
 ```
 
 Eventually, the Rust binary can generate or install the helper files:
@@ -313,7 +313,7 @@ story simple.
 
 ## Risks
 
-- Overbuilding: if `agent-swarm` starts doing task tracking, it competes
+- Overbuilding: if `buzz` starts doing task tracking, it competes
   with Beads/Gas Town instead of composing with them.
 - Plugin complexity: native dynamic Rust plugins are not worth it for
   v1.
@@ -324,7 +324,7 @@ story simple.
 
 ## Recommended First Rust Milestone
 
-Build a single `agent-swarm` binary that supports:
+Build a single `buzz` binary that supports:
 
 - `serve`
 - `register`

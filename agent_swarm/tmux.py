@@ -798,7 +798,7 @@ def format_message(
     head += "] "
     if sender == "owner" and owner_reply_reminder:
         head += (
-            'Reply via `agent-swarm send --to owner --message "..."` '
+            'Reply via `buzz send --to owner --message "..."` '
             'so it appears on the dashboard.\n\n'
         )
     return head + content

@@ -185,7 +185,7 @@ def test_a_mismatched_id_says_how_to_reregister(client):
     register(client, "0:0.0", "heron", agent_id="old-imported-id")
     r = send(client, tmux_pane="0:0.0", agent_id="actual-session", pane_verified=True)
     detail = r.json()["detail"]["detail"]
-    assert r.status_code == 404 and "agent-swarm register` from this pane (without --name)" in detail
+    assert r.status_code == 404 and "buzz register` from this pane (without --name)" in detail
     # Nothing was overwritten.
     assert whoami(client, agent_id="old-imported-id")["user_id"] == "heron"
     repaired = client.post("/register", json={"tmux_pane": "0:0.0", "agent_id": "actual-session"})

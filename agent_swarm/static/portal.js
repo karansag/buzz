@@ -9773,7 +9773,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 }
 function Doing({ summaries, now }) {
 	if (summaries.length === 0) return m$1`<div class="doing-box empty-doing">No status yet. Agents post one with
-      <code>agent-swarm status "working on …"</code>; Claude Code and Codex pane titles
+      <code>buzz status "working on …"</code>; Claude Code and Codex pane titles
       show up here too.</div>`;
 	const [cur, ...past] = summaries.slice(0, 6);
 	const line = (s) => m$1`<span class="src" title=${SUMMARY_SOURCE[s.source] || s.source}>${s.source === "agent" ? "✎" : "▭"}</span>`;

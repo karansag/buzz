@@ -47,13 +47,29 @@ sqlite3 ~/.agent-msg/db.sqlite ".backup '$HOME/.agent-swarm/db.sqlite'"
 Alternatively, keep the old file where it is and point the server at it with
 `AGENT_SWARM_DB=~/.agent-msg/db.sqlite`.
 
-## 4. Service definitions (optional for now)
+## 4. The commands are now `buzz`
 
-The old `agent-msg` / `agent-msg-server` commands and `AGENT_MSG_*`
-environment variables still work for one compatibility release, so an
-existing launchd plist or systemd unit keeps working unchanged. When
-convenient, switch it to `agent-swarm-server` and `AGENT_SWARM_HOST`,
-`AGENT_SWARM_PORT` and `AGENT_SWARM_DB`.
+The commands were renamed: `agent-swarm` is `buzz`, `agent-swarm-server` is
+`buzz-server`, and `agent-swarm-node` is `buzz-node`. The `agent-msg` and
+`agent-msg-server` commands are gone. Reinstalling (`uv tool install
+--editable . --force`) removes the old launchers, so anything that still
+names them stops working: systemd units, launchd plists, startup hooks, and
+running agents that were told to use `agent-swarm send`.
+
+- Point units and plists at the new names, e.g.
+  `ExecStart=%h/.local/bin/buzz-server`.
+- Run `hooks/install` again. It replaces hooks that ran `agent-swarm
+  autoregister` with `buzz autoregister`.
+- Until every running agent has picked up the new name, link the old ones:
+
+```bash
+cd ~/.local/bin
+ln -sf buzz agent-swarm
+ln -sf buzz-server agent-swarm-server
+ln -sf buzz-node agent-swarm-node
+```
+
+The `AGENT_MSG_*` environment variables still work.
 
 ## 5. Start the server
 
@@ -61,7 +77,7 @@ Start it with tmux running as the same user, then check:
 
 ```bash
 curl http://127.0.0.1:8765/health     # "db" should be the file you expect
-agent-swarm recipients
+buzz recipients
 ```
 
 Three things happen on first start:
@@ -75,7 +91,7 @@ Three things happen on first start:
   | What the server finds at the old position | Result |
   |---|---|
   | Pane title names the agent, or the same harness (Claude/Codex) runs there | Stays online, now bound to the pane id |
-  | No pane at all | Offline: "pane … no longer exists"; `agent-swarm prune` removes it |
+  | No pane at all | Offline: "pane … no longer exists"; `buzz prune` removes it |
   | A bare shell, or a different harness | Offline: "could not be verified"; the agent must register again |
 
   If tmux isn't running when the server starts, the conversion waits and runs
@@ -84,7 +100,7 @@ Three things happen on first start:
 - **Handles are bare names again.** New registrations and spawns get a
   plain pool name (`otter`), not `otter-codex-gpt5-karanslinux`. What an
   agent is and where it runs are recorded on its row instead: the
-  dashboard card, `agent-swarm recipients`, and the protocol brief show a
+  dashboard card, `buzz recipients`, and the protocol brief show a
   `node` next to flavor and model. Existing handles are left exactly as
   they are; an agent that wants a shorter one re-registers with
   `--name`, which renames it and carries its history over. While an old
@@ -93,7 +109,7 @@ Three things happen on first start:
   node name.
 
   The registration request field `host` is now `node`, and the server
-  rejects unknown fields, so an older `agent-swarm` CLI gets a 422 from a
+  rejects unknown fields, so an older `buzz` CLI gets a 422 from a
   newer server (and vice versa). Upgrade the CLI and the server together;
   `uv tool install --editable .` does both from one checkout.
 
@@ -104,18 +120,18 @@ Three things happen on first start:
 
 ## 6. Agents
 
-Running agents need nothing: their next `agent-swarm` command sends their
+Running agents need nothing: their next `buzz` command sends their
 pane id automatically.
 
 - **Offline "could not be verified" agents:** when you restart one, have it
   register with its old handle to keep its history:
-  `agent-swarm register --name <handle>` (the Claude/Codex skill accepts
+  `buzz register --name <handle>` (the Claude/Codex skill accepts
   `--name` too). A handle whose agent is offline can now be reclaimed this way.
 - **Skills:** installs that symlink `skills/` pick up the new registration
   helpers automatically. If you copied them, copy them again: the helpers now
   send the agent's exact model instead of a `claude-code` / `gpt-5-codex`
   placeholder.
-- **Cleanup:** `agent-swarm prune` removes registrations whose panes are gone;
+- **Cleanup:** `buzz prune` removes registrations whose panes are gone;
   `--include-shells` also removes the offline ones sitting in bare shells or
   unverified panes.
 
@@ -127,18 +143,18 @@ it under this one rather than merging databases:
 1. On the hub, listen beyond loopback (`AGENT_SWARM_HOST=0.0.0.0`, with
    the firewall rule from the README's Security Model so only loopback
    and the Tailscale interface reach port 8765) and run
-   `agent-swarm node-token <that-machine>`; it prints the join command.
+   `buzz node-token <that-machine>`; it prints the join command.
 2. On that machine: pull and reinstall, then write its agents, teams, and
-   tasks out: `agent-swarm export --out ~/swarm-bundle.json` (add
+   tasks out: `buzz export --out ~/swarm-bundle.json` (add
    `--with-messages` to carry history too). The export never writes to
    the database it reads. Then stop its own server, rename its database
    aside (`~/.agent-swarm/db.sqlite.pre-hub`), run the join command, and
-   start `agent-swarm-node` as a service.
+   start `buzz-node` as a service.
 3. Copy the bundle to the hub (`tailscale file cp`, `scp`), and there:
 
    ```bash
-   agent-swarm import ~/swarm-bundle.json --node <that-machine> --dry-run
-   agent-swarm import ~/swarm-bundle.json --node <that-machine>
+   buzz import ~/swarm-bundle.json --node <that-machine> --dry-run
+   buzz import ~/swarm-bundle.json --node <that-machine>
    ```
 
    The dry run reports what would happen and writes nothing: which
@@ -160,7 +176,7 @@ it under this one rather than merging databases:
 Rolling that machine back: stop the daemon, remove
 `~/.agent-swarm/node.toml` (and any `AGENT_SWARM_URL`, `AGENT_SWARM_NODE`,
 or `AGENT_SWARM_TOKEN` in the shell profile), restore its database, start
-its old server, and check `agent-swarm whoami` shows
+its old server, and check `buzz whoami` shows
 `http://127.0.0.1:8765`. The join is otherwise still in force: the CLI
 would keep talking to the hub with the node token. Nothing in the
 archive was touched.

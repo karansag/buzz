@@ -576,7 +576,7 @@ def test_owner_send_delivers_to_pane_and_records(client):
     pane, text, *_ = client._calls[-1]
     assert pane == "0:1.0"
     assert "[agent-msg from owner]" in text and "status update please" in text
-    assert 'agent-swarm send --to owner --message "..."' in text
+    assert 'buzz send --to owner --message "..."' in text
 
     msgs = client.get("/messages", params={"user": user}).json()["messages"]
     assert msgs[0]["sender"] == "owner"
@@ -594,7 +594,7 @@ def test_owner_send_preserves_multiline_content_and_context(client):
 
     _, delivered, *_ = client._calls[-1]
     assert "[agent-msg from owner · investigation]" in delivered
-    assert 'agent-swarm send --to owner --message' in delivered
+    assert 'buzz send --to owner --message' in delivered
     assert content in delivered
 
     msgs = client.get("/messages", params={"user": user}).json()["messages"]
@@ -1066,12 +1066,12 @@ def test_closing_a_task_requires_a_verification_note(client):
     # A note supplied with the close is enough, and it is kept on the task.
     r = client.patch(
         f"/tasks/{tid}",
-        json={"status": "done", "note": "Run `agent-swarm tasks`; note shows on the card."},
+        json={"status": "done", "note": "Run `buzz tasks`; note shows on the card."},
     )
     assert r.status_code == 200
     task = r.json()["task"]
     assert task["status"] == "done"
-    assert task["note"].startswith("Run `agent-swarm tasks`")
+    assert task["note"].startswith("Run `buzz tasks`")
 
 
 def test_a_note_left_earlier_satisfies_the_close(client):
@@ -1602,7 +1602,7 @@ def test_owner_reminder_follows_per_agent_conversation_inactivity(client, monkey
     def send(user, text='hello'):
         assert client.post('/owner/send', json={'recipient': user, 'content': text}).status_code == 200
         return client._calls[-1][1]
-    hint = 'Reply via `agent-swarm send --to owner'
+    hint = 'Reply via `buzz send --to owner'
     assert hint in send(a)
     clock[0] += 60
     assert send(a, 'follow-up') == '[agent-msg from owner] follow-up'
@@ -1629,7 +1629,7 @@ def test_unsuccessful_owner_delivery_does_not_suppress_reminder(client, monkeypa
     for _ in range(2):
         r = client.post('/owner/send', json={'recipient': user, 'content': 'hello'})
         assert r.json()['status'] == 'failed'
-    assert all('Reply via `agent-swarm send --to owner' in body for body in calls)
+    assert all('Reply via `buzz send --to owner' in body for body in calls)
 
 
 @pytest.mark.parametrize("existing", [False, True])

@@ -122,7 +122,7 @@ no wholesale rewrite; insert with targeted edits).
 ## Verification (scratch, never production)
 
 1. `AGENT_SWARM_DB=/tmp/mon.sqlite AGENT_SWARM_PORT=8799
-   AGENT_SWARM_ATTENTION_GRACE=15 uv run agent-swarm-server`
+   AGENT_SWARM_ATTENTION_GRACE=15 uv run buzz-server`
 2. Three panes in a scratch tmux session, all registered:
    - `while true; do date; sleep 1; done` → must read working
    - plain idle shell → must read idle

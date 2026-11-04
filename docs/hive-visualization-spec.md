@@ -135,7 +135,7 @@ v1 matching this spec, then iterate with Karan.
 
 ## Explicitly out of scope for v1
 
-- `agent-swarm status` self-report command (separate feature; would add
+- `buzz status` self-report command (separate feature; would add
   a status line under bee names later).
 - Sound, task creation from the canvas. (Drag assignment shipped after v1:
   comb cells and kanban cards can both be dragged onto a live bee.)

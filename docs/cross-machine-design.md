@@ -76,7 +76,7 @@ Before the hub work, as one commit:
 
 **Chosen: one hub, thin nodes.** One server stays the single source
 of truth: handles, messages, tasks, teams, monitor state, dashboard.
-Every other machine runs `agent-swarm-node`, a small daemon from the
+Every other machine runs `buzz-node`, a small daemon from the
 same package that drives its local tmux and nothing else. The hub
 machine's own tmux is served in-process through the same interface.
 
@@ -89,7 +89,7 @@ Alternatives:
 - **Hub drives remote tmux over SSH.** No daemon on nodes. Review
   corrected an overstatement in the first draft: SSH does not force
   one round trip per tmux call, because the hub can invoke one remote
-  helper (`agent-swarm-node deliver ...`) that does the paste, delay,
+  helper (`buzz-node deliver ...`) that does the paste, delay,
   submit, and verify locally. That makes SSH a credible prototype if
   avoiding a persistent daemon were the dominant requirement. It is
   not chosen because continuous monitoring, reconnect, spawn, and
@@ -213,7 +213,7 @@ registered pane on every machine, so the tailnet-auth item in the
 roadmap stops being deferrable.
 
 **Chosen: per-node bearer tokens bound to node identity.**
-`agent-swarm node-token <name>` on the hub creates or rotates a
+`buzz node-token <name>` on the hub creates or rotates a
 token, prints it once, and stores only a hash. The node daemon and
 the CLI on that machine send it as `Authorization: Bearer`. The hub
 derives the node from the token and **rejects a register or send
@@ -335,7 +335,7 @@ Rules:
 
 ## The node daemon
 
-`agent_swarm/node.py`, console script `agent-swarm-node`. On start it
+`agent_swarm/node.py`, console script `buzz-node`. On start it
 connects to `AGENT_SWARM_HUB` with its token, sends hello, then loops:
 execute commands from the socket, stream observations on the
 interval. Command kinds and what they do:
@@ -390,10 +390,10 @@ path on each.
 `register`, `send`, and `whoami` already send the host; it is renamed
 `node` and persisted. The CLI and the node daemon read one per-machine
 config file, `~/.agent-swarm/node.toml`, written once by
-`agent-swarm join`:
+`buzz join`:
 
 ```bash
-agent-swarm join http://karans-linux:8765 --token <from: agent-swarm node-token karans-macbook-pro>
+buzz join http://karans-linux:8765 --token <from: buzz node-token karans-macbook-pro>
 # writes ~/.agent-swarm/node.toml: hub url, token, node name (short hostname unless --node)
 ```
 
@@ -404,7 +404,7 @@ needs no file at all.
 
 A file rather than shell-profile exports because an agent already
 running in a tmux pane inherited its environment at launch and cannot
-pick up new exports; its harness runs `agent-swarm register` as a
+pick up new exports; its harness runs `buzz register` as a
 subprocess, which reads the file. That is what makes migration below
 a re-register rather than a restart. The bundled register skills work
 unchanged.
@@ -428,8 +428,8 @@ Two kinds of machine exist today, and the hub cannot tell which from
 outside because a local server binds loopback.
 
 **A machine with agents in tmux but no server of its own.** Nothing to
-migrate. Install the package, run `agent-swarm join`, start
-`agent-swarm-node`, and have each agent register with the hub; the
+migrate. Install the package, run `buzz join`, start
+`buzz-node`, and have each agent register with the hub; the
 register skill does it on request. Each gets a handle from the hub
 pool.
 
@@ -441,20 +441,20 @@ a fresh hub row with no clash, and registering twice returns the same
 hub handle. The old database is archived, not merged:
 
 1. On the hub, after steps 0 to 2 of the implementation plan are
-   deployed: `agent-swarm node-token karans-macbook-pro`.
+   deployed: `buzz node-token karans-macbook-pro`.
 2. On the machine: pull, reinstall, stop its server (`fuser -k
    8765/tcp` or `launchctl bootout`), rename its database to
-   `db.sqlite.pre-hub`, run `agent-swarm join` with the token, start
-   `agent-swarm-node` as a launchd or systemd user service.
+   `db.sqlite.pre-hub`, run `buzz join` with the token, start
+   `buzz-node` as a launchd or systemd user service.
 3. Ask each live agent to register. It keeps running in its pane; the
    CLI reads the new config file. An agent that wants its old handle
    asks for it with `--name`; the hub grants it when free and refuses
    it when a live hub agent already holds it, in which case the agent
    takes the assigned one. The register response's protocol brief
    lists its peers under their hub handles.
-4. `agent-swarm export` on that machine writes its agents, teams, and
+4. `buzz export` on that machine writes its agents, teams, and
    tasks (and, with `--with-messages`, its history) to a JSON bundle,
-   reading its database without writing to it. `agent-swarm import
+   reading its database without writing to it. `buzz import
    BUNDLE --node <machine>` on the hub takes them in as one
    transaction: agents arrive as reservations holding their handles
    until they register, clashing handles and team names are imported
@@ -506,7 +506,7 @@ Each step leaves the single-machine path working and the tests green.
    through the registry. No network change yet; tests monkeypatch
    `LocalNode` and cover the unknown path.
 2. **Node daemon and socket transport.** Add `node.py`, the
-   `agent-swarm-node` script, the socket protocol (op ids, deadlines,
+   `buzz-node` script, the socket protocol (op ids, deadlines,
    fencing, hello, heartbeat, observation batches), `RemoteNode`,
    per-node tokens with node-claim validation, and attachment fetch
    with dedup. Test `RemoteNode` against the daemon in-process with

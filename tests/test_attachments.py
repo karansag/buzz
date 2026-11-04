@@ -184,8 +184,8 @@ def test_cleanup_expires_images_past_retention_and_the_thread_keeps_the_message(
 def test_cleanup_deletes_old_messages_and_their_images(client, tmp_path):
     user = register(client)
     image = send_image(client, user)
-    age_file(image["path"], 61)
-    age_messages(tmp_path, 61)
+    age_file(image["path"], 121)
+    age_messages(tmp_path, 121)
     client.post("/owner/send", json={"recipient": user, "content": "recent"})
 
     result = client.app.state.cleanup()
