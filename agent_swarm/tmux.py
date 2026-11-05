@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from typing import Callable, NamedTuple
 
+from . import config
 
 # Panes are addressed by tmux's pane id (%N), which never changes or gets
 # reused while the tmux server runs. The positional session:window.pane form
@@ -354,7 +355,7 @@ AGENTS_SESSION = "agents"
 # "generic" is intentionally not spawnable: launching a bare shell produces a
 # registered pane with no agent in it, which is not a working target.
 #
-# One fixed launch per harness, with no permission choice (task #170):
+# Default launch per harness, unless overridden in the owner's configuration:
 # `binary [model_flag model] launch_args`, and no model flag at all when the
 # harness default is wanted. startup_args remove interactive startup blockers
 # that would leave a fresh pane stuck before the agent is usable (codex's
@@ -497,6 +498,11 @@ def spawn_launch_command(flavor: str, model: str | None = None) -> str | None:
     spec = HARNESS_SPAWN.get(flavor)
     if spec is None:
         return None
+    command = config.harness_command(flavor)
+    if command is not None:
+        if model and model in spec.models:
+            command += f" {spec.model_flag} {shlex.quote(model)}"
+        return command
     parts = [spec.binary]
     if spec.startup_args:
         parts.append(spec.startup_args)

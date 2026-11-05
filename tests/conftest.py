@@ -13,6 +13,8 @@ from agent_swarm import tmux
 @pytest.fixture(autouse=True)
 def _isolated_settings(monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_SWARM_CONFIG", str(tmp_path / "no-such-node.toml"))
+    for flavor in tmux.SPAWNABLE_FLAVORS:
+        monkeypatch.delenv(f"AGENT_SWARM_{flavor.upper()}_COMMAND", raising=False)
     # The harness session ids too: tests run inside Claude Code or Codex.
     for var in ("AGENT_SWARM_URL", "AGENT_MSG_URL", "AGENT_SWARM_TOKEN", "AGENT_SWARM_NODE",
                 "AGENT_SWARM_TABS",
