@@ -2306,7 +2306,7 @@ def create_app(
         if node is None:
             text, err, label = None, f"node {recipient['node']} is not connected", None
         else:
-            text, err = node.capture(recipient["tmux_pane"], recipient.get("tmux_server"))
+            text, err = node.capture(recipient["tmux_pane"], recipient.get("tmux_server"), colors=True)
             snap = _try_snapshot(node)
             label = snap.label(recipient["tmux_pane"]) if snap else None
         return {

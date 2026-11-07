@@ -340,7 +340,7 @@ class Executor:
             r = self.local.rename_window(op_id, a["pane"], a.get("tmux_server"), a["name"])
             return protocol.result(op_id, r.status, r.error)
         if kind == "capture":
-            text, err = self.local.capture(a["pane"], a.get("tmux_server"))
+            text, err = self.local.capture(a["pane"], a.get("tmux_server"), bool(a.get("colors")))
             return protocol.result(op_id, "ok" if err is None else "failed", err, text=text)
         if kind == "resolve":
             try:

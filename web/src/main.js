@@ -37,6 +37,7 @@ import { AttachmentLink, AttachmentList, AttachmentPicker, useAttachments } from
 import { createBottomFollower } from "./scroll-follow.js";
 import { attentionReporter } from "./native.js";
 import { renderMarkdown } from "./markdown.js";
+import { parseAnsi, runStyle, trimAnsiEnd } from "./ansi.js";
 import "../styles.css";
 import { stepTeammate, teammates } from "./teammates.js";
 import { shellNewlines } from "./newlines.js";
@@ -766,6 +767,17 @@ function Overview({ state, refresh, machine, harness, setHarness, unreadFor }) {
 
 /* ---------- agent focus mode ---------- */
 
+// The pane's text with its terminal colors, as text nodes: nothing from the
+// pane is parsed as HTML.
+function terminalRuns(text) {
+  const runs = parseAnsi(trimAnsiEnd(text));
+  if (!runs.some(r => r.text.trim())) return "(pane is blank)";
+  return runs.map(r => {
+    const css = runStyle(r.style);
+    return css ? html`<span style=${css}>${r.text}</span>` : r.text;
+  });
+}
+
 function Scope({ user, refresh }) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState(null);
@@ -804,7 +816,7 @@ function Scope({ user, refresh }) {
     ${data && data.error
       ? html`<div class="err">could not capture pane: ${data.error}</div>`
       : html`<pre ref=${preRef} onScroll=${onScroll}>${data
-          ? ((data.text || "").replace(/\s+$/, "") || "(pane is blank)")
+          ? terminalRuns(data.text)
           : "capturing pane…"}</pre>`}
     <${TerminalInput} user=${user} />
   </details>`;

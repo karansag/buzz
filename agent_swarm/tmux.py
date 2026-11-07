@@ -777,11 +777,15 @@ def send_key(pane: str, key: str) -> tuple[bool, str | None]:
     return True, None
 
 
-def capture_pane(pane: str) -> tuple[str | None, str | None]:
-    """Return the pane's visible screen as text. Returns (text, error_or_None)."""
+def capture_pane(pane: str, colors: bool = False) -> tuple[str | None, str | None]:
+    """Return the pane's visible screen as text. Returns (text, error_or_None).
+
+    With `colors`, the text keeps tmux's SGR escape codes (colors, bold, ...)
+    for the dashboard's terminal view. Screen checks want plain text.
+    """
     try:
         out = subprocess.run(
-            ["tmux", "capture-pane", "-p", "-J", "-t", pane],
+            ["tmux", "capture-pane", "-p", "-J", *(["-e"] if colors else []), "-t", pane],
             capture_output=True,
             text=True,
             check=True,

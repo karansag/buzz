@@ -131,7 +131,9 @@ class Node(Protocol):
     def snapshot(self) -> PaneSnapshot: ...
     def server_id(self) -> str | None: ...
     def resolve(self, target: str) -> Resolved | None: ...
-    def capture(self, pane: str, tmux_server: str | None) -> tuple[str | None, str | None]: ...
+    def capture(
+        self, pane: str, tmux_server: str | None, colors: bool = False
+    ) -> tuple[str | None, str | None]: ...
     def deliver(
         self,
         op_id: str,
@@ -223,10 +225,12 @@ class LocalNode:
             raise Unavailable("tmux restarted while resolving the pane")
         return Resolved(found[0], found[1], after)
 
-    def capture(self, pane: str, tmux_server: str | None) -> tuple[str | None, str | None]:
+    def capture(
+        self, pane: str, tmux_server: str | None, colors: bool = False
+    ) -> tuple[str | None, str | None]:
         if stale := _stale_server(tmux_server):
             return None, stale
-        return tmux.capture_pane(pane)
+        return tmux.capture_pane(pane, colors)
 
     def deliver(
         self,
@@ -512,16 +516,18 @@ class RemoteNode:
         # The server id comes from the same node-side look as the pane.
         return Resolved(data["pane"], data.get("label") or data["pane"], data.get("tmux_server"))
 
-    def capture(self, pane: str, tmux_server: str | None) -> tuple[str | None, str | None]:
+    def capture(
+        self, pane: str, tmux_server: str | None, colors: bool = False
+    ) -> tuple[str | None, str | None]:
         # The node captures watched panes with every observation; use that
-        # when it is fresh rather than asking again.
+        # when it is fresh rather than asking again. Those are plain text.
         last, at = self._last, self._last_at
-        if last and at and time.monotonic() - at <= self.interval * 1.5:
+        if not colors and last and at and time.monotonic() - at <= self.interval * 1.5:
             if tmux_server is None or last.get("tmux_server") == tmux_server:
                 text = (last.get("captures") or {}).get(pane)
                 if text is not None:
                     return text, None
-        r = self._call("capture", COMMAND_TTL, pane=pane, tmux_server=tmux_server)
+        r = self._call("capture", COMMAND_TTL, pane=pane, tmux_server=tmux_server, colors=colors)
         if r.get("status") != "ok":
             return None, r.get("error") or "capture failed"
         return (r.get("data") or {}).get("text"), None

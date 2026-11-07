@@ -141,7 +141,7 @@ def test_digest_shows_attention_and_working_agents(client, monkeypatch):
         "0:0.0": "Do you want to run rm -rf build?\n❯ 1. Yes\n  2. No\nEsc to cancel",
         "0:1.0": "streaming output",
     }
-    monkeypatch.setattr(server.tmux, "capture_pane", lambda pane: (screens[pane], None))
+    monkeypatch.setattr(server.tmux, "capture_pane", lambda pane, colors=False: (screens[pane], None))
     clock = {"t": 1_000_000.0}
     monkeypatch.setattr(server.time, "time", lambda: clock["t"])
     tick = client.app.state.monitor_tick
@@ -236,7 +236,7 @@ def test_interval_zero_disables_nudges(tmp_path, monkeypatch):
         "0:0.0": {"label": "0:0.0", "command": "claude", "title": ""},
         "0:1.0": {"label": "0:1.0", "command": "claude", "title": ""},
     })
-    monkeypatch.setattr(tmux, "capture_pane", lambda pane: ("$ ", None))
+    monkeypatch.setattr(tmux, "capture_pane", lambda pane, colors=False: ("$ ", None))
     monkeypatch.setattr(tmux, "tag_pane", lambda pane, handle: (True, None))
     monkeypatch.setattr(tmux, "rename_window", lambda pane, name: (True, None))
     c = TestClient(server.create_app(tmp_path / "db.sqlite", monitor=False), client=("127.0.0.1", 50000))

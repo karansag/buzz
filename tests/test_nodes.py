@@ -42,7 +42,7 @@ def test_local_node_refuses_a_pane_from_an_earlier_tmux(monkeypatch):
     monkeypatch.setattr(tmux, "server_id", lambda: "srv-2")
     calls = []
     monkeypatch.setattr(tmux, "deliver", lambda *a, **k: calls.append(a) or (True, None))
-    monkeypatch.setattr(tmux, "capture_pane", lambda pane: calls.append(pane) or ("x", None))
+    monkeypatch.setattr(tmux, "capture_pane", lambda pane, colors=False: calls.append(pane) or ("x", None))
     monkeypatch.setattr(tmux, "kill_pane", lambda pane: calls.append(pane) or (True, None))
     monkeypatch.setattr(tmux, "tag_pane", lambda pane, h: calls.append(pane) or (True, None))
     monkeypatch.setattr(tmux, "rename_window", lambda pane, n: calls.append(pane) or (True, None))

@@ -34,8 +34,8 @@ class FakeLocal(nodes.LocalNode):
         r = self.results.get("resolve")
         return nodes.Resolved(r[0], r[1], self.server) if r else None
 
-    def capture(self, pane, tmux_server):
-        self.calls.append(("capture", pane, tmux_server))
+    def capture(self, pane, tmux_server, colors=False):
+        self.calls.append(("capture", pane, tmux_server, colors))
         return self.results.get("capture", ("screen", None))
 
     def deliver(self, op_id, pane, tmux_server, text, **kw):
@@ -88,6 +88,9 @@ def test_executor_runs_each_kind_and_reports_a_result(executor):
     assert ex.run(protocol.command("w1", "rename_window", 30, pane="%7", tmux_server="srv-1", name="otter"), now)["status"] == "ok"
     r = ex.run(protocol.command("c1", "capture", 30, pane="%7", tmux_server="srv-1"), now)
     assert r["status"] == "ok" and r["data"] == {"text": "screen"}
+    assert local.calls[-1] == ("capture", "%7", "srv-1", False)
+    ex.run(protocol.command("c2", "capture", 30, pane="%7", tmux_server="srv-1", colors=True), now)
+    assert local.calls[-1] == ("capture", "%7", "srv-1", True)  # the dashboard's terminal view
     r = ex.run(protocol.command("r1", "resolve", 30, target="agents:3.0"), now)
     assert r["data"] == {"pane": "%7", "label": "agents:3.0", "tmux_server": "srv-1"}
     local.results["resolve"] = None

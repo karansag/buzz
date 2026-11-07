@@ -74,7 +74,7 @@ def client(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        tmux, "capture_pane", lambda pane: (f"screen of {pane}\n$ ", None)
+        tmux, "capture_pane", lambda pane, colors=False: (f"screen of {pane}\n$ ", None)
     )
 
     spawns = []
@@ -555,9 +555,14 @@ def test_state_carries_seeded_activity(client):
     }
 
 
-def test_peek_returns_pane_capture(client):
+def test_peek_returns_pane_capture(client, monkeypatch):
+    asked = []
+    monkeypatch.setattr(
+        tmux, "capture_pane", lambda pane, colors=False: asked.append(colors) or (f"screen of {pane}\n$ ", None)
+    )
     user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
     r = client.get(f"/api/peek/{user}")
+    assert asked == [True]  # the terminal view shows the pane's colors
     assert r.status_code == 200
     body = r.json()
     assert body["tmux_pane"] == "0:1.0"
@@ -1495,7 +1500,7 @@ def test_a_node_that_cannot_observe_its_tmux_is_unavailable_not_empty(client):
 
 def test_a_failing_capture_does_not_end_the_monitor_tick(client):
     class Jumpy(nodes.LocalNode):
-        def capture(self, pane, tmux_server):
+        def capture(self, pane, tmux_server, colors=False):
             raise RuntimeError("tmux hiccup")
 
     client.app.state.nodes.add(Jumpy("macbook"))

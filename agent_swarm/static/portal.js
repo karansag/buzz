@@ -1,5 +1,11 @@
 //#region \0rolldown/runtime.js
+var __create = Object.create;
 var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod), cb = null), mod.exports);
 var __exportAll = (all, no_symbols) => {
 	let target = {};
 	for (var name in all) __defProp(target, name, {
@@ -9,6 +15,20 @@ var __exportAll = (all, no_symbols) => {
 	if (!no_symbols) __defProp(target, Symbol.toStringTag, { value: "Module" });
 	return target;
 };
+var __copyProps = (to, from, except, desc) => {
+	if (from && typeof from === "object" || typeof from === "function") for (var keys = __getOwnPropNames(from), i = 0, n = keys.length, key; i < n; i++) {
+		key = keys[i];
+		if (!__hasOwnProp.call(to, key) && key !== except) __defProp(to, key, {
+			get: ((k) => from[k]).bind(null, key),
+			enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
+		});
+	}
+	return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", {
+	value: mod,
+	enumerable: true
+}) : target, mod));
 //#endregion
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
@@ -41,7 +61,7 @@ var __exportAll = (all, no_symbols) => {
 	}
 })();
 //#endregion
-//#region ../agent-swarm/node_modules/preact/dist/preact.module.js
+//#region node_modules/preact/dist/preact.module.js
 var n$1;
 var l$1;
 var u$1;
@@ -307,7 +327,7 @@ n$1 = w$1.slice, l$1 = { __e: function(n, l, u, t) {
 	return n.__v.__b - l.__v.__b;
 }, H.__r = 0, f$1 = Math.random().toString(8), c$1 = "__d" + f$1, a$1 = "__a" + f$1, s$1 = /(PointerCapture)$|Capture$/i, h$1 = 0, p$1 = V(!1), v$1 = V(!0);
 //#endregion
-//#region ../agent-swarm/node_modules/htm/dist/htm.module.js
+//#region node_modules/htm/dist/htm.module.js
 var n = function(t, s, r, e) {
 	var u;
 	s[0] = 0;
@@ -331,10 +351,10 @@ function htm_module_default(s) {
 	}(s)), r), arguments, [])).length > 1 ? r : r[0];
 }
 //#endregion
-//#region ../agent-swarm/node_modules/htm/preact/index.module.js
+//#region node_modules/htm/preact/index.module.js
 var m$1 = htm_module_default.bind(k$1);
 //#endregion
-//#region ../agent-swarm/node_modules/preact/hooks/dist/hooks.module.js
+//#region node_modules/preact/hooks/dist/hooks.module.js
 var t;
 var r;
 var u;
@@ -2854,7 +2874,7 @@ function attentionReporter(invoke) {
 	};
 }
 //#endregion
-//#region ../agent-swarm/node_modules/mdurl/lib/decode.mjs
+//#region node_modules/mdurl/lib/decode.mjs
 var decodeCache = {};
 function getDecodeCache(exclude) {
 	let cache = decodeCache[exclude];
@@ -2925,7 +2945,7 @@ function decode$1(string, exclude) {
 decode$1.defaultChars = ";/?:@&=+$,#";
 decode$1.componentChars = "";
 //#endregion
-//#region ../agent-swarm/node_modules/mdurl/lib/encode.mjs
+//#region node_modules/mdurl/lib/encode.mjs
 var encodeCache = {};
 function getEncodeCache(exclude) {
 	let cache = encodeCache[exclude];
@@ -2979,7 +2999,7 @@ function encode$1(string, exclude, keepEscaped) {
 encode$1.defaultChars = ";/?:@&=+$,-_.!~*'()#";
 encode$1.componentChars = "-_.!~*'()";
 //#endregion
-//#region ../agent-swarm/node_modules/mdurl/lib/format.mjs
+//#region node_modules/mdurl/lib/format.mjs
 function format(url) {
 	let result = "";
 	result += url.protocol || "";
@@ -2994,7 +3014,7 @@ function format(url) {
 	return result;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/mdurl/lib/parse.mjs
+//#region node_modules/mdurl/lib/parse.mjs
 function Url() {
 	this.protocol = null;
 	this.slashes = null;
@@ -3166,7 +3186,7 @@ Url.prototype.parseHost = function(host) {
 	if (host) this.hostname = host;
 };
 //#endregion
-//#region ../agent-swarm/node_modules/mdurl/index.mjs
+//#region node_modules/mdurl/index.mjs
 var mdurl_exports = /* @__PURE__ */ __exportAll({
 	decode: () => decode$1,
 	encode: () => encode$1,
@@ -3174,25 +3194,25 @@ var mdurl_exports = /* @__PURE__ */ __exportAll({
 	parse: () => urlParse
 });
 //#endregion
-//#region ../agent-swarm/node_modules/uc.micro/properties/Any/regex.mjs
+//#region node_modules/uc.micro/properties/Any/regex.mjs
 var regex_default$5 = /[\0-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]/;
 //#endregion
-//#region ../agent-swarm/node_modules/uc.micro/categories/Cc/regex.mjs
+//#region node_modules/uc.micro/categories/Cc/regex.mjs
 var regex_default$4 = /[\0-\x1F\x7F-\x9F]/;
 //#endregion
-//#region ../agent-swarm/node_modules/uc.micro/categories/Cf/regex.mjs
+//#region node_modules/uc.micro/categories/Cf/regex.mjs
 var regex_default$3 = /[\xAD\u0600-\u0605\u061C\u06DD\u070F\u0890\u0891\u08E2\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\uFFF9-\uFFFB]|\uD804[\uDCBD\uDCCD]|\uD80D[\uDC30-\uDC3F]|\uD82F[\uDCA0-\uDCA3]|\uD834[\uDD73-\uDD7A]|\uDB40[\uDC01\uDC20-\uDC7F]/;
 //#endregion
-//#region ../agent-swarm/node_modules/uc.micro/categories/P/regex.mjs
+//#region node_modules/uc.micro/categories/P/regex.mjs
 var regex_default$2 = /[!-#%-\*,-\/:;\?@\[-\]_\{\}\xA1\xA7\xAB\xB6\xB7\xBB\xBF\u037E\u0387\u055A-\u055F\u0589\u058A\u05BE\u05C0\u05C3\u05C6\u05F3\u05F4\u0609\u060A\u060C\u060D\u061B\u061D-\u061F\u066A-\u066D\u06D4\u0700-\u070D\u07F7-\u07F9\u0830-\u083E\u085E\u0964\u0965\u0970\u09FD\u0A76\u0AF0\u0C77\u0C84\u0DF4\u0E4F\u0E5A\u0E5B\u0F04-\u0F12\u0F14\u0F3A-\u0F3D\u0F85\u0FD0-\u0FD4\u0FD9\u0FDA\u104A-\u104F\u10FB\u1360-\u1368\u1400\u166E\u169B\u169C\u16EB-\u16ED\u1735\u1736\u17D4-\u17D6\u17D8-\u17DA\u1800-\u180A\u1944\u1945\u1A1E\u1A1F\u1AA0-\u1AA6\u1AA8-\u1AAD\u1B5A-\u1B60\u1B7D\u1B7E\u1BFC-\u1BFF\u1C3B-\u1C3F\u1C7E\u1C7F\u1CC0-\u1CC7\u1CD3\u2010-\u2027\u2030-\u2043\u2045-\u2051\u2053-\u205E\u207D\u207E\u208D\u208E\u2308-\u230B\u2329\u232A\u2768-\u2775\u27C5\u27C6\u27E6-\u27EF\u2983-\u2998\u29D8-\u29DB\u29FC\u29FD\u2CF9-\u2CFC\u2CFE\u2CFF\u2D70\u2E00-\u2E2E\u2E30-\u2E4F\u2E52-\u2E5D\u3001-\u3003\u3008-\u3011\u3014-\u301F\u3030\u303D\u30A0\u30FB\uA4FE\uA4FF\uA60D-\uA60F\uA673\uA67E\uA6F2-\uA6F7\uA874-\uA877\uA8CE\uA8CF\uA8F8-\uA8FA\uA8FC\uA92E\uA92F\uA95F\uA9C1-\uA9CD\uA9DE\uA9DF\uAA5C-\uAA5F\uAADE\uAADF\uAAF0\uAAF1\uABEB\uFD3E\uFD3F\uFE10-\uFE19\uFE30-\uFE52\uFE54-\uFE61\uFE63\uFE68\uFE6A\uFE6B\uFF01-\uFF03\uFF05-\uFF0A\uFF0C-\uFF0F\uFF1A\uFF1B\uFF1F\uFF20\uFF3B-\uFF3D\uFF3F\uFF5B\uFF5D\uFF5F-\uFF65]|\uD800[\uDD00-\uDD02\uDF9F\uDFD0]|\uD801\uDD6F|\uD802[\uDC57\uDD1F\uDD3F\uDE50-\uDE58\uDE7F\uDEF0-\uDEF6\uDF39-\uDF3F\uDF99-\uDF9C]|\uD803[\uDEAD\uDF55-\uDF59\uDF86-\uDF89]|\uD804[\uDC47-\uDC4D\uDCBB\uDCBC\uDCBE-\uDCC1\uDD40-\uDD43\uDD74\uDD75\uDDC5-\uDDC8\uDDCD\uDDDB\uDDDD-\uDDDF\uDE38-\uDE3D\uDEA9]|\uD805[\uDC4B-\uDC4F\uDC5A\uDC5B\uDC5D\uDCC6\uDDC1-\uDDD7\uDE41-\uDE43\uDE60-\uDE6C\uDEB9\uDF3C-\uDF3E]|\uD806[\uDC3B\uDD44-\uDD46\uDDE2\uDE3F-\uDE46\uDE9A-\uDE9C\uDE9E-\uDEA2\uDF00-\uDF09]|\uD807[\uDC41-\uDC45\uDC70\uDC71\uDEF7\uDEF8\uDF43-\uDF4F\uDFFF]|\uD809[\uDC70-\uDC74]|\uD80B[\uDFF1\uDFF2]|\uD81A[\uDE6E\uDE6F\uDEF5\uDF37-\uDF3B\uDF44]|\uD81B[\uDE97-\uDE9A\uDFE2]|\uD82F\uDC9F|\uD836[\uDE87-\uDE8B]|\uD83A[\uDD5E\uDD5F]/;
 //#endregion
-//#region ../agent-swarm/node_modules/uc.micro/categories/S/regex.mjs
+//#region node_modules/uc.micro/categories/S/regex.mjs
 var regex_default$1 = /[\$\+<->\^`\|~\xA2-\xA6\xA8\xA9\xAC\xAE-\xB1\xB4\xB8\xD7\xF7\u02C2-\u02C5\u02D2-\u02DF\u02E5-\u02EB\u02ED\u02EF-\u02FF\u0375\u0384\u0385\u03F6\u0482\u058D-\u058F\u0606-\u0608\u060B\u060E\u060F\u06DE\u06E9\u06FD\u06FE\u07F6\u07FE\u07FF\u0888\u09F2\u09F3\u09FA\u09FB\u0AF1\u0B70\u0BF3-\u0BFA\u0C7F\u0D4F\u0D79\u0E3F\u0F01-\u0F03\u0F13\u0F15-\u0F17\u0F1A-\u0F1F\u0F34\u0F36\u0F38\u0FBE-\u0FC5\u0FC7-\u0FCC\u0FCE\u0FCF\u0FD5-\u0FD8\u109E\u109F\u1390-\u1399\u166D\u17DB\u1940\u19DE-\u19FF\u1B61-\u1B6A\u1B74-\u1B7C\u1FBD\u1FBF-\u1FC1\u1FCD-\u1FCF\u1FDD-\u1FDF\u1FED-\u1FEF\u1FFD\u1FFE\u2044\u2052\u207A-\u207C\u208A-\u208C\u20A0-\u20C0\u2100\u2101\u2103-\u2106\u2108\u2109\u2114\u2116-\u2118\u211E-\u2123\u2125\u2127\u2129\u212E\u213A\u213B\u2140-\u2144\u214A-\u214D\u214F\u218A\u218B\u2190-\u2307\u230C-\u2328\u232B-\u2426\u2440-\u244A\u249C-\u24E9\u2500-\u2767\u2794-\u27C4\u27C7-\u27E5\u27F0-\u2982\u2999-\u29D7\u29DC-\u29FB\u29FE-\u2B73\u2B76-\u2B95\u2B97-\u2BFF\u2CE5-\u2CEA\u2E50\u2E51\u2E80-\u2E99\u2E9B-\u2EF3\u2F00-\u2FD5\u2FF0-\u2FFF\u3004\u3012\u3013\u3020\u3036\u3037\u303E\u303F\u309B\u309C\u3190\u3191\u3196-\u319F\u31C0-\u31E3\u31EF\u3200-\u321E\u322A-\u3247\u3250\u3260-\u327F\u328A-\u32B0\u32C0-\u33FF\u4DC0-\u4DFF\uA490-\uA4C6\uA700-\uA716\uA720\uA721\uA789\uA78A\uA828-\uA82B\uA836-\uA839\uAA77-\uAA79\uAB5B\uAB6A\uAB6B\uFB29\uFBB2-\uFBC2\uFD40-\uFD4F\uFDCF\uFDFC-\uFDFF\uFE62\uFE64-\uFE66\uFE69\uFF04\uFF0B\uFF1C-\uFF1E\uFF3E\uFF40\uFF5C\uFF5E\uFFE0-\uFFE6\uFFE8-\uFFEE\uFFFC\uFFFD]|\uD800[\uDD37-\uDD3F\uDD79-\uDD89\uDD8C-\uDD8E\uDD90-\uDD9C\uDDA0\uDDD0-\uDDFC]|\uD802[\uDC77\uDC78\uDEC8]|\uD805\uDF3F|\uD807[\uDFD5-\uDFF1]|\uD81A[\uDF3C-\uDF3F\uDF45]|\uD82F\uDC9C|\uD833[\uDF50-\uDFC3]|\uD834[\uDC00-\uDCF5\uDD00-\uDD26\uDD29-\uDD64\uDD6A-\uDD6C\uDD83\uDD84\uDD8C-\uDDA9\uDDAE-\uDDEA\uDE00-\uDE41\uDE45\uDF00-\uDF56]|\uD835[\uDEC1\uDEDB\uDEFB\uDF15\uDF35\uDF4F\uDF6F\uDF89\uDFA9\uDFC3]|\uD836[\uDC00-\uDDFF\uDE37-\uDE3A\uDE6D-\uDE74\uDE76-\uDE83\uDE85\uDE86]|\uD838[\uDD4F\uDEFF]|\uD83B[\uDCAC\uDCB0\uDD2E\uDEF0\uDEF1]|\uD83C[\uDC00-\uDC2B\uDC30-\uDC93\uDCA0-\uDCAE\uDCB1-\uDCBF\uDCC1-\uDCCF\uDCD1-\uDCF5\uDD0D-\uDDAD\uDDE6-\uDE02\uDE10-\uDE3B\uDE40-\uDE48\uDE50\uDE51\uDE60-\uDE65\uDF00-\uDFFF]|\uD83D[\uDC00-\uDED7\uDEDC-\uDEEC\uDEF0-\uDEFC\uDF00-\uDF76\uDF7B-\uDFD9\uDFE0-\uDFEB\uDFF0]|\uD83E[\uDC00-\uDC0B\uDC10-\uDC47\uDC50-\uDC59\uDC60-\uDC87\uDC90-\uDCAD\uDCB0\uDCB1\uDD00-\uDE53\uDE60-\uDE6D\uDE70-\uDE7C\uDE80-\uDE88\uDE90-\uDEBD\uDEBF-\uDEC5\uDECE-\uDEDB\uDEE0-\uDEE8\uDEF0-\uDEF8\uDF00-\uDF92\uDF94-\uDFCA]/;
 //#endregion
-//#region ../agent-swarm/node_modules/uc.micro/categories/Z/regex.mjs
+//#region node_modules/uc.micro/categories/Z/regex.mjs
 var regex_default = /[ \xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/;
 //#endregion
-//#region ../agent-swarm/node_modules/uc.micro/index.mjs
+//#region node_modules/uc.micro/index.mjs
 var uc_micro_exports = /* @__PURE__ */ __exportAll({
 	Any: () => regex_default$5,
 	Cc: () => regex_default$4,
@@ -3202,13 +3222,13 @@ var uc_micro_exports = /* @__PURE__ */ __exportAll({
 	Z: () => regex_default
 });
 //#endregion
-//#region ../agent-swarm/node_modules/entities/lib/esm/generated/decode-data-html.js
+//#region node_modules/entities/lib/esm/generated/decode-data-html.js
 var decode_data_html_default = new Uint16Array("ᵁ<Õıʊҝջאٵ۞ޢߖࠏ੊ઑඡ๭༉༦჊ረዡᐕᒝᓃᓟᔥ\0\0\0\0\0\0ᕫᛍᦍᰒᷝ὾⁠↰⊍⏀⏻⑂⠤⤒ⴈ⹈⿎〖㊺㘹㞬㣾㨨㩱㫠㬮ࠀEMabcfglmnoprstu\\bfms¦³¹ÈÏlig耻Æ䃆P耻&䀦cute耻Á䃁reve;䄂Āiyx}rc耻Â䃂;䐐r;쀀𝔄rave耻À䃀pha;䎑acr;䄀d;橓Āgp¡on;䄄f;쀀𝔸plyFunction;恡ing耻Å䃅Ācs¾Ãr;쀀𝒜ign;扔ilde耻Ã䃃ml耻Ä䃄ЀaceforsuåûþėĜĢħĪĀcrêòkslash;或Ŷöø;櫧ed;挆y;䐑ƀcrtąċĔause;戵noullis;愬a;䎒r;쀀𝔅pf;쀀𝔹eve;䋘còēmpeq;扎܀HOacdefhilorsuōőŖƀƞƢƵƷƺǜȕɳɸɾcy;䐧PY耻©䂩ƀcpyŝŢźute;䄆Ā;iŧŨ拒talDifferentialD;慅leys;愭ȀaeioƉƎƔƘron;䄌dil耻Ç䃇rc;䄈nint;戰ot;䄊ĀdnƧƭilla;䂸terDot;䂷òſi;䎧rcleȀDMPTǇǋǑǖot;抙inus;抖lus;投imes;抗oĀcsǢǸkwiseContourIntegral;戲eCurlyĀDQȃȏoubleQuote;思uote;怙ȀlnpuȞȨɇɕonĀ;eȥȦ户;橴ƀgitȯȶȺruent;扡nt;戯ourIntegral;戮ĀfrɌɎ;愂oduct;成nterClockwiseContourIntegral;戳oss;樯cr;쀀𝒞pĀ;Cʄʅ拓ap;才րDJSZacefiosʠʬʰʴʸˋ˗ˡ˦̳ҍĀ;oŹʥtrahd;椑cy;䐂cy;䐅cy;䐏ƀgrsʿ˄ˇger;怡r;憡hv;櫤Āayː˕ron;䄎;䐔lĀ;t˝˞戇a;䎔r;쀀𝔇Āaf˫̧Ācm˰̢riticalȀADGT̖̜̀̆cute;䂴oŴ̋̍;䋙bleAcute;䋝rave;䁠ilde;䋜ond;拄ferentialD;慆Ѱ̽\0\0\0͔͂\0Ѕf;쀀𝔻ƀ;DE͈͉͍䂨ot;惜qual;扐blèCDLRUVͣͲ΂ϏϢϸontourIntegraìȹoɴ͹\0\0ͻ»͉nArrow;懓Āeo·ΤftƀARTΐΖΡrrow;懐ightArrow;懔eåˊngĀLRΫτeftĀARγιrrow;柸ightArrow;柺ightArrow;柹ightĀATϘϞrrow;懒ee;抨pɁϩ\0\0ϯrrow;懑ownArrow;懕erticalBar;戥ǹABLRTaВЪаўѿͼrrowƀ;BUНОТ憓ar;椓pArrow;懵reve;䌑eft˒к\0ц\0ѐightVector;楐eeVector;楞ectorĀ;Bљњ憽ar;楖ightǔѧ\0ѱeeVector;楟ectorĀ;BѺѻ懁ar;楗eeĀ;A҆҇护rrow;憧ĀctҒҗr;쀀𝒟rok;䄐ࠀNTacdfglmopqstuxҽӀӄӋӞӢӧӮӵԡԯԶՒ՝ՠեG;䅊H耻Ð䃐cute耻É䃉ƀaiyӒӗӜron;䄚rc耻Ê䃊;䐭ot;䄖r;쀀𝔈rave耻È䃈ement;戈ĀapӺӾcr;䄒tyɓԆ\0\0ԒmallSquare;旻erySmallSquare;斫ĀgpԦԪon;䄘f;쀀𝔼silon;䎕uĀaiԼՉlĀ;TՂՃ橵ilde;扂librium;懌Āci՗՚r;愰m;橳a;䎗ml耻Ë䃋Āipժկsts;戃onentialE;慇ʀcfiosօֈ֍ֲ׌y;䐤r;쀀𝔉lledɓ֗\0\0֣mallSquare;旼erySmallSquare;斪Ͱֺ\0ֿ\0\0ׄf;쀀𝔽All;戀riertrf;愱cò׋؀JTabcdfgorstר׬ׯ׺؀ؒؖ؛؝أ٬ٲcy;䐃耻>䀾mmaĀ;d׷׸䎓;䏜reve;䄞ƀeiy؇،ؐdil;䄢rc;䄜;䐓ot;䄠r;쀀𝔊;拙pf;쀀𝔾eater̀EFGLSTصلَٖٛ٦qualĀ;Lؾؿ扥ess;招ullEqual;执reater;檢ess;扷lantEqual;橾ilde;扳cr;쀀𝒢;扫ЀAacfiosuڅڋږڛڞڪھۊRDcy;䐪Āctڐڔek;䋇;䁞irc;䄤r;愌lbertSpace;愋ǰگ\0ڲf;愍izontalLine;攀Āctۃۅòکrok;䄦mpńېۘownHumðįqual;扏܀EJOacdfgmnostuۺ۾܃܇܎ܚܞܡܨ݄ݸދޏޕcy;䐕lig;䄲cy;䐁cute耻Í䃍Āiyܓܘrc耻Î䃎;䐘ot;䄰r;愑rave耻Ì䃌ƀ;apܠܯܿĀcgܴܷr;䄪inaryI;慈lieóϝǴ݉\0ݢĀ;eݍݎ戬Āgrݓݘral;戫section;拂isibleĀCTݬݲomma;恣imes;恢ƀgptݿރވon;䄮f;쀀𝕀a;䎙cr;愐ilde;䄨ǫޚ\0ޞcy;䐆l耻Ï䃏ʀcfosuެ޷޼߂ߐĀiyޱ޵rc;䄴;䐙r;쀀𝔍pf;쀀𝕁ǣ߇\0ߌr;쀀𝒥rcy;䐈kcy;䐄΀HJacfosߤߨ߽߬߱ࠂࠈcy;䐥cy;䐌ppa;䎚Āey߶߻dil;䄶;䐚r;쀀𝔎pf;쀀𝕂cr;쀀𝒦րJTaceflmostࠥࠩࠬࡐࡣ঳সে্਷ੇcy;䐉耻<䀼ʀcmnpr࠷࠼ࡁࡄࡍute;䄹bda;䎛g;柪lacetrf;愒r;憞ƀaeyࡗ࡜ࡡron;䄽dil;䄻;䐛Āfsࡨ॰tԀACDFRTUVarࡾࢩࢱࣦ࣠ࣼयज़ΐ४Ānrࢃ࢏gleBracket;柨rowƀ;BR࢙࢚࢞憐ar;懤ightArrow;懆eiling;挈oǵࢷ\0ࣃbleBracket;柦nǔࣈ\0࣒eeVector;楡ectorĀ;Bࣛࣜ懃ar;楙loor;挊ightĀAV࣯ࣵrrow;憔ector;楎Āerँगeƀ;AVउऊऐ抣rrow;憤ector;楚iangleƀ;BEतथऩ抲ar;槏qual;抴pƀDTVषूौownVector;楑eeVector;楠ectorĀ;Bॖॗ憿ar;楘ectorĀ;B॥०憼ar;楒ightáΜs̀EFGLSTॾঋকঝঢভqualGreater;拚ullEqual;扦reater;扶ess;檡lantEqual;橽ilde;扲r;쀀𝔏Ā;eঽা拘ftarrow;懚idot;䄿ƀnpw৔ਖਛgȀLRlr৞৷ਂਐeftĀAR০৬rrow;柵ightArrow;柷ightArrow;柶eftĀarγਊightáοightáϊf;쀀𝕃erĀLRਢਬeftArrow;憙ightArrow;憘ƀchtਾੀੂòࡌ;憰rok;䅁;扪Ѐacefiosuਗ਼੝੠੷੼અઋ઎p;椅y;䐜Ādl੥੯iumSpace;恟lintrf;愳r;쀀𝔐nusPlus;戓pf;쀀𝕄cò੶;䎜ҀJacefostuણધભીଔଙඑ඗ඞcy;䐊cute;䅃ƀaey઴હાron;䅇dil;䅅;䐝ƀgswે૰଎ativeƀMTV૓૟૨ediumSpace;怋hiĀcn૦૘ë૙eryThiî૙tedĀGL૸ଆreaterGreateòٳessLesóੈLine;䀊r;쀀𝔑ȀBnptଢନଷ଺reak;恠BreakingSpace;䂠f;愕ڀ;CDEGHLNPRSTV୕ୖ୪୼஡௫ఄ౞಄ದ೘ൡඅ櫬Āou୛୤ngruent;扢pCap;扭oubleVerticalBar;戦ƀlqxஃஊ஛ement;戉ualĀ;Tஒஓ扠ilde;쀀≂̸ists;戄reater΀;EFGLSTஶஷ஽௉௓௘௥扯qual;扱ullEqual;쀀≧̸reater;쀀≫̸ess;批lantEqual;쀀⩾̸ilde;扵umpń௲௽ownHump;쀀≎̸qual;쀀≏̸eĀfsఊధtTriangleƀ;BEచఛడ拪ar;쀀⧏̸qual;括s̀;EGLSTవశ఼ౄోౘ扮qual;扰reater;扸ess;쀀≪̸lantEqual;쀀⩽̸ilde;扴estedĀGL౨౹reaterGreater;쀀⪢̸essLess;쀀⪡̸recedesƀ;ESಒಓಛ技qual;쀀⪯̸lantEqual;拠ĀeiಫಹverseElement;戌ghtTriangleƀ;BEೋೌ೒拫ar;쀀⧐̸qual;拭ĀquೝഌuareSuĀbp೨೹setĀ;E೰ೳ쀀⊏̸qual;拢ersetĀ;Eഃആ쀀⊐̸qual;拣ƀbcpഓതൎsetĀ;Eഛഞ쀀⊂⃒qual;抈ceedsȀ;ESTലള഻െ抁qual;쀀⪰̸lantEqual;拡ilde;쀀≿̸ersetĀ;E൘൛쀀⊃⃒qual;抉ildeȀ;EFT൮൯൵ൿ扁qual;扄ullEqual;扇ilde;扉erticalBar;戤cr;쀀𝒩ilde耻Ñ䃑;䎝܀Eacdfgmoprstuvලෂ෉෕ෛ෠෧෼ขภยา฿ไlig;䅒cute耻Ó䃓Āiy෎ීrc耻Ô䃔;䐞blac;䅐r;쀀𝔒rave耻Ò䃒ƀaei෮ෲ෶cr;䅌ga;䎩cron;䎟pf;쀀𝕆enCurlyĀDQฎบoubleQuote;怜uote;怘;橔Āclวฬr;쀀𝒪ash耻Ø䃘iŬื฼de耻Õ䃕es;樷ml耻Ö䃖erĀBP๋๠Āar๐๓r;怾acĀek๚๜;揞et;掴arenthesis;揜Ҁacfhilors๿ງຊຏຒດຝະ໼rtialD;戂y;䐟r;쀀𝔓i;䎦;䎠usMinus;䂱Āipຢອncareplanåڝf;愙Ȁ;eio຺ູ໠໤檻cedesȀ;EST່້໏໚扺qual;檯lantEqual;扼ilde;找me;怳Ādp໩໮uct;戏ortionĀ;aȥ໹l;戝Āci༁༆r;쀀𝒫;䎨ȀUfos༑༖༛༟OT耻\"䀢r;쀀𝔔pf;愚cr;쀀𝒬؀BEacefhiorsu༾གྷཇའཱིྦྷྪྭ႖ႩႴႾarr;椐G耻®䂮ƀcnrཎནབute;䅔g;柫rĀ;tཛྷཝ憠l;椖ƀaeyཧཬཱron;䅘dil;䅖;䐠Ā;vླྀཹ愜erseĀEUྂྙĀlq྇ྎement;戋uilibrium;懋pEquilibrium;楯r»ཹo;䎡ghtЀACDFTUVa࿁࿫࿳ဢဨၛႇϘĀnr࿆࿒gleBracket;柩rowƀ;BL࿜࿝࿡憒ar;懥eftArrow;懄eiling;按oǵ࿹\0စbleBracket;柧nǔည\0နeeVector;楝ectorĀ;Bဝသ懂ar;楕loor;挋Āerိ၃eƀ;AVဵံြ抢rrow;憦ector;楛iangleƀ;BEၐၑၕ抳ar;槐qual;抵pƀDTVၣၮၸownVector;楏eeVector;楜ectorĀ;Bႂႃ憾ar;楔ectorĀ;B႑႒懀ar;楓Āpuႛ႞f;愝ndImplies;楰ightarrow;懛ĀchႹႼr;愛;憱leDelayed;槴ڀHOacfhimoqstuფჱჷჽᄙᄞᅑᅖᅡᅧᆵᆻᆿĀCcჩხHcy;䐩y;䐨FTcy;䐬cute;䅚ʀ;aeiyᄈᄉᄎᄓᄗ檼ron;䅠dil;䅞rc;䅜;䐡r;쀀𝔖ortȀDLRUᄪᄴᄾᅉownArrow»ОeftArrow»࢚ightArrow»࿝pArrow;憑gma;䎣allCircle;战pf;쀀𝕊ɲᅭ\0\0ᅰt;戚areȀ;ISUᅻᅼᆉᆯ斡ntersection;抓uĀbpᆏᆞsetĀ;Eᆗᆘ抏qual;抑ersetĀ;Eᆨᆩ抐qual;抒nion;抔cr;쀀𝒮ar;拆ȀbcmpᇈᇛሉላĀ;sᇍᇎ拐etĀ;Eᇍᇕqual;抆ĀchᇠህeedsȀ;ESTᇭᇮᇴᇿ扻qual;檰lantEqual;扽ilde;承Tháྌ;我ƀ;esሒሓሣ拑rsetĀ;Eሜም抃qual;抇et»ሓրHRSacfhiorsሾቄ቉ቕ቞ቱቶኟዂወዑORN耻Þ䃞ADE;愢ĀHc቎ቒcy;䐋y;䐦Ābuቚቜ;䀉;䎤ƀaeyብቪቯron;䅤dil;䅢;䐢r;쀀𝔗Āeiቻ኉ǲኀ\0ኇefore;戴a;䎘Ācn኎ኘkSpace;쀀  Space;怉ldeȀ;EFTካኬኲኼ戼qual;扃ullEqual;扅ilde;扈pf;쀀𝕋ipleDot;惛Āctዖዛr;쀀𝒯rok;䅦ૡዷጎጚጦ\0ጬጱ\0\0\0\0\0ጸጽ፷ᎅ\0᏿ᐄᐊᐐĀcrዻጁute耻Ú䃚rĀ;oጇገ憟cir;楉rǣጓ\0጖y;䐎ve;䅬Āiyጞጣrc耻Û䃛;䐣blac;䅰r;쀀𝔘rave耻Ù䃙acr;䅪Ādiፁ፩erĀBPፈ፝Āarፍፐr;䁟acĀekፗፙ;揟et;掵arenthesis;揝onĀ;P፰፱拃lus;抎Āgp፻፿on;䅲f;쀀𝕌ЀADETadps᎕ᎮᎸᏄϨᏒᏗᏳrrowƀ;BDᅐᎠᎤar;椒ownArrow;懅ownArrow;憕quilibrium;楮eeĀ;AᏋᏌ报rrow;憥ownáϳerĀLRᏞᏨeftArrow;憖ightArrow;憗iĀ;lᏹᏺ䏒on;䎥ing;䅮cr;쀀𝒰ilde;䅨ml耻Ü䃜ҀDbcdefosvᐧᐬᐰᐳᐾᒅᒊᒐᒖash;披ar;櫫y;䐒ashĀ;lᐻᐼ抩;櫦Āerᑃᑅ;拁ƀbtyᑌᑐᑺar;怖Ā;iᑏᑕcalȀBLSTᑡᑥᑪᑴar;戣ine;䁼eparator;杘ilde;所ThinSpace;怊r;쀀𝔙pf;쀀𝕍cr;쀀𝒱dash;抪ʀcefosᒧᒬᒱᒶᒼirc;䅴dge;拀r;쀀𝔚pf;쀀𝕎cr;쀀𝒲Ȁfiosᓋᓐᓒᓘr;쀀𝔛;䎞pf;쀀𝕏cr;쀀𝒳ҀAIUacfosuᓱᓵᓹᓽᔄᔏᔔᔚᔠcy;䐯cy;䐇cy;䐮cute耻Ý䃝Āiyᔉᔍrc;䅶;䐫r;쀀𝔜pf;쀀𝕐cr;쀀𝒴ml;䅸ЀHacdefosᔵᔹᔿᕋᕏᕝᕠᕤcy;䐖cute;䅹Āayᕄᕉron;䅽;䐗ot;䅻ǲᕔ\0ᕛoWidtè૙a;䎖r;愨pf;愤cr;쀀𝒵௡ᖃᖊᖐ\0ᖰᖶᖿ\0\0\0\0ᗆᗛᗫᙟ᙭\0ᚕ᚛ᚲᚹ\0ᚾcute耻á䃡reve;䄃̀;Ediuyᖜᖝᖡᖣᖨᖭ戾;쀀∾̳;房rc耻â䃢te肻´̆;䐰lig耻æ䃦Ā;r²ᖺ;쀀𝔞rave耻à䃠ĀepᗊᗖĀfpᗏᗔsym;愵èᗓha;䎱ĀapᗟcĀclᗤᗧr;䄁g;樿ɤᗰ\0\0ᘊʀ;adsvᗺᗻᗿᘁᘇ戧nd;橕;橜lope;橘;橚΀;elmrszᘘᘙᘛᘞᘿᙏᙙ戠;榤e»ᘙsdĀ;aᘥᘦ戡ѡᘰᘲᘴᘶᘸᘺᘼᘾ;榨;榩;榪;榫;榬;榭;榮;榯tĀ;vᙅᙆ戟bĀ;dᙌᙍ抾;榝Āptᙔᙗh;戢»¹arr;捼Āgpᙣᙧon;䄅f;쀀𝕒΀;Eaeiop዁ᙻᙽᚂᚄᚇᚊ;橰cir;橯;扊d;手s;䀧roxĀ;e዁ᚒñᚃing耻å䃥ƀctyᚡᚦᚨr;쀀𝒶;䀪mpĀ;e዁ᚯñʈilde耻ã䃣ml耻ä䃤Āciᛂᛈoninôɲnt;樑ࠀNabcdefiklnoprsu᛭ᛱᜰ᜼ᝃᝈ᝸᝽០៦ᠹᡐᜍ᤽᥈ᥰot;櫭Ācrᛶ᜞kȀcepsᜀᜅᜍᜓong;扌psilon;䏶rime;怵imĀ;e᜚᜛戽q;拍Ŷᜢᜦee;抽edĀ;gᜬᜭ挅e»ᜭrkĀ;t፜᜷brk;掶Āoyᜁᝁ;䐱quo;怞ʀcmprtᝓ᝛ᝡᝤᝨausĀ;eĊĉptyv;榰séᜌnoõēƀahwᝯ᝱ᝳ;䎲;愶een;扬r;쀀𝔟g΀costuvwឍឝឳេ៕៛៞ƀaiuបពរðݠrc;旯p»፱ƀdptឤឨឭot;樀lus;樁imes;樂ɱឹ\0\0ើcup;樆ar;昅riangleĀdu៍្own;施p;斳plus;樄eåᑄåᒭarow;植ƀako៭ᠦᠵĀcn៲ᠣkƀlst៺֫᠂ozenge;槫riangleȀ;dlr᠒᠓᠘᠝斴own;斾eft;旂ight;斸k;搣Ʊᠫ\0ᠳƲᠯ\0ᠱ;斒;斑4;斓ck;斈ĀeoᠾᡍĀ;qᡃᡆ쀀=⃥uiv;쀀≡⃥t;挐Ȁptwxᡙᡞᡧᡬf;쀀𝕓Ā;tᏋᡣom»Ꮜtie;拈؀DHUVbdhmptuvᢅᢖᢪᢻᣗᣛᣬ᣿ᤅᤊᤐᤡȀLRlrᢎᢐᢒᢔ;敗;敔;敖;敓ʀ;DUduᢡᢢᢤᢦᢨ敐;敦;敩;敤;敧ȀLRlrᢳᢵᢷᢹ;敝;敚;敜;教΀;HLRhlrᣊᣋᣍᣏᣑᣓᣕ救;敬;散;敠;敫;敢;敟ox;槉ȀLRlrᣤᣦᣨᣪ;敕;敒;攐;攌ʀ;DUduڽ᣷᣹᣻᣽;敥;敨;攬;攴inus;抟lus;択imes;抠ȀLRlrᤙᤛᤝ᤟;敛;敘;攘;攔΀;HLRhlrᤰᤱᤳᤵᤷ᤻᤹攂;敪;敡;敞;攼;攤;攜Āevģ᥂bar耻¦䂦Ȁceioᥑᥖᥚᥠr;쀀𝒷mi;恏mĀ;e᜚᜜lƀ;bhᥨᥩᥫ䁜;槅sub;柈Ŭᥴ᥾lĀ;e᥹᥺怢t»᥺pƀ;Eeįᦅᦇ;檮Ā;qۜۛೡᦧ\0᧨ᨑᨕᨲ\0ᨷᩐ\0\0᪴\0\0᫁\0\0ᬡᬮ᭍᭒\0᯽\0ᰌƀcpr᦭ᦲ᧝ute;䄇̀;abcdsᦿᧀᧄ᧊᧕᧙戩nd;橄rcup;橉Āau᧏᧒p;橋p;橇ot;橀;쀀∩︀Āeo᧢᧥t;恁îړȀaeiu᧰᧻ᨁᨅǰ᧵\0᧸s;橍on;䄍dil耻ç䃧rc;䄉psĀ;sᨌᨍ橌m;橐ot;䄋ƀdmnᨛᨠᨦil肻¸ƭptyv;榲t脀¢;eᨭᨮ䂢räƲr;쀀𝔠ƀceiᨽᩀᩍy;䑇ckĀ;mᩇᩈ朓ark»ᩈ;䏇r΀;Ecefms᩟᩠ᩢᩫ᪤᪪᪮旋;槃ƀ;elᩩᩪᩭ䋆q;扗eɡᩴ\0\0᪈rrowĀlr᩼᪁eft;憺ight;憻ʀRSacd᪒᪔᪖᪚᪟»ཇ;擈st;抛irc;抚ash;抝nint;樐id;櫯cir;槂ubsĀ;u᪻᪼晣it»᪼ˬ᫇᫔᫺\0ᬊonĀ;eᫍᫎ䀺Ā;qÇÆɭ᫙\0\0᫢aĀ;t᫞᫟䀬;䁀ƀ;fl᫨᫩᫫戁îᅠeĀmx᫱᫶ent»᫩eóɍǧ᫾\0ᬇĀ;dኻᬂot;橭nôɆƀfryᬐᬔᬗ;쀀𝕔oäɔ脀©;sŕᬝr;愗Āaoᬥᬩrr;憵ss;朗Ācuᬲᬷr;쀀𝒸Ābpᬼ᭄Ā;eᭁᭂ櫏;櫑Ā;eᭉᭊ櫐;櫒dot;拯΀delprvw᭠᭬᭷ᮂᮬᯔ᯹arrĀlr᭨᭪;椸;椵ɰ᭲\0\0᭵r;拞c;拟arrĀ;p᭿ᮀ憶;椽̀;bcdosᮏᮐᮖᮡᮥᮨ截rcap;橈Āauᮛᮞp;橆p;橊ot;抍r;橅;쀀∪︀Ȁalrv᮵ᮿᯞᯣrrĀ;mᮼᮽ憷;椼yƀevwᯇᯔᯘqɰᯎ\0\0ᯒreã᭳uã᭵ee;拎edge;拏en耻¤䂤earrowĀlrᯮ᯳eft»ᮀight»ᮽeäᯝĀciᰁᰇoninôǷnt;戱lcty;挭ঀAHabcdefhijlorstuwz᰸᰻᰿ᱝᱩᱵᲊᲞᲬᲷ᳻᳿ᴍᵻᶑᶫᶻ᷆᷍rò΁ar;楥Ȁglrs᱈ᱍ᱒᱔ger;怠eth;愸òᄳhĀ;vᱚᱛ怐»ऊūᱡᱧarow;椏aã̕Āayᱮᱳron;䄏;䐴ƀ;ao̲ᱼᲄĀgrʿᲁr;懊tseq;橷ƀglmᲑᲔᲘ耻°䂰ta;䎴ptyv;榱ĀirᲣᲨsht;楿;쀀𝔡arĀlrᲳᲵ»ࣜ»သʀaegsv᳂͸᳖᳜᳠mƀ;oș᳊᳔ndĀ;ș᳑uit;晦amma;䏝in;拲ƀ;io᳧᳨᳸䃷de脀÷;o᳧ᳰntimes;拇nø᳷cy;䑒cɯᴆ\0\0ᴊrn;挞op;挍ʀlptuwᴘᴝᴢᵉᵕlar;䀤f;쀀𝕕ʀ;emps̋ᴭᴷᴽᵂqĀ;d͒ᴳot;扑inus;戸lus;戔quare;抡blebarwedgåúnƀadhᄮᵝᵧownarrowóᲃarpoonĀlrᵲᵶefôᲴighôᲶŢᵿᶅkaro÷གɯᶊ\0\0ᶎrn;挟op;挌ƀcotᶘᶣᶦĀryᶝᶡ;쀀𝒹;䑕l;槶rok;䄑Ādrᶰᶴot;拱iĀ;fᶺ᠖斿Āah᷀᷃ròЩaòྦangle;榦Āci᷒ᷕy;䑟grarr;柿ऀDacdefglmnopqrstuxḁḉḙḸոḼṉṡṾấắẽỡἪἷὄ὎὚ĀDoḆᴴoôᲉĀcsḎḔute耻é䃩ter;橮ȀaioyḢḧḱḶron;䄛rĀ;cḭḮ扖耻ê䃪lon;払;䑍ot;䄗ĀDrṁṅot;扒;쀀𝔢ƀ;rsṐṑṗ檚ave耻è䃨Ā;dṜṝ檖ot;檘Ȁ;ilsṪṫṲṴ檙nters;揧;愓Ā;dṹṺ檕ot;檗ƀapsẅẉẗcr;䄓tyƀ;svẒẓẕ戅et»ẓpĀ1;ẝẤĳạả;怄;怅怃ĀgsẪẬ;䅋p;怂ĀgpẴẸon;䄙f;쀀𝕖ƀalsỄỎỒrĀ;sỊị拕l;槣us;橱iƀ;lvỚớở䎵on»ớ;䏵ȀcsuvỪỳἋἣĀioữḱrc»Ḯɩỹ\0\0ỻíՈantĀglἂἆtr»ṝess»Ṻƀaeiἒ἖Ἒls;䀽st;扟vĀ;DȵἠD;橸parsl;槥ĀDaἯἳot;打rr;楱ƀcdiἾὁỸr;愯oô͒ĀahὉὋ;䎷耻ð䃰Āmrὓὗl耻ë䃫o;悬ƀcipὡὤὧl;䀡sôծĀeoὬὴctatioîՙnentialåչৡᾒ\0ᾞ\0ᾡᾧ\0\0ῆῌ\0ΐ\0ῦῪ \0 ⁚llingdotseñṄy;䑄male;晀ƀilrᾭᾳ῁lig;耀ﬃɩᾹ\0\0᾽g;耀ﬀig;耀ﬄ;쀀𝔣lig;耀ﬁlig;쀀fjƀaltῙ῜ῡt;晭ig;耀ﬂns;斱of;䆒ǰ΅\0ῳf;쀀𝕗ĀakֿῷĀ;vῼ´拔;櫙artint;樍Āao‌⁕Ācs‑⁒α‚‰‸⁅⁈\0⁐β•‥‧‪‬\0‮耻½䂽;慓耻¼䂼;慕;慙;慛Ƴ‴\0‶;慔;慖ʴ‾⁁\0\0⁃耻¾䂾;慗;慜5;慘ƶ⁌\0⁎;慚;慝8;慞l;恄wn;挢cr;쀀𝒻ࢀEabcdefgijlnorstv₂₉₟₥₰₴⃰⃵⃺⃿℃ℒℸ̗ℾ⅒↞Ā;lٍ₇;檌ƀcmpₐₕ₝ute;䇵maĀ;dₜ᳚䎳;檆reve;䄟Āiy₪₮rc;䄝;䐳ot;䄡Ȁ;lqsؾق₽⃉ƀ;qsؾٌ⃄lanô٥Ȁ;cdl٥⃒⃥⃕c;檩otĀ;o⃜⃝檀Ā;l⃢⃣檂;檄Ā;e⃪⃭쀀⋛︀s;檔r;쀀𝔤Ā;gٳ؛mel;愷cy;䑓Ȁ;Eajٚℌℎℐ;檒;檥;檤ȀEaesℛℝ℩ℴ;扩pĀ;p℣ℤ檊rox»ℤĀ;q℮ℯ檈Ā;q℮ℛim;拧pf;쀀𝕘Āci⅃ⅆr;愊mƀ;el٫ⅎ⅐;檎;檐茀>;cdlqr׮ⅠⅪⅮⅳⅹĀciⅥⅧ;檧r;橺ot;拗Par;榕uest;橼ʀadelsↄⅪ←ٖ↛ǰ↉\0↎proø₞r;楸qĀlqؿ↖lesó₈ií٫Āen↣↭rtneqq;쀀≩︀Å↪ԀAabcefkosy⇄⇇⇱⇵⇺∘∝∯≨≽ròΠȀilmr⇐⇔⇗⇛rsðᒄf»․ilôکĀdr⇠⇤cy;䑊ƀ;cwࣴ⇫⇯ir;楈;憭ar;意irc;䄥ƀalr∁∎∓rtsĀ;u∉∊晥it»∊lip;怦con;抹r;쀀𝔥sĀew∣∩arow;椥arow;椦ʀamopr∺∾≃≞≣rr;懿tht;戻kĀlr≉≓eftarrow;憩ightarrow;憪f;쀀𝕙bar;怕ƀclt≯≴≸r;쀀𝒽asè⇴rok;䄧Ābp⊂⊇ull;恃hen»ᱛૡ⊣\0⊪\0⊸⋅⋎\0⋕⋳\0\0⋸⌢⍧⍢⍿\0⎆⎪⎴cute耻í䃭ƀ;iyݱ⊰⊵rc耻î䃮;䐸Ācx⊼⊿y;䐵cl耻¡䂡ĀfrΟ⋉;쀀𝔦rave耻ì䃬Ȁ;inoܾ⋝⋩⋮Āin⋢⋦nt;樌t;戭fin;槜ta;愩lig;䄳ƀaop⋾⌚⌝ƀcgt⌅⌈⌗r;䄫ƀelpܟ⌏⌓inåގarôܠh;䄱f;抷ed;䆵ʀ;cfotӴ⌬⌱⌽⍁are;愅inĀ;t⌸⌹戞ie;槝doô⌙ʀ;celpݗ⍌⍐⍛⍡al;抺Āgr⍕⍙eróᕣã⍍arhk;樗rod;樼Ȁcgpt⍯⍲⍶⍻y;䑑on;䄯f;쀀𝕚a;䎹uest耻¿䂿Āci⎊⎏r;쀀𝒾nʀ;EdsvӴ⎛⎝⎡ӳ;拹ot;拵Ā;v⎦⎧拴;拳Ā;iݷ⎮lde;䄩ǫ⎸\0⎼cy;䑖l耻ï䃯̀cfmosu⏌⏗⏜⏡⏧⏵Āiy⏑⏕rc;䄵;䐹r;쀀𝔧ath;䈷pf;쀀𝕛ǣ⏬\0⏱r;쀀𝒿rcy;䑘kcy;䑔Ѐacfghjos␋␖␢␧␭␱␵␻ppaĀ;v␓␔䎺;䏰Āey␛␠dil;䄷;䐺r;쀀𝔨reen;䄸cy;䑅cy;䑜pf;쀀𝕜cr;쀀𝓀஀ABEHabcdefghjlmnoprstuv⑰⒁⒆⒍⒑┎┽╚▀♎♞♥♹♽⚚⚲⛘❝❨➋⟀⠁⠒ƀart⑷⑺⑼rò৆òΕail;椛arr;椎Ā;gঔ⒋;檋ar;楢ॣ⒥\0⒪\0⒱\0\0\0\0\0⒵Ⓔ\0ⓆⓈⓍ\0⓹ute;䄺mptyv;榴raîࡌbda;䎻gƀ;dlࢎⓁⓃ;榑åࢎ;檅uo耻«䂫rЀ;bfhlpst࢙ⓞⓦⓩ⓫⓮⓱⓵Ā;f࢝ⓣs;椟s;椝ë≒p;憫l;椹im;楳l;憢ƀ;ae⓿─┄檫il;椙Ā;s┉┊檭;쀀⪭︀ƀabr┕┙┝rr;椌rk;杲Āak┢┬cĀek┨┪;䁻;䁛Āes┱┳;榋lĀdu┹┻;榏;榍Ȁaeuy╆╋╖╘ron;䄾Ādi═╔il;䄼ìࢰâ┩;䐻Ȁcqrs╣╦╭╽a;椶uoĀ;rนᝆĀdu╲╷har;楧shar;楋h;憲ʀ;fgqs▋▌উ◳◿扤tʀahlrt▘▤▷◂◨rrowĀ;t࢙□aé⓶arpoonĀdu▯▴own»њp»०eftarrows;懇ightƀahs◍◖◞rrowĀ;sࣴࢧarpoonó྘quigarro÷⇰hreetimes;拋ƀ;qs▋ও◺lanôবʀ;cdgsব☊☍☝☨c;檨otĀ;o☔☕橿Ā;r☚☛檁;檃Ā;e☢☥쀀⋚︀s;檓ʀadegs☳☹☽♉♋pproøⓆot;拖qĀgq♃♅ôউgtò⒌ôছiíলƀilr♕࣡♚sht;楼;쀀𝔩Ā;Eজ♣;檑š♩♶rĀdu▲♮Ā;l॥♳;楪lk;斄cy;䑙ʀ;achtੈ⚈⚋⚑⚖rò◁orneòᴈard;楫ri;旺Āio⚟⚤dot;䅀ustĀ;a⚬⚭掰che»⚭ȀEaes⚻⚽⛉⛔;扨pĀ;p⛃⛄檉rox»⛄Ā;q⛎⛏檇Ā;q⛎⚻im;拦Ѐabnoptwz⛩⛴⛷✚✯❁❇❐Ānr⛮⛱g;柬r;懽rëࣁgƀlmr⛿✍✔eftĀar০✇ightá৲apsto;柼ightá৽parrowĀlr✥✩efô⓭ight;憬ƀafl✶✹✽r;榅;쀀𝕝us;樭imes;樴š❋❏st;戗áፎƀ;ef❗❘᠀旊nge»❘arĀ;l❤❥䀨t;榓ʀachmt❳❶❼➅➇ròࢨorneòᶌarĀ;d྘➃;業;怎ri;抿̀achiqt➘➝ੀ➢➮➻quo;怹r;쀀𝓁mƀ;egল➪➬;檍;檏Ābu┪➳oĀ;rฟ➹;怚rok;䅂萀<;cdhilqrࠫ⟒☹⟜⟠⟥⟪⟰Āci⟗⟙;檦r;橹reå◲mes;拉arr;楶uest;橻ĀPi⟵⟹ar;榖ƀ;ef⠀भ᠛旃rĀdu⠇⠍shar;楊har;楦Āen⠗⠡rtneqq;쀀≨︀Å⠞܀Dacdefhilnopsu⡀⡅⢂⢎⢓⢠⢥⢨⣚⣢⣤ઃ⣳⤂Dot;戺Ȁclpr⡎⡒⡣⡽r耻¯䂯Āet⡗⡙;時Ā;e⡞⡟朠se»⡟Ā;sျ⡨toȀ;dluျ⡳⡷⡻owîҌefôएðᏑker;斮Āoy⢇⢌mma;権;䐼ash;怔asuredangle»ᘦr;쀀𝔪o;愧ƀcdn⢯⢴⣉ro耻µ䂵Ȁ;acdᑤ⢽⣀⣄sôᚧir;櫰ot肻·Ƶusƀ;bd⣒ᤃ⣓戒Ā;uᴼ⣘;横ţ⣞⣡p;櫛ò−ðઁĀdp⣩⣮els;抧f;쀀𝕞Āct⣸⣽r;쀀𝓂pos»ᖝƀ;lm⤉⤊⤍䎼timap;抸ఀGLRVabcdefghijlmoprstuvw⥂⥓⥾⦉⦘⧚⧩⨕⨚⩘⩝⪃⪕⪤⪨⬄⬇⭄⭿⮮ⰴⱧⱼ⳩Āgt⥇⥋;쀀⋙̸Ā;v⥐௏쀀≫⃒ƀelt⥚⥲⥶ftĀar⥡⥧rrow;懍ightarrow;懎;쀀⋘̸Ā;v⥻ే쀀≪⃒ightarrow;懏ĀDd⦎⦓ash;抯ash;抮ʀbcnpt⦣⦧⦬⦱⧌la»˞ute;䅄g;쀀∠⃒ʀ;Eiop඄⦼⧀⧅⧈;쀀⩰̸d;쀀≋̸s;䅉roø඄urĀ;a⧓⧔普lĀ;s⧓ସǳ⧟\0⧣p肻\xA0ଷmpĀ;e௹ఀʀaeouy⧴⧾⨃⨐⨓ǰ⧹\0⧻;橃on;䅈dil;䅆ngĀ;dൾ⨊ot;쀀⩭̸p;橂;䐽ash;怓΀;Aadqsxஒ⨩⨭⨻⩁⩅⩐rr;懗rĀhr⨳⨶k;椤Ā;oᏲᏰot;쀀≐̸uiöୣĀei⩊⩎ar;椨í஘istĀ;s஠டr;쀀𝔫ȀEest௅⩦⩹⩼ƀ;qs஼⩭௡ƀ;qs஼௅⩴lanô௢ií௪Ā;rஶ⪁»ஷƀAap⪊⪍⪑rò⥱rr;憮ar;櫲ƀ;svྍ⪜ྌĀ;d⪡⪢拼;拺cy;䑚΀AEadest⪷⪺⪾⫂⫅⫶⫹rò⥦;쀀≦̸rr;憚r;急Ȁ;fqs఻⫎⫣⫯tĀar⫔⫙rro÷⫁ightarro÷⪐ƀ;qs఻⪺⫪lanôౕĀ;sౕ⫴»శiíౝĀ;rవ⫾iĀ;eచథiäඐĀpt⬌⬑f;쀀𝕟膀¬;in⬙⬚⬶䂬nȀ;Edvஉ⬤⬨⬮;쀀⋹̸ot;쀀⋵̸ǡஉ⬳⬵;拷;拶iĀ;vಸ⬼ǡಸ⭁⭃;拾;拽ƀaor⭋⭣⭩rȀ;ast୻⭕⭚⭟lleì୻l;쀀⫽⃥;쀀∂̸lint;樔ƀ;ceಒ⭰⭳uåಥĀ;cಘ⭸Ā;eಒ⭽ñಘȀAait⮈⮋⮝⮧rò⦈rrƀ;cw⮔⮕⮙憛;쀀⤳̸;쀀↝̸ghtarrow»⮕riĀ;eೋೖ΀chimpqu⮽⯍⯙⬄୸⯤⯯Ȁ;cerല⯆ഷ⯉uå൅;쀀𝓃ortɭ⬅\0\0⯖ará⭖mĀ;e൮⯟Ā;q൴൳suĀbp⯫⯭å೸åഋƀbcp⯶ⰑⰙȀ;Ees⯿ⰀഢⰄ抄;쀀⫅̸etĀ;eഛⰋqĀ;qണⰀcĀ;eലⰗñസȀ;EesⰢⰣൟⰧ抅;쀀⫆̸etĀ;e൘ⰮqĀ;qൠⰣȀgilrⰽⰿⱅⱇìௗlde耻ñ䃱çృiangleĀlrⱒⱜeftĀ;eచⱚñదightĀ;eೋⱥñ೗Ā;mⱬⱭ䎽ƀ;esⱴⱵⱹ䀣ro;愖p;怇ҀDHadgilrsⲏⲔⲙⲞⲣⲰⲶⳓⳣash;抭arr;椄p;쀀≍⃒ash;抬ĀetⲨⲬ;쀀≥⃒;쀀>⃒nfin;槞ƀAetⲽⳁⳅrr;椂;쀀≤⃒Ā;rⳊⳍ쀀<⃒ie;쀀⊴⃒ĀAtⳘⳜrr;椃rie;쀀⊵⃒im;쀀∼⃒ƀAan⳰⳴ⴂrr;懖rĀhr⳺⳽k;椣Ā;oᏧᏥear;椧ቓ᪕\0\0\0\0\0\0\0\0\0\0\0\0\0ⴭ\0ⴸⵈⵠⵥ⵲ⶄᬇ\0\0ⶍⶫ\0ⷈⷎ\0ⷜ⸙⸫⸾⹃Ācsⴱ᪗ute耻ó䃳ĀiyⴼⵅrĀ;c᪞ⵂ耻ô䃴;䐾ʀabios᪠ⵒⵗǈⵚlac;䅑v;樸old;榼lig;䅓Ācr⵩⵭ir;榿;쀀𝔬ͯ⵹\0\0⵼\0ⶂn;䋛ave耻ò䃲;槁Ābmⶈ෴ar;榵Ȁacitⶕ⶘ⶥⶨrò᪀Āir⶝ⶠr;榾oss;榻nå๒;槀ƀaeiⶱⶵⶹcr;䅍ga;䏉ƀcdnⷀⷅǍron;䎿;榶pf;쀀𝕠ƀaelⷔ⷗ǒr;榷rp;榹΀;adiosvⷪⷫⷮ⸈⸍⸐⸖戨rò᪆Ȁ;efmⷷⷸ⸂⸅橝rĀ;oⷾⷿ愴f»ⷿ耻ª䂪耻º䂺gof;抶r;橖lope;橗;橛ƀclo⸟⸡⸧ò⸁ash耻ø䃸l;折iŬⸯ⸴de耻õ䃵esĀ;aǛ⸺s;樶ml耻ö䃶bar;挽ૡ⹞\0⹽\0⺀⺝\0⺢⺹\0\0⻋ຜ\0⼓\0\0⼫⾼\0⿈rȀ;astЃ⹧⹲຅脀¶;l⹭⹮䂶leìЃɩ⹸\0\0⹻m;櫳;櫽y;䐿rʀcimpt⺋⺏⺓ᡥ⺗nt;䀥od;䀮il;怰enk;怱r;쀀𝔭ƀimo⺨⺰⺴Ā;v⺭⺮䏆;䏕maô੶ne;明ƀ;tv⺿⻀⻈䏀chfork»´;䏖Āau⻏⻟nĀck⻕⻝kĀ;h⇴⻛;愎ö⇴sҀ;abcdemst⻳⻴ᤈ⻹⻽⼄⼆⼊⼎䀫cir;樣ir;樢Āouᵀ⼂;樥;橲n肻±ຝim;樦wo;樧ƀipu⼙⼠⼥ntint;樕f;쀀𝕡nd耻£䂣Ԁ;Eaceinosu່⼿⽁⽄⽇⾁⾉⾒⽾⾶;檳p;檷uå໙Ā;c໎⽌̀;acens່⽙⽟⽦⽨⽾pproø⽃urlyeñ໙ñ໎ƀaes⽯⽶⽺pprox;檹qq;檵im;拨iíໟmeĀ;s⾈ຮ怲ƀEas⽸⾐⽺ð⽵ƀdfp໬⾙⾯ƀals⾠⾥⾪lar;挮ine;挒urf;挓Ā;t໻⾴ï໻rel;抰Āci⿀⿅r;쀀𝓅;䏈ncsp;怈̀fiopsu⿚⋢⿟⿥⿫⿱r;쀀𝔮pf;쀀𝕢rime;恗cr;쀀𝓆ƀaeo⿸〉〓tĀei⿾々rnionóڰnt;樖stĀ;e【】䀿ñἙô༔઀ABHabcdefhilmnoprstux぀けさすムㄎㄫㅇㅢㅲㆎ㈆㈕㈤㈩㉘㉮㉲㊐㊰㊷ƀartぇおがròႳòϝail;検aròᱥar;楤΀cdenqrtとふへみわゔヌĀeuねぱ;쀀∽̱te;䅕iãᅮmptyv;榳gȀ;del࿑らるろ;榒;榥å࿑uo耻»䂻rր;abcfhlpstw࿜ガクシスゼゾダッデナp;極Ā;f࿠ゴs;椠;椳s;椞ë≝ð✮l;楅im;楴l;憣;憝Āaiパフil;椚oĀ;nホボ戶aló༞ƀabrョリヮrò៥rk;杳ĀakンヽcĀekヹ・;䁽;䁝Āes㄂㄄;榌lĀduㄊㄌ;榎;榐Ȁaeuyㄗㄜㄧㄩron;䅙Ādiㄡㄥil;䅗ì࿲âヺ;䑀Ȁclqsㄴㄷㄽㅄa;椷dhar;楩uoĀ;rȎȍh;憳ƀacgㅎㅟངlȀ;ipsླྀㅘㅛႜnåႻarôྩt;断ƀilrㅩဣㅮsht;楽;쀀𝔯ĀaoㅷㆆrĀduㅽㅿ»ѻĀ;l႑ㆄ;楬Ā;vㆋㆌ䏁;䏱ƀgns㆕ㇹㇼht̀ahlrstㆤㆰ㇂㇘㇤㇮rrowĀ;t࿜ㆭaéトarpoonĀduㆻㆿowîㅾp»႒eftĀah㇊㇐rrowó࿪arpoonóՑightarrows;應quigarro÷ニhreetimes;拌g;䋚ingdotseñἲƀahm㈍㈐㈓rò࿪aòՑ;怏oustĀ;a㈞㈟掱che»㈟mid;櫮Ȁabpt㈲㈽㉀㉒Ānr㈷㈺g;柭r;懾rëဃƀafl㉇㉊㉎r;榆;쀀𝕣us;樮imes;樵Āap㉝㉧rĀ;g㉣㉤䀩t;榔olint;樒arò㇣Ȁachq㉻㊀Ⴜ㊅quo;怺r;쀀𝓇Ābu・㊊oĀ;rȔȓƀhir㊗㊛㊠reåㇸmes;拊iȀ;efl㊪ၙᠡ㊫方tri;槎luhar;楨;愞ൡ㋕㋛㋟㌬㌸㍱\0㍺㎤\0\0㏬㏰\0㐨㑈㑚㒭㒱㓊㓱\0㘖\0\0㘳cute;䅛quï➺Ԁ;Eaceinpsyᇭ㋳㋵㋿㌂㌋㌏㌟㌦㌩;檴ǰ㋺\0㋼;檸on;䅡uåᇾĀ;dᇳ㌇il;䅟rc;䅝ƀEas㌖㌘㌛;檶p;檺im;择olint;樓iíሄ;䑁otƀ;be㌴ᵇ㌵担;橦΀Aacmstx㍆㍊㍗㍛㍞㍣㍭rr;懘rĀhr㍐㍒ë∨Ā;oਸ਼਴t耻§䂧i;䀻war;椩mĀin㍩ðnuóñt;朶rĀ;o㍶⁕쀀𝔰Ȁacoy㎂㎆㎑㎠rp;景Āhy㎋㎏cy;䑉;䑈rtɭ㎙\0\0㎜iäᑤaraì⹯耻­䂭Āgm㎨㎴maƀ;fv㎱㎲㎲䏃;䏂Ѐ;deglnprካ㏅㏉㏎㏖㏞㏡㏦ot;橪Ā;q኱ኰĀ;E㏓㏔檞;檠Ā;E㏛㏜檝;檟e;扆lus;樤arr;楲aròᄽȀaeit㏸㐈㐏㐗Āls㏽㐄lsetmé㍪hp;樳parsl;槤Ādlᑣ㐔e;挣Ā;e㐜㐝檪Ā;s㐢㐣檬;쀀⪬︀ƀflp㐮㐳㑂tcy;䑌Ā;b㐸㐹䀯Ā;a㐾㐿槄r;挿f;쀀𝕤aĀdr㑍ЂesĀ;u㑔㑕晠it»㑕ƀcsu㑠㑹㒟Āau㑥㑯pĀ;sᆈ㑫;쀀⊓︀pĀ;sᆴ㑵;쀀⊔︀uĀbp㑿㒏ƀ;esᆗᆜ㒆etĀ;eᆗ㒍ñᆝƀ;esᆨᆭ㒖etĀ;eᆨ㒝ñᆮƀ;afᅻ㒦ְrť㒫ֱ»ᅼaròᅈȀcemt㒹㒾㓂㓅r;쀀𝓈tmîñiì㐕aræᆾĀar㓎㓕rĀ;f㓔ឿ昆Āan㓚㓭ightĀep㓣㓪psiloîỠhé⺯s»⡒ʀbcmnp㓻㕞ሉ㖋㖎Ҁ;Edemnprs㔎㔏㔑㔕㔞㔣㔬㔱㔶抂;櫅ot;檽Ā;dᇚ㔚ot;櫃ult;櫁ĀEe㔨㔪;櫋;把lus;檿arr;楹ƀeiu㔽㕒㕕tƀ;en㔎㕅㕋qĀ;qᇚ㔏eqĀ;q㔫㔨m;櫇Ābp㕚㕜;櫕;櫓c̀;acensᇭ㕬㕲㕹㕻㌦pproø㋺urlyeñᇾñᇳƀaes㖂㖈㌛pproø㌚qñ㌗g;晪ڀ123;Edehlmnps㖩㖬㖯ሜ㖲㖴㗀㗉㗕㗚㗟㗨㗭耻¹䂹耻²䂲耻³䂳;櫆Āos㖹㖼t;檾ub;櫘Ā;dሢ㗅ot;櫄sĀou㗏㗒l;柉b;櫗arr;楻ult;櫂ĀEe㗤㗦;櫌;抋lus;櫀ƀeiu㗴㘉㘌tƀ;enሜ㗼㘂qĀ;qሢ㖲eqĀ;q㗧㗤m;櫈Ābp㘑㘓;櫔;櫖ƀAan㘜㘠㘭rr;懙rĀhr㘦㘨ë∮Ā;oਫ਩war;椪lig耻ß䃟௡㙑㙝㙠ዎ㙳㙹\0㙾㛂\0\0\0\0\0㛛㜃\0㜉㝬\0\0\0㞇ɲ㙖\0\0㙛get;挖;䏄rë๟ƀaey㙦㙫㙰ron;䅥dil;䅣;䑂lrec;挕r;쀀𝔱Ȁeiko㚆㚝㚵㚼ǲ㚋\0㚑eĀ4fኄኁaƀ;sv㚘㚙㚛䎸ym;䏑Ācn㚢㚲kĀas㚨㚮pproø዁im»ኬsðኞĀas㚺㚮ð዁rn耻þ䃾Ǭ̟㛆⋧es膀×;bd㛏㛐㛘䃗Ā;aᤏ㛕r;樱;樰ƀeps㛡㛣㜀á⩍Ȁ;bcf҆㛬㛰㛴ot;挶ir;櫱Ā;o㛹㛼쀀𝕥rk;櫚á㍢rime;怴ƀaip㜏㜒㝤dåቈ΀adempst㜡㝍㝀㝑㝗㝜㝟ngleʀ;dlqr㜰㜱㜶㝀㝂斵own»ᶻeftĀ;e⠀㜾ñम;扜ightĀ;e㊪㝋ñၚot;旬inus;樺lus;樹b;槍ime;樻ezium;揢ƀcht㝲㝽㞁Āry㝷㝻;쀀𝓉;䑆cy;䑛rok;䅧Āio㞋㞎xô᝷headĀlr㞗㞠eftarro÷ࡏightarrow»ཝऀAHabcdfghlmoprstuw㟐㟓㟗㟤㟰㟼㠎㠜㠣㠴㡑㡝㡫㢩㣌㣒㣪㣶ròϭar;楣Ācr㟜㟢ute耻ú䃺òᅐrǣ㟪\0㟭y;䑞ve;䅭Āiy㟵㟺rc耻û䃻;䑃ƀabh㠃㠆㠋ròᎭlac;䅱aòᏃĀir㠓㠘sht;楾;쀀𝔲rave耻ù䃹š㠧㠱rĀlr㠬㠮»ॗ»ႃlk;斀Āct㠹㡍ɯ㠿\0\0㡊rnĀ;e㡅㡆挜r»㡆op;挏ri;旸Āal㡖㡚cr;䅫肻¨͉Āgp㡢㡦on;䅳f;쀀𝕦̀adhlsuᅋ㡸㡽፲㢑㢠ownáᎳarpoonĀlr㢈㢌efô㠭ighô㠯iƀ;hl㢙㢚㢜䏅»ᏺon»㢚parrows;懈ƀcit㢰㣄㣈ɯ㢶\0\0㣁rnĀ;e㢼㢽挝r»㢽op;挎ng;䅯ri;旹cr;쀀𝓊ƀdir㣙㣝㣢ot;拰lde;䅩iĀ;f㜰㣨»᠓Āam㣯㣲rò㢨l耻ü䃼angle;榧ހABDacdeflnoprsz㤜㤟㤩㤭㦵㦸㦽㧟㧤㧨㧳㧹㧽㨁㨠ròϷarĀ;v㤦㤧櫨;櫩asèϡĀnr㤲㤷grt;榜΀eknprst㓣㥆㥋㥒㥝㥤㦖appá␕othinçẖƀhir㓫⻈㥙opô⾵Ā;hᎷ㥢ïㆍĀiu㥩㥭gmá㎳Ābp㥲㦄setneqĀ;q㥽㦀쀀⊊︀;쀀⫋︀setneqĀ;q㦏㦒쀀⊋︀;쀀⫌︀Āhr㦛㦟etá㚜iangleĀlr㦪㦯eft»थight»ၑy;䐲ash»ံƀelr㧄㧒㧗ƀ;beⷪ㧋㧏ar;抻q;扚lip;拮Ābt㧜ᑨaòᑩr;쀀𝔳tré㦮suĀbp㧯㧱»ജ»൙pf;쀀𝕧roð໻tré㦴Ācu㨆㨋r;쀀𝓋Ābp㨐㨘nĀEe㦀㨖»㥾nĀEe㦒㨞»㦐igzag;榚΀cefoprs㨶㨻㩖㩛㩔㩡㩪irc;䅵Ādi㩀㩑Ābg㩅㩉ar;機eĀ;qᗺ㩏;扙erp;愘r;쀀𝔴pf;쀀𝕨Ā;eᑹ㩦atèᑹcr;쀀𝓌ૣណ㪇\0㪋\0㪐㪛\0\0㪝㪨㪫㪯\0\0㫃㫎\0㫘ៜ៟tré៑r;쀀𝔵ĀAa㪔㪗ròσrò৶;䎾ĀAa㪡㪤ròθrò৫að✓is;拻ƀdptឤ㪵㪾Āfl㪺ឩ;쀀𝕩imåឲĀAa㫇㫊ròώròਁĀcq㫒ីr;쀀𝓍Āpt៖㫜ré។Ѐacefiosu㫰㫽㬈㬌㬑㬕㬛㬡cĀuy㫶㫻te耻ý䃽;䑏Āiy㬂㬆rc;䅷;䑋n耻¥䂥r;쀀𝔶cy;䑗pf;쀀𝕪cr;쀀𝓎Ācm㬦㬩y;䑎l耻ÿ䃿Ԁacdefhiosw㭂㭈㭔㭘㭤㭩㭭㭴㭺㮀cute;䅺Āay㭍㭒ron;䅾;䐷ot;䅼Āet㭝㭡træᕟa;䎶r;쀀𝔷cy;䐶grarr;懝pf;쀀𝕫cr;쀀𝓏Ājn㮅㮇;怍j;怌".split("").map((c) => c.charCodeAt(0)));
 //#endregion
-//#region ../agent-swarm/node_modules/entities/lib/esm/generated/decode-data-xml.js
+//#region node_modules/entities/lib/esm/generated/decode-data-xml.js
 var decode_data_xml_default = new Uint16Array("Ȁaglq	\x1Bɭ\0\0p;䀦os;䀧t;䀾t;䀼uot;䀢".split("").map((c) => c.charCodeAt(0)));
 //#endregion
-//#region ../agent-swarm/node_modules/entities/lib/esm/decode_codepoint.js
+//#region node_modules/entities/lib/esm/decode_codepoint.js
 var _a;
 var decodeMap = /* @__PURE__ */ new Map([
 	[0, 65533],
@@ -3264,7 +3284,7 @@ function replaceCodePoint(codePoint) {
 	return (_a = decodeMap.get(codePoint)) !== null && _a !== void 0 ? _a : codePoint;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/entities/lib/esm/decode.js
+//#region node_modules/entities/lib/esm/decode.js
 var CharCodes;
 (function(CharCodes) {
 	CharCodes[CharCodes["NUM"] = 35] = "NUM";
@@ -3640,7 +3660,7 @@ function decodeHTMLStrict(str) {
 	return htmlDecoder(str, DecodingMode.Strict);
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/common/utils.mjs
+//#region node_modules/markdown-it/lib/common/utils.mjs
 var utils_exports = /* @__PURE__ */ __exportAll({
 	arrayReplaceAt: () => arrayReplaceAt,
 	asciiTrim: () => asciiTrim,
@@ -3836,7 +3856,7 @@ var lib = {
 	ucmicro: uc_micro_exports
 };
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/helpers/parse_link_label.mjs
+//#region node_modules/markdown-it/lib/helpers/parse_link_label.mjs
 function parseLinkLabel(state, start, disableNested) {
 	let level, found, marker, prevPos;
 	const max = state.posMax;
@@ -3868,7 +3888,7 @@ function parseLinkLabel(state, start, disableNested) {
 	return labelEnd;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/helpers/parse_link_destination.mjs
+//#region node_modules/markdown-it/lib/helpers/parse_link_destination.mjs
 function parseLinkDestination(str, start, max) {
 	let code;
 	let pos = start;
@@ -3928,7 +3948,7 @@ function parseLinkDestination(str, start, max) {
 	return result;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/helpers/parse_link_title.mjs
+//#region node_modules/markdown-it/lib/helpers/parse_link_title.mjs
 function parseLinkTitle(str, start, max, prev_state) {
 	let code;
 	let pos = start;
@@ -3967,14 +3987,14 @@ function parseLinkTitle(str, start, max, prev_state) {
 	return state;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/helpers/index.mjs
+//#region node_modules/markdown-it/lib/helpers/index.mjs
 var helpers_exports = /* @__PURE__ */ __exportAll({
 	parseLinkDestination: () => parseLinkDestination,
 	parseLinkLabel: () => parseLinkLabel,
 	parseLinkTitle: () => parseLinkTitle
 });
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/renderer.mjs
+//#region node_modules/markdown-it/lib/renderer.mjs
 /**
 * class Renderer
 *
@@ -4187,7 +4207,7 @@ Renderer.prototype.render = function(tokens, options, env) {
 	return result;
 };
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/ruler.mjs
+//#region node_modules/markdown-it/lib/ruler.mjs
 /**
 * class Ruler
 *
@@ -4458,7 +4478,7 @@ Ruler.prototype.getRules = function(chainName) {
 	return this.__cache__[chainName] || [];
 };
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/token.mjs
+//#region node_modules/markdown-it/lib/token.mjs
 /**
 * class Token
 **/
@@ -4612,7 +4632,7 @@ Token.prototype.attrJoin = function attrJoin(name, value) {
 	else this.attrs[idx][1] = this.attrs[idx][1] + " " + value;
 };
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_core/state_core.mjs
+//#region node_modules/markdown-it/lib/rules_core/state_core.mjs
 function StateCore(src, md, env) {
 	this.src = src;
 	this.env = env;
@@ -4622,7 +4642,7 @@ function StateCore(src, md, env) {
 }
 StateCore.prototype.Token = Token;
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_core/normalize.mjs
+//#region node_modules/markdown-it/lib/rules_core/normalize.mjs
 var NEWLINES_RE = /\r\n?|\n/g;
 var NULL_RE = /\0/g;
 function normalize(state) {
@@ -4632,7 +4652,7 @@ function normalize(state) {
 	state.src = str;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_core/block.mjs
+//#region node_modules/markdown-it/lib/rules_core/block.mjs
 function block(state) {
 	let token;
 	if (state.inlineMode) {
@@ -4644,7 +4664,7 @@ function block(state) {
 	} else state.md.block.parse(state.src, state.md, state.env, state.tokens);
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_core/inline.mjs
+//#region node_modules/markdown-it/lib/rules_core/inline.mjs
 function inline(state) {
 	const tokens = state.tokens;
 	for (let i = 0, l = tokens.length; i < l; i++) {
@@ -4653,7 +4673,7 @@ function inline(state) {
 	}
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_core/linkify.mjs
+//#region node_modules/markdown-it/lib/rules_core/linkify.mjs
 function isLinkOpen$1(str) {
 	return /^<a[>\s]/i.test(str);
 }
@@ -4750,7 +4770,7 @@ function linkify$1(state) {
 	}
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_core/replacements.mjs
+//#region node_modules/markdown-it/lib/rules_core/replacements.mjs
 var RARE_RE = /\+-|\.\.|\?\?\?\?|!!!!|,,|--/;
 var SCOPED_ABBR_TEST_RE = /\((c|tm|r)\)/i;
 var SCOPED_ABBR_RE = /\((c|tm|r)\)/gi;
@@ -4792,7 +4812,7 @@ function replace(state) {
 	}
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_core/smartquotes.mjs
+//#region node_modules/markdown-it/lib/rules_core/smartquotes.mjs
 var QUOTE_TEST_RE = /['"]/;
 var QUOTE_RE = /['"]/g;
 var APOSTROPHE = "’";
@@ -4931,7 +4951,7 @@ function smartquotes(state) {
 	}
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_core/text_join.mjs
+//#region node_modules/markdown-it/lib/rules_core/text_join.mjs
 function text_join(state) {
 	let curr, last;
 	const blockTokens = state.tokens;
@@ -4950,7 +4970,7 @@ function text_join(state) {
 	}
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/parser_core.mjs
+//#region node_modules/markdown-it/lib/parser_core.mjs
 /** internal
 * class Core
 *
@@ -4989,7 +5009,7 @@ Core.prototype.process = function(state) {
 };
 Core.prototype.State = StateCore;
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/state_block.mjs
+//#region node_modules/markdown-it/lib/rules_block/state_block.mjs
 function StateBlock(src, md, env, tokens) {
 	this.src = src;
 	this.md = md;
@@ -5096,7 +5116,7 @@ StateBlock.prototype.getLines = function getLines(begin, end, indent, keepLastLF
 };
 StateBlock.prototype.Token = Token;
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/table.mjs
+//#region node_modules/markdown-it/lib/rules_block/table.mjs
 var MAX_AUTOCOMPLETED_CELLS = 65536;
 function getLine(state, line) {
 	const pos = state.bMarks[line] + state.tShift[line];
@@ -5231,7 +5251,7 @@ function table(state, startLine, endLine, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/code.mjs
+//#region node_modules/markdown-it/lib/rules_block/code.mjs
 function code(state, startLine, endLine) {
 	if (state.sCount[startLine] - state.blkIndent < 4) return false;
 	let nextLine = startLine + 1;
@@ -5255,7 +5275,7 @@ function code(state, startLine, endLine) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/fence.mjs
+//#region node_modules/markdown-it/lib/rules_block/fence.mjs
 function fence(state, startLine, endLine, silent) {
 	let pos = state.bMarks[startLine] + state.tShift[startLine];
 	let max = state.eMarks[startLine];
@@ -5300,7 +5320,7 @@ function fence(state, startLine, endLine, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/blockquote.mjs
+//#region node_modules/markdown-it/lib/rules_block/blockquote.mjs
 function blockquote(state, startLine, endLine, silent) {
 	let pos = state.bMarks[startLine] + state.tShift[startLine];
 	let max = state.eMarks[startLine];
@@ -5403,7 +5423,7 @@ function blockquote(state, startLine, endLine, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/hr.mjs
+//#region node_modules/markdown-it/lib/rules_block/hr.mjs
 function hr(state, startLine, endLine, silent) {
 	const max = state.eMarks[startLine];
 	if (state.sCount[startLine] - state.blkIndent >= 4) return false;
@@ -5425,7 +5445,7 @@ function hr(state, startLine, endLine, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/list.mjs
+//#region node_modules/markdown-it/lib/rules_block/list.mjs
 function skipBulletListMarker(state, startLine) {
 	const max = state.eMarks[startLine];
 	let pos = state.bMarks[startLine] + state.tShift[startLine];
@@ -5578,7 +5598,7 @@ function list(state, startLine, endLine, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/reference.mjs
+//#region node_modules/markdown-it/lib/rules_block/reference.mjs
 function reference(state, startLine, _endLine, silent) {
 	let pos = state.bMarks[startLine] + state.tShift[startLine];
 	let max = state.eMarks[startLine];
@@ -5714,7 +5734,7 @@ function reference(state, startLine, _endLine, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/common/html_blocks.mjs
+//#region node_modules/markdown-it/lib/common/html_blocks.mjs
 var html_blocks_default = [
 	"address",
 	"article",
@@ -5780,11 +5800,11 @@ var html_blocks_default = [
 	"ul"
 ];
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/common/html_re.mjs
+//#region node_modules/markdown-it/lib/common/html_re.mjs
 var HTML_TAG_RE = /* @__PURE__ */ new RegExp("^(?:<[A-Za-z][A-Za-z0-9\\-]*(?:\\s+[a-zA-Z_:][a-zA-Z0-9:._-]*(?:\\s*=\\s*(?:[^\"'=<>`\\x00-\\x20]+|'[^']*'|\"[^\"]*\"))?)*\\s*\\/?>|<\\/[A-Za-z][A-Za-z0-9\\-]*\\s*>|<!---?>|<!--(?:[^-]|-[^-]|--[^>])*-->|<[?][\\s\\S]*?[?]>|<![A-Za-z][^>]*>|<!\\[CDATA\\[[\\s\\S]*?\\]\\]>)");
 var HTML_OPEN_CLOSE_TAG_RE = /* @__PURE__ */ new RegExp("^(?:<[A-Za-z][A-Za-z0-9\\-]*(?:\\s+[a-zA-Z_:][a-zA-Z0-9:._-]*(?:\\s*=\\s*(?:[^\"'=<>`\\x00-\\x20]+|'[^']*'|\"[^\"]*\"))?)*\\s*\\/?>|<\\/[A-Za-z][A-Za-z0-9\\-]*\\s*>)");
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/html_block.mjs
+//#region node_modules/markdown-it/lib/rules_block/html_block.mjs
 var HTML_SEQUENCES = [
 	[
 		/^<(script|pre|style|textarea)(?=(\s|>|$))/i,
@@ -5854,7 +5874,7 @@ function html_block(state, startLine, endLine, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/heading.mjs
+//#region node_modules/markdown-it/lib/rules_block/heading.mjs
 function heading(state, startLine, endLine, silent) {
 	let pos = state.bMarks[startLine] + state.tShift[startLine];
 	let max = state.eMarks[startLine];
@@ -5885,7 +5905,7 @@ function heading(state, startLine, endLine, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/lheading.mjs
+//#region node_modules/markdown-it/lib/rules_block/lheading.mjs
 function lheading(state, startLine, endLine) {
 	const terminatorRules = state.md.block.ruler.getRules("paragraph");
 	if (state.sCount[startLine] - state.blkIndent >= 4) return false;
@@ -5938,7 +5958,7 @@ function lheading(state, startLine, endLine) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_block/paragraph.mjs
+//#region node_modules/markdown-it/lib/rules_block/paragraph.mjs
 function paragraph(state, startLine, endLine) {
 	const terminatorRules = state.md.block.ruler.getRules("paragraph");
 	const oldParentType = state.parentType;
@@ -5967,7 +5987,7 @@ function paragraph(state, startLine, endLine) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/parser_block.mjs
+//#region node_modules/markdown-it/lib/parser_block.mjs
 /** internal
 * class ParserBlock
 *
@@ -6099,7 +6119,7 @@ ParserBlock.prototype.parse = function(src, md, env, outTokens) {
 };
 ParserBlock.prototype.State = StateBlock;
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/state_inline.mjs
+//#region node_modules/markdown-it/lib/rules_inline/state_inline.mjs
 function StateInline(src, md, env, outTokens) {
 	this.src = src;
 	this.env = env;
@@ -6183,7 +6203,7 @@ StateInline.prototype.scanDelims = function(start, canSplitWord) {
 };
 StateInline.prototype.Token = Token;
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/text.mjs
+//#region node_modules/markdown-it/lib/rules_inline/text.mjs
 function isTerminatorChar(ch) {
 	switch (ch) {
 		case 10:
@@ -6221,7 +6241,7 @@ function text(state, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/linkify.mjs
+//#region node_modules/markdown-it/lib/rules_inline/linkify.mjs
 function isAsciiAlpha(code) {
 	return code >= 65 && code <= 90 || code >= 97 && code <= 122;
 }
@@ -6267,7 +6287,7 @@ function linkify(state, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/newline.mjs
+//#region node_modules/markdown-it/lib/rules_inline/newline.mjs
 function newline(state, silent) {
 	let pos = state.pos;
 	if (state.src.charCodeAt(pos) !== 10) return false;
@@ -6289,7 +6309,7 @@ function newline(state, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/escape.mjs
+//#region node_modules/markdown-it/lib/rules_inline/escape.mjs
 var ESCAPED = [];
 for (let i = 0; i < 256; i++) ESCAPED.push(0);
 "\\!\"#$%&'()*+,./:;<=>?@[]^_`{|}~-".split("").forEach(function(ch) {
@@ -6343,7 +6363,7 @@ function escape(state, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/backticks.mjs
+//#region node_modules/markdown-it/lib/rules_inline/backticks.mjs
 function backtick(state, silent) {
 	let pos = state.pos;
 	if (state.src.charCodeAt(pos) !== 96) return false;
@@ -6381,7 +6401,7 @@ function backtick(state, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/strikethrough.mjs
+//#region node_modules/markdown-it/lib/rules_inline/strikethrough.mjs
 function strikethrough_tokenize(state, silent) {
 	const start = state.pos;
 	const marker = state.src.charCodeAt(start);
@@ -6458,7 +6478,7 @@ var strikethrough_default = {
 	postProcess: strikethrough_postProcess
 };
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/emphasis.mjs
+//#region node_modules/markdown-it/lib/rules_inline/emphasis.mjs
 function emphasis_tokenize(state, silent) {
 	const start = state.pos;
 	const marker = state.src.charCodeAt(start);
@@ -6519,7 +6539,7 @@ var emphasis_default = {
 	postProcess: emphasis_post_process
 };
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/link.mjs
+//#region node_modules/markdown-it/lib/rules_inline/link.mjs
 function link(state, silent) {
 	let code, label, res, ref;
 	let href = "";
@@ -6599,7 +6619,7 @@ function link(state, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/image.mjs
+//#region node_modules/markdown-it/lib/rules_inline/image.mjs
 function image(state, silent) {
 	let code, content, label, pos, ref, res, title, start;
 	let href = "";
@@ -6677,7 +6697,7 @@ function image(state, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/autolink.mjs
+//#region node_modules/markdown-it/lib/rules_inline/autolink.mjs
 var EMAIL_RE = /^([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)$/;
 var AUTOLINK_RE = /^([a-zA-Z][a-zA-Z0-9+.-]{1,31}):([^<>\x00-\x20]*)$/;
 function autolink(state, silent) {
@@ -6729,7 +6749,7 @@ function autolink(state, silent) {
 	return false;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/html_inline.mjs
+//#region node_modules/markdown-it/lib/rules_inline/html_inline.mjs
 function isLinkOpen(str) {
 	return /^<a[>\s]/i.test(str);
 }
@@ -6759,7 +6779,7 @@ function html_inline(state, silent) {
 	return true;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/entity.mjs
+//#region node_modules/markdown-it/lib/rules_inline/entity.mjs
 var DIGITAL_RE = /^&#((?:x[a-f0-9]{1,6}|[0-9]{1,7}));/i;
 var NAMED_RE = /^&([a-z][a-z0-9]{1,31});/i;
 function entity(state, silent) {
@@ -6799,7 +6819,7 @@ function entity(state, silent) {
 	return false;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/balance_pairs.mjs
+//#region node_modules/markdown-it/lib/rules_inline/balance_pairs.mjs
 function processDelimiters(delimiters) {
 	const openersBottom = {};
 	const max = delimiters.length;
@@ -6858,7 +6878,7 @@ function link_pairs(state) {
 	for (let curr = 0; curr < max; curr++) if (tokens_meta[curr] && tokens_meta[curr].delimiters) processDelimiters(tokens_meta[curr].delimiters);
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/rules_inline/fragments_join.mjs
+//#region node_modules/markdown-it/lib/rules_inline/fragments_join.mjs
 function fragments_join(state) {
 	let curr, last;
 	let level = 0;
@@ -6877,7 +6897,7 @@ function fragments_join(state) {
 	if (curr !== last) tokens.length = last;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/parser_inline.mjs
+//#region node_modules/markdown-it/lib/parser_inline.mjs
 /** internal
 * class ParserInline
 *
@@ -6984,7 +7004,7 @@ ParserInline.prototype.parse = function(str, md, env, outTokens) {
 };
 ParserInline.prototype.State = StateInline;
 //#endregion
-//#region ../agent-swarm/node_modules/linkify-it/lib/re.mjs
+//#region node_modules/linkify-it/lib/re.mjs
 function re_default(opts) {
 	const re = {};
 	opts = opts || {};
@@ -7024,7 +7044,7 @@ function re_default(opts) {
 	return re;
 }
 //#endregion
-//#region ../agent-swarm/node_modules/linkify-it/index.mjs
+//#region node_modules/linkify-it/index.mjs
 function assign(obj) {
 	Array.prototype.slice.call(arguments, 1).forEach(function(source) {
 		if (!source) return;
@@ -7477,7 +7497,7 @@ LinkifyIt.prototype.normalize = function normalize(match) {
 **/
 LinkifyIt.prototype.onCompile = function onCompile() {};
 //#endregion
-//#region ../agent-swarm/node_modules/punycode.js/punycode.es6.js
+//#region node_modules/punycode.js/punycode.es6.js
 /** Highest positive signed 32-bit float value */
 var maxInt = 2147483647;
 /** Bootstring parameters */
@@ -7774,7 +7794,7 @@ var punycode = {
 	"toUnicode": toUnicode
 };
 //#endregion
-//#region ../agent-swarm/node_modules/markdown-it/lib/index.mjs
+//#region node_modules/markdown-it/lib/index.mjs
 var config = {
 	default: {
 		options: {
@@ -8333,12 +8353,2918 @@ MarkdownIt.prototype.renderInline = function(src, env) {
 	env = env || {};
 	return this.renderer.render(this.parseInline(src, env), this.options, env);
 };
+var core_default = (/* @__PURE__ */ __toESM((/* @__PURE__ */ __commonJSMin(((exports, module) => {
+	function deepFreeze(obj) {
+		if (obj instanceof Map) obj.clear = obj.delete = obj.set = function() {
+			throw new Error("map is read-only");
+		};
+		else if (obj instanceof Set) obj.add = obj.clear = obj.delete = function() {
+			throw new Error("set is read-only");
+		};
+		Object.freeze(obj);
+		Object.getOwnPropertyNames(obj).forEach((name) => {
+			const prop = obj[name];
+			const type = typeof prop;
+			if ((type === "object" || type === "function") && !Object.isFrozen(prop)) deepFreeze(prop);
+		});
+		return obj;
+	}
+	/** @typedef {import('highlight.js').CallbackResponse} CallbackResponse */
+	/** @typedef {import('highlight.js').CompiledMode} CompiledMode */
+	/** @implements CallbackResponse */
+	var Response = class {
+		/**
+		* @param {CompiledMode} mode
+		*/
+		constructor(mode) {
+			if (mode.data === void 0) mode.data = {};
+			this.data = mode.data;
+			this.isMatchIgnored = false;
+		}
+		ignoreMatch() {
+			this.isMatchIgnored = true;
+		}
+	};
+	/**
+	* @param {string} value
+	* @returns {string}
+	*/
+	function escapeHTML(value) {
+		return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
+	}
+	/**
+	* performs a shallow merge of multiple objects into one
+	*
+	* @template T
+	* @param {T} original
+	* @param {Record<string,any>[]} objects
+	* @returns {T} a single new object
+	*/
+	function inherit$1(original, ...objects) {
+		/** @type Record<string,any> */
+		const result = Object.create(null);
+		for (const key in original) result[key] = original[key];
+		objects.forEach(function(obj) {
+			for (const key in obj) result[key] = obj[key];
+		});
+		return result;
+	}
+	/**
+	* @typedef {object} Renderer
+	* @property {(text: string) => void} addText
+	* @property {(node: Node) => void} openNode
+	* @property {(node: Node) => void} closeNode
+	* @property {() => string} value
+	*/
+	/** @typedef {{scope?: string, language?: string, sublanguage?: boolean}} Node */
+	/** @typedef {{walk: (r: Renderer) => void}} Tree */
+	/** */
+	var SPAN_CLOSE = "</span>";
+	/**
+	* Determines if a node needs to be wrapped in <span>
+	*
+	* @param {Node} node */
+	var emitsWrappingTags = (node) => {
+		return !!node.scope;
+	};
+	/**
+	*
+	* @param {string} name
+	* @param {{prefix:string}} options
+	*/
+	var scopeToCSSClass = (name, { prefix }) => {
+		if (name.startsWith("language:")) return name.replace("language:", "language-");
+		if (name.includes(".")) {
+			const pieces = name.split(".");
+			return [`${prefix}${pieces.shift()}`, ...pieces.map((x, i) => `${x}${"_".repeat(i + 1)}`)].join(" ");
+		}
+		return `${prefix}${name}`;
+	};
+	/** @type {Renderer} */
+	var HTMLRenderer = class {
+		/**
+		* Creates a new HTMLRenderer
+		*
+		* @param {Tree} parseTree - the parse tree (must support `walk` API)
+		* @param {{classPrefix: string}} options
+		*/
+		constructor(parseTree, options) {
+			this.buffer = "";
+			this.classPrefix = options.classPrefix;
+			parseTree.walk(this);
+		}
+		/**
+		* Adds texts to the output stream
+		*
+		* @param {string} text */
+		addText(text) {
+			this.buffer += escapeHTML(text);
+		}
+		/**
+		* Adds a node open to the output stream (if needed)
+		*
+		* @param {Node} node */
+		openNode(node) {
+			if (!emitsWrappingTags(node)) return;
+			const className = scopeToCSSClass(node.scope, { prefix: this.classPrefix });
+			this.span(className);
+		}
+		/**
+		* Adds a node close to the output stream (if needed)
+		*
+		* @param {Node} node */
+		closeNode(node) {
+			if (!emitsWrappingTags(node)) return;
+			this.buffer += SPAN_CLOSE;
+		}
+		/**
+		* returns the accumulated buffer
+		*/
+		value() {
+			return this.buffer;
+		}
+		/**
+		* Builds a span element
+		*
+		* @param {string} className */
+		span(className) {
+			this.buffer += `<span class="${className}">`;
+		}
+	};
+	/** @typedef {{scope?: string, language?: string, children: Node[]} | string} Node */
+	/** @typedef {{scope?: string, language?: string, children: Node[]} } DataNode */
+	/** @typedef {import('highlight.js').Emitter} Emitter */
+	/**  */
+	/** @returns {DataNode} */
+	var newNode = (opts = {}) => {
+		/** @type DataNode */
+		const result = { children: [] };
+		Object.assign(result, opts);
+		return result;
+	};
+	var TokenTree = class TokenTree {
+		constructor() {
+			/** @type DataNode */
+			this.rootNode = newNode();
+			this.stack = [this.rootNode];
+		}
+		get top() {
+			return this.stack[this.stack.length - 1];
+		}
+		get root() {
+			return this.rootNode;
+		}
+		/** @param {Node} node */
+		add(node) {
+			this.top.children.push(node);
+		}
+		/** @param {string} scope */
+		openNode(scope) {
+			/** @type Node */
+			const node = newNode({ scope });
+			this.add(node);
+			this.stack.push(node);
+		}
+		closeNode() {
+			if (this.stack.length > 1) return this.stack.pop();
+		}
+		closeAllNodes() {
+			while (this.closeNode());
+		}
+		toJSON() {
+			return JSON.stringify(this.rootNode, null, 4);
+		}
+		/**
+		* @typedef { import("./html_renderer").Renderer } Renderer
+		* @param {Renderer} builder
+		*/
+		walk(builder) {
+			return this.constructor._walk(builder, this.rootNode);
+		}
+		/**
+		* @param {Renderer} builder
+		* @param {Node} node
+		*/
+		static _walk(builder, node) {
+			if (typeof node === "string") builder.addText(node);
+			else if (node.children) {
+				builder.openNode(node);
+				node.children.forEach((child) => this._walk(builder, child));
+				builder.closeNode(node);
+			}
+			return builder;
+		}
+		/**
+		* @param {Node} node
+		*/
+		static _collapse(node) {
+			if (typeof node === "string") return;
+			if (!node.children) return;
+			if (node.children.every((el) => typeof el === "string")) node.children = [node.children.join("")];
+			else node.children.forEach((child) => {
+				TokenTree._collapse(child);
+			});
+		}
+	};
+	/**
+	Currently this is all private API, but this is the minimal API necessary
+	that an Emitter must implement to fully support the parser.
+	
+	Minimal interface:
+	
+	- addText(text)
+	- __addSublanguage(emitter, subLanguageName)
+	- startScope(scope)
+	- endScope()
+	- finalize()
+	- toHTML()
+	
+	*/
+	/**
+	* @implements {Emitter}
+	*/
+	var TokenTreeEmitter = class extends TokenTree {
+		/**
+		* @param {*} options
+		*/
+		constructor(options) {
+			super();
+			this.options = options;
+		}
+		/**
+		* @param {string} text
+		*/
+		addText(text) {
+			if (text === "") return;
+			this.add(text);
+		}
+		/** @param {string} scope */
+		startScope(scope) {
+			this.openNode(scope);
+		}
+		endScope() {
+			this.closeNode();
+		}
+		/**
+		* @param {Emitter & {root: DataNode}} emitter
+		* @param {string} name
+		*/
+		__addSublanguage(emitter, name) {
+			/** @type DataNode */
+			const node = emitter.root;
+			if (name) node.scope = `language:${name}`;
+			this.add(node);
+		}
+		toHTML() {
+			return new HTMLRenderer(this, this.options).value();
+		}
+		finalize() {
+			this.closeAllNodes();
+			return true;
+		}
+	};
+	/**
+	* @param {string} value
+	* @returns {RegExp}
+	* */
+	/**
+	* @param {RegExp | string } re
+	* @returns {string}
+	*/
+	function source(re) {
+		if (!re) return null;
+		if (typeof re === "string") return re;
+		return re.source;
+	}
+	/**
+	* @param {RegExp | string } re
+	* @returns {string}
+	*/
+	function lookahead(re) {
+		return concat("(?=", re, ")");
+	}
+	/**
+	* @param {RegExp | string } re
+	* @returns {string}
+	*/
+	function anyNumberOfTimes(re) {
+		return concat("(?:", re, ")*");
+	}
+	/**
+	* @param {RegExp | string } re
+	* @returns {string}
+	*/
+	function optional(re) {
+		return concat("(?:", re, ")?");
+	}
+	/**
+	* @param {...(RegExp | string) } args
+	* @returns {string}
+	*/
+	function concat(...args) {
+		return args.map((x) => source(x)).join("");
+	}
+	/**
+	* @param { Array<string | RegExp | Object> } args
+	* @returns {object}
+	*/
+	function stripOptionsFromArgs(args) {
+		const opts = args[args.length - 1];
+		if (typeof opts === "object" && opts.constructor === Object) {
+			args.splice(args.length - 1, 1);
+			return opts;
+		} else return {};
+	}
+	/** @typedef { {capture?: boolean} } RegexEitherOptions */
+	/**
+	* Any of the passed expresssions may match
+	*
+	* Creates a huge this | this | that | that match
+	* @param {(RegExp | string)[] | [...(RegExp | string)[], RegexEitherOptions]} args
+	* @returns {string}
+	*/
+	function either(...args) {
+		return "(" + (stripOptionsFromArgs(args).capture ? "" : "?:") + args.map((x) => source(x)).join("|") + ")";
+	}
+	/**
+	* @param {RegExp | string} re
+	* @returns {number}
+	*/
+	function countMatchGroups(re) {
+		return new RegExp(re.toString() + "|").exec("").length - 1;
+	}
+	/**
+	* Does lexeme start with a regular expression match at the beginning
+	* @param {RegExp} re
+	* @param {string} lexeme
+	*/
+	function startsWith(re, lexeme) {
+		const match = re && re.exec(lexeme);
+		return match && match.index === 0;
+	}
+	var BACKREF_RE = new RegExp(either(/\[(?:[^\\\]]|\\.)*\]/, /\(\?<(?![=!])[^>]+>/, /\(\?'[^']+'/, /\(\??/, /\\([1-9][0-9]*)/, /\\./));
+	/**
+	* @param {(string | RegExp)[]} regexps
+	* @param {{joinWith: string}} opts
+	* @returns {string}
+	*/
+	function _rewriteBackreferences(regexps, { joinWith }) {
+		let numCaptures = 0;
+		return regexps.map((regex) => {
+			numCaptures += 1;
+			const offset = numCaptures;
+			let re = source(regex);
+			let out = "";
+			while (re.length > 0) {
+				const match = BACKREF_RE.exec(re);
+				if (!match) {
+					out += re;
+					break;
+				}
+				out += re.substring(0, match.index);
+				re = re.substring(match.index + match[0].length);
+				if (match[0][0] === "\\" && match[1]) out += "\\" + String(Number(match[1]) + offset);
+				else {
+					out += match[0];
+					if (match[0] === "(" || /^\(\?[<']/.test(match[0])) numCaptures++;
+				}
+			}
+			return out;
+		}).map((re) => `(${re})`).join(joinWith);
+	}
+	/** @typedef {import('highlight.js').Mode} Mode */
+	/** @typedef {import('highlight.js').ModeCallback} ModeCallback */
+	var MATCH_NOTHING_RE = /\b\B/;
+	var IDENT_RE = "[a-zA-Z]\\w*";
+	var UNDERSCORE_IDENT_RE = "[a-zA-Z_]\\w*";
+	var NUMBER_RE = "\\b\\d+(\\.\\d+)?";
+	var C_NUMBER_RE = "(-?)(\\b0[xX][a-fA-F0-9]+|(\\b\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?)";
+	var BINARY_NUMBER_RE = "\\b(0b[01]+)";
+	var RE_STARTERS_RE = "!|!=|!==|%|%=|&|&&|&=|\\*|\\*=|\\+|\\+=|,|-|-=|/=|/|:|;|<<|<<=|<=|<|===|==|=|>>>=|>>=|>=|>>>|>>|>|\\?|\\[|\\{|\\(|\\^|\\^=|\\||\\|=|\\|\\||~";
+	/**
+	* @param { Partial<Mode> & {binary?: string | RegExp} } opts
+	*/
+	var SHEBANG = (opts = {}) => {
+		const beginShebang = /^#![ ]*\//;
+		if (opts.binary) opts.begin = concat(beginShebang, /.*\b/, opts.binary, /\b.*/);
+		return inherit$1({
+			scope: "meta",
+			begin: beginShebang,
+			end: /$/,
+			relevance: 0,
+			/** @type {ModeCallback} */
+			"on:begin": (m, resp) => {
+				if (m.index !== 0) resp.ignoreMatch();
+			}
+		}, opts);
+	};
+	var BACKSLASH_ESCAPE = {
+		begin: "\\\\[\\s\\S]",
+		relevance: 0
+	};
+	var APOS_STRING_MODE = {
+		scope: "string",
+		begin: "'",
+		end: "'",
+		illegal: "\\n",
+		contains: [BACKSLASH_ESCAPE]
+	};
+	var QUOTE_STRING_MODE = {
+		scope: "string",
+		begin: "\"",
+		end: "\"",
+		illegal: "\\n",
+		contains: [BACKSLASH_ESCAPE]
+	};
+	var PHRASAL_WORDS_MODE = { begin: /\b(a|an|the|are|I'm|isn't|don't|doesn't|won't|but|just|should|pretty|simply|enough|gonna|going|wtf|so|such|will|you|your|they|like|more)\b/ };
+	/**
+	* Creates a comment mode
+	*
+	* @param {string | RegExp} begin
+	* @param {string | RegExp} end
+	* @param {Mode | {}} [modeOptions]
+	* @returns {Partial<Mode>}
+	*/
+	var COMMENT = function(begin, end, modeOptions = {}) {
+		const mode = inherit$1({
+			scope: "comment",
+			begin,
+			end,
+			contains: []
+		}, modeOptions);
+		mode.contains.push({
+			scope: "doctag",
+			begin: "[ ]*(?=(TODO|FIXME|NOTE|BUG|OPTIMIZE|HACK|XXX):)",
+			end: /(TODO|FIXME|NOTE|BUG|OPTIMIZE|HACK|XXX):/,
+			excludeBegin: true,
+			relevance: 0
+		});
+		const ENGLISH_WORD = either("I", "a", "is", "so", "us", "to", "at", "if", "in", "it", "on", /[A-Za-z]+['](d|ve|re|ll|t|s|n)/, /[A-Za-z]+[-][a-z]+/, /[A-Za-z][a-z]{2,}/);
+		mode.contains.push({ begin: concat(/[ ]+/, "(", ENGLISH_WORD, /[.]?[:]?([.][ ]|[ ])/, "){3}") });
+		return mode;
+	};
+	var C_LINE_COMMENT_MODE = COMMENT("//", "$");
+	var C_BLOCK_COMMENT_MODE = COMMENT("/\\*", "\\*/");
+	var HASH_COMMENT_MODE = COMMENT("#", "$");
+	var NUMBER_MODE = {
+		scope: "number",
+		begin: NUMBER_RE,
+		relevance: 0
+	};
+	var C_NUMBER_MODE = {
+		scope: "number",
+		begin: C_NUMBER_RE,
+		relevance: 0
+	};
+	var BINARY_NUMBER_MODE = {
+		scope: "number",
+		begin: BINARY_NUMBER_RE,
+		relevance: 0
+	};
+	var REGEXP_MODE = {
+		scope: "regexp",
+		begin: /\/(?=[^/\n]*\/)/,
+		end: /\/[gimuy]*/,
+		contains: [BACKSLASH_ESCAPE, {
+			begin: /\[/,
+			end: /\]/,
+			relevance: 0,
+			contains: [BACKSLASH_ESCAPE]
+		}]
+	};
+	var TITLE_MODE = {
+		scope: "title",
+		begin: IDENT_RE,
+		relevance: 0
+	};
+	var UNDERSCORE_TITLE_MODE = {
+		scope: "title",
+		begin: UNDERSCORE_IDENT_RE,
+		relevance: 0
+	};
+	var METHOD_GUARD = {
+		begin: "\\.\\s*[a-zA-Z_]\\w*",
+		relevance: 0
+	};
+	/**
+	* Adds end same as begin mechanics to a mode
+	*
+	* Your mode must include at least a single () match group as that first match
+	* group is what is used for comparison
+	* @param {Partial<Mode>} mode
+	*/
+	var END_SAME_AS_BEGIN = function(mode) {
+		return Object.assign(mode, {
+			/** @type {ModeCallback} */
+			"on:begin": (m, resp) => {
+				resp.data._beginMatch = m[1];
+			},
+			/** @type {ModeCallback} */
+			"on:end": (m, resp) => {
+				if (resp.data._beginMatch !== m[1]) resp.ignoreMatch();
+			}
+		});
+	};
+	var MODES = /*#__PURE__*/ Object.freeze({
+		__proto__: null,
+		APOS_STRING_MODE,
+		BACKSLASH_ESCAPE,
+		BINARY_NUMBER_MODE,
+		BINARY_NUMBER_RE,
+		COMMENT,
+		C_BLOCK_COMMENT_MODE,
+		C_LINE_COMMENT_MODE,
+		C_NUMBER_MODE,
+		C_NUMBER_RE,
+		END_SAME_AS_BEGIN,
+		HASH_COMMENT_MODE,
+		IDENT_RE,
+		MATCH_NOTHING_RE,
+		METHOD_GUARD,
+		NUMBER_MODE,
+		NUMBER_RE,
+		PHRASAL_WORDS_MODE,
+		QUOTE_STRING_MODE,
+		REGEXP_MODE,
+		RE_STARTERS_RE,
+		SHEBANG,
+		TITLE_MODE,
+		UNDERSCORE_IDENT_RE,
+		UNDERSCORE_TITLE_MODE
+	});
+	/**
+	@typedef {import('highlight.js').CallbackResponse} CallbackResponse
+	@typedef {import('highlight.js').CompilerExt} CompilerExt
+	*/
+	/**
+	* Skip a match if it has a preceding dot
+	*
+	* This is used for `beginKeywords` to prevent matching expressions such as
+	* `bob.keyword.do()`. The mode compiler automatically wires this up as a
+	* special _internal_ 'on:begin' callback for modes with `beginKeywords`
+	* @param {RegExpMatchArray} match
+	* @param {CallbackResponse} response
+	*/
+	function skipIfHasPrecedingDot(match, response) {
+		if (match.input[match.index - 1] === ".") response.ignoreMatch();
+	}
+	/**
+	*
+	* @type {CompilerExt}
+	*/
+	function scopeClassName(mode, _parent) {
+		if (mode.className !== void 0) {
+			mode.scope = mode.className;
+			delete mode.className;
+		}
+	}
+	/**
+	* `beginKeywords` syntactic sugar
+	* @type {CompilerExt}
+	*/
+	function beginKeywords(mode, parent) {
+		if (!parent) return;
+		if (!mode.beginKeywords) return;
+		mode.begin = "\\b(" + mode.beginKeywords.split(" ").join("|") + ")(?!\\.)(?=\\b|\\s)";
+		mode.__beforeBegin = skipIfHasPrecedingDot;
+		mode.keywords = mode.keywords || mode.beginKeywords;
+		delete mode.beginKeywords;
+		if (mode.relevance === void 0) mode.relevance = 0;
+	}
+	/**
+	* Allow `illegal` to contain an array of illegal values
+	* @type {CompilerExt}
+	*/
+	function compileIllegal(mode, _parent) {
+		if (!Array.isArray(mode.illegal)) return;
+		mode.illegal = either(...mode.illegal);
+	}
+	/**
+	* `match` to match a single expression for readability
+	* @type {CompilerExt}
+	*/
+	function compileMatch(mode, _parent) {
+		if (!mode.match) return;
+		if (mode.begin || mode.end) throw new Error("begin & end are not supported with match");
+		mode.begin = mode.match;
+		delete mode.match;
+	}
+	/**
+	* provides the default 1 relevance to all modes
+	* @type {CompilerExt}
+	*/
+	function compileRelevance(mode, _parent) {
+		if (mode.relevance === void 0) mode.relevance = 1;
+	}
+	var beforeMatchExt = (mode, parent) => {
+		if (!mode.beforeMatch) return;
+		if (mode.starts) throw new Error("beforeMatch cannot be used with starts");
+		const originalMode = Object.assign({}, mode);
+		Object.keys(mode).forEach((key) => {
+			delete mode[key];
+		});
+		mode.keywords = originalMode.keywords;
+		mode.begin = concat(originalMode.beforeMatch, lookahead(originalMode.begin));
+		mode.starts = {
+			relevance: 0,
+			contains: [Object.assign(originalMode, { endsParent: true })]
+		};
+		mode.relevance = 0;
+		delete originalMode.beforeMatch;
+	};
+	var COMMON_KEYWORDS = [
+		"of",
+		"and",
+		"for",
+		"in",
+		"not",
+		"or",
+		"if",
+		"then",
+		"parent",
+		"list",
+		"value"
+	];
+	var DEFAULT_KEYWORD_SCOPE = "keyword";
+	/**
+	* Given raw keywords from a language definition, compile them.
+	*
+	* @param {string | Record<string,string|string[]> | Array<string>} rawKeywords
+	* @param {boolean} caseInsensitive
+	*/
+	function compileKeywords(rawKeywords, caseInsensitive, scopeName = DEFAULT_KEYWORD_SCOPE) {
+		/** @type {import("highlight.js/private").KeywordDict} */
+		const compiledKeywords = Object.create(null);
+		if (typeof rawKeywords === "string") compileList(scopeName, rawKeywords.split(" "));
+		else if (Array.isArray(rawKeywords)) compileList(scopeName, rawKeywords);
+		else Object.keys(rawKeywords).forEach(function(scopeName) {
+			Object.assign(compiledKeywords, compileKeywords(rawKeywords[scopeName], caseInsensitive, scopeName));
+		});
+		return compiledKeywords;
+		/**
+		* Compiles an individual list of keywords
+		*
+		* Ex: "for if when while|5"
+		*
+		* @param {string} scopeName
+		* @param {Array<string>} keywordList
+		*/
+		function compileList(scopeName, keywordList) {
+			if (caseInsensitive) keywordList = keywordList.map((x) => x.toLowerCase());
+			keywordList.forEach(function(keyword) {
+				const pair = keyword.split("|");
+				compiledKeywords[pair[0]] = [scopeName, scoreForKeyword(pair[0], pair[1])];
+			});
+		}
+	}
+	/**
+	* Returns the proper score for a given keyword
+	*
+	* Also takes into account comment keywords, which will be scored 0 UNLESS
+	* another score has been manually assigned.
+	* @param {string} keyword
+	* @param {string} [providedScore]
+	*/
+	function scoreForKeyword(keyword, providedScore) {
+		if (providedScore) return Number(providedScore);
+		return commonKeyword(keyword) ? 0 : 1;
+	}
+	/**
+	* Determines if a given keyword is common or not
+	*
+	* @param {string} keyword */
+	function commonKeyword(keyword) {
+		return COMMON_KEYWORDS.includes(keyword.toLowerCase());
+	}
+	/**
+	* @type {Record<string, boolean>}
+	*/
+	var seenDeprecations = {};
+	/**
+	* @param {string} message
+	*/
+	var error = (message) => {
+		console.error(message);
+	};
+	/**
+	* @param {string} message
+	* @param {any} args
+	*/
+	var warn = (message, ...args) => {
+		console.log(`WARN: ${message}`, ...args);
+	};
+	/**
+	* @param {string} version
+	* @param {string} message
+	*/
+	var deprecated = (version, message) => {
+		if (seenDeprecations[`${version}/${message}`]) return;
+		console.log(`Deprecated as of ${version}. ${message}`);
+		seenDeprecations[`${version}/${message}`] = true;
+	};
+	/**
+	@typedef {import('highlight.js').CompiledMode} CompiledMode
+	*/
+	var MultiClassError = /* @__PURE__ */ new Error();
+	/**
+	* Renumbers labeled scope names to account for additional inner match
+	* groups that otherwise would break everything.
+	*
+	* Lets say we 3 match scopes:
+	*
+	*   { 1 => ..., 2 => ..., 3 => ... }
+	*
+	* So what we need is a clean match like this:
+	*
+	*   (a)(b)(c) => [ "a", "b", "c" ]
+	*
+	* But this falls apart with inner match groups:
+	*
+	* (a)(((b)))(c) => ["a", "b", "b", "b", "c" ]
+	*
+	* Our scopes are now "out of alignment" and we're repeating `b` 3 times.
+	* What needs to happen is the numbers are remapped:
+	*
+	*   { 1 => ..., 2 => ..., 5 => ... }
+	*
+	* We also need to know that the ONLY groups that should be output
+	* are 1, 2, and 5.  This function handles this behavior.
+	*
+	* @param {CompiledMode} mode
+	* @param {Array<RegExp | string>} regexes
+	* @param {{key: "beginScope"|"endScope"}} opts
+	*/
+	function remapScopeNames(mode, regexes, { key }) {
+		let offset = 0;
+		const scopeNames = mode[key];
+		/** @type Record<number,boolean> */
+		const emit = {};
+		/** @type Record<number,string> */
+		const positions = {};
+		for (let i = 1; i <= regexes.length; i++) {
+			positions[i + offset] = scopeNames[i];
+			emit[i + offset] = true;
+			offset += countMatchGroups(regexes[i - 1]);
+		}
+		mode[key] = positions;
+		mode[key]._emit = emit;
+		mode[key]._multi = true;
+	}
+	/**
+	* @param {CompiledMode} mode
+	*/
+	function beginMultiClass(mode) {
+		if (!Array.isArray(mode.begin)) return;
+		if (mode.skip || mode.excludeBegin || mode.returnBegin) {
+			error("skip, excludeBegin, returnBegin not compatible with beginScope: {}");
+			throw MultiClassError;
+		}
+		if (typeof mode.beginScope !== "object" || mode.beginScope === null) {
+			error("beginScope must be object");
+			throw MultiClassError;
+		}
+		remapScopeNames(mode, mode.begin, { key: "beginScope" });
+		mode.begin = _rewriteBackreferences(mode.begin, { joinWith: "" });
+	}
+	/**
+	* @param {CompiledMode} mode
+	*/
+	function endMultiClass(mode) {
+		if (!Array.isArray(mode.end)) return;
+		if (mode.skip || mode.excludeEnd || mode.returnEnd) {
+			error("skip, excludeEnd, returnEnd not compatible with endScope: {}");
+			throw MultiClassError;
+		}
+		if (typeof mode.endScope !== "object" || mode.endScope === null) {
+			error("endScope must be object");
+			throw MultiClassError;
+		}
+		remapScopeNames(mode, mode.end, { key: "endScope" });
+		mode.end = _rewriteBackreferences(mode.end, { joinWith: "" });
+	}
+	/**
+	* this exists only to allow `scope: {}` to be used beside `match:`
+	* Otherwise `beginScope` would necessary and that would look weird
+	
+	{
+	match: [ /def/, /\w+/ ]
+	scope: { 1: "keyword" , 2: "title" }
+	}
+	
+	* @param {CompiledMode} mode
+	*/
+	function scopeSugar(mode) {
+		if (mode.scope && typeof mode.scope === "object" && mode.scope !== null) {
+			mode.beginScope = mode.scope;
+			delete mode.scope;
+		}
+	}
+	/**
+	* @param {CompiledMode} mode
+	*/
+	function MultiClass(mode) {
+		scopeSugar(mode);
+		if (typeof mode.beginScope === "string") mode.beginScope = { _wrap: mode.beginScope };
+		if (typeof mode.endScope === "string") mode.endScope = { _wrap: mode.endScope };
+		beginMultiClass(mode);
+		endMultiClass(mode);
+	}
+	/**
+	@typedef {import('highlight.js').Mode} Mode
+	@typedef {import('highlight.js').CompiledMode} CompiledMode
+	@typedef {import('highlight.js').Language} Language
+	@typedef {import('highlight.js').HLJSPlugin} HLJSPlugin
+	@typedef {import('highlight.js').CompiledLanguage} CompiledLanguage
+	*/
+	/**
+	* Compiles a language definition result
+	*
+	* Given the raw result of a language definition (Language), compiles this so
+	* that it is ready for highlighting code.
+	* @param {Language} language
+	* @returns {CompiledLanguage}
+	*/
+	function compileLanguage(language) {
+		/**
+		* Builds a regex with the case sensitivity of the current language
+		*
+		* @param {RegExp | string} value
+		* @param {boolean} [global]
+		*/
+		function langRe(value, global) {
+			return new RegExp(source(value), "m" + (language.case_insensitive ? "i" : "") + (language.unicodeRegex ? "u" : "") + (global ? "g" : ""));
+		}
+		/**
+		Stores multiple regular expressions and allows you to quickly search for
+		them all in a string simultaneously - returning the first match.  It does
+		this by creating a huge (a|b|c) regex - each individual item wrapped with ()
+		and joined by `|` - using match groups to track position.  When a match is
+		found checking which position in the array has content allows us to figure
+		out which of the original regexes / match groups triggered the match.
+		
+		The match object itself (the result of `Regex.exec`) is returned but also
+		enhanced by merging in any meta-data that was registered with the regex.
+		This is how we keep track of which mode matched, and what type of rule
+		(`illegal`, `begin`, end, etc).
+		*/
+		class MultiRegex {
+			constructor() {
+				this.matchIndexes = {};
+				this.regexes = [];
+				this.matchAt = 1;
+				this.position = 0;
+			}
+			addRule(re, opts) {
+				opts.position = this.position++;
+				this.matchIndexes[this.matchAt] = opts;
+				this.regexes.push([opts, re]);
+				this.matchAt += countMatchGroups(re) + 1;
+			}
+			compile() {
+				if (this.regexes.length === 0) this.exec = () => null;
+				const terminators = this.regexes.map((el) => el[1]);
+				this.matcherRe = langRe(_rewriteBackreferences(terminators, { joinWith: "|" }), true);
+				this.lastIndex = 0;
+			}
+			/** @param {string} s */
+			exec(s) {
+				this.matcherRe.lastIndex = this.lastIndex;
+				const match = this.matcherRe.exec(s);
+				if (!match) return null;
+				const i = match.findIndex((el, i) => i > 0 && el !== void 0);
+				const matchData = this.matchIndexes[i];
+				match.splice(0, i);
+				return Object.assign(match, matchData);
+			}
+		}
+		class ResumableMultiRegex {
+			constructor() {
+				this.rules = [];
+				this.multiRegexes = [];
+				this.count = 0;
+				this.lastIndex = 0;
+				this.regexIndex = 0;
+			}
+			getMatcher(index) {
+				if (this.multiRegexes[index]) return this.multiRegexes[index];
+				const matcher = new MultiRegex();
+				this.rules.slice(index).forEach(([re, opts]) => matcher.addRule(re, opts));
+				matcher.compile();
+				this.multiRegexes[index] = matcher;
+				return matcher;
+			}
+			resumingScanAtSamePosition() {
+				return this.regexIndex !== 0;
+			}
+			considerAll() {
+				this.regexIndex = 0;
+			}
+			addRule(re, opts) {
+				this.rules.push([re, opts]);
+				if (opts.type === "begin") this.count++;
+			}
+			/** @param {string} s */
+			exec(s) {
+				const m = this.getMatcher(this.regexIndex);
+				m.lastIndex = this.lastIndex;
+				let result = m.exec(s);
+				if (this.resumingScanAtSamePosition()) if (result && result.index === this.lastIndex);
+				else {
+					const m2 = this.getMatcher(0);
+					m2.lastIndex = this.lastIndex + 1;
+					result = m2.exec(s);
+				}
+				if (result) {
+					this.regexIndex += result.position + 1;
+					if (this.regexIndex === this.count) this.considerAll();
+				}
+				return result;
+			}
+		}
+		/**
+		* Given a mode, builds a huge ResumableMultiRegex that can be used to walk
+		* the content and find matches.
+		*
+		* @param {CompiledMode} mode
+		* @returns {ResumableMultiRegex}
+		*/
+		function buildModeRegex(mode) {
+			const mm = new ResumableMultiRegex();
+			mode.contains.forEach((term) => mm.addRule(term.begin, {
+				rule: term,
+				type: "begin"
+			}));
+			if (mode.terminatorEnd) mm.addRule(mode.terminatorEnd, { type: "end" });
+			if (mode.illegal) mm.addRule(mode.illegal, { type: "illegal" });
+			return mm;
+		}
+		/** skip vs abort vs ignore
+		*
+		* @skip   - The mode is still entered and exited normally (and contains rules apply),
+		*           but all content is held and added to the parent buffer rather than being
+		*           output when the mode ends.  Mostly used with `sublanguage` to build up
+		*           a single large buffer than can be parsed by sublanguage.
+		*
+		*             - The mode begin ands ends normally.
+		*             - Content matched is added to the parent mode buffer.
+		*             - The parser cursor is moved forward normally.
+		*
+		* @abort  - A hack placeholder until we have ignore.  Aborts the mode (as if it
+		*           never matched) but DOES NOT continue to match subsequent `contains`
+		*           modes.  Abort is bad/suboptimal because it can result in modes
+		*           farther down not getting applied because an earlier rule eats the
+		*           content but then aborts.
+		*
+		*             - The mode does not begin.
+		*             - Content matched by `begin` is added to the mode buffer.
+		*             - The parser cursor is moved forward accordingly.
+		*
+		* @ignore - Ignores the mode (as if it never matched) and continues to match any
+		*           subsequent `contains` modes.  Ignore isn't technically possible with
+		*           the current parser implementation.
+		*
+		*             - The mode does not begin.
+		*             - Content matched by `begin` is ignored.
+		*             - The parser cursor is not moved forward.
+		*/
+		/**
+		* Compiles an individual mode
+		*
+		* This can raise an error if the mode contains certain detectable known logic
+		* issues.
+		* @param {Mode} mode
+		* @param {CompiledMode | null} [parent]
+		* @returns {CompiledMode | never}
+		*/
+		function compileMode(mode, parent) {
+			const cmode = mode;
+			if (mode.isCompiled) return cmode;
+			[
+				scopeClassName,
+				compileMatch,
+				MultiClass,
+				beforeMatchExt
+			].forEach((ext) => ext(mode, parent));
+			language.compilerExtensions.forEach((ext) => ext(mode, parent));
+			mode.__beforeBegin = null;
+			[
+				beginKeywords,
+				compileIllegal,
+				compileRelevance
+			].forEach((ext) => ext(mode, parent));
+			mode.isCompiled = true;
+			let keywordPattern = null;
+			if (typeof mode.keywords === "object" && mode.keywords.$pattern) {
+				mode.keywords = Object.assign({}, mode.keywords);
+				keywordPattern = mode.keywords.$pattern;
+				delete mode.keywords.$pattern;
+			}
+			keywordPattern = keywordPattern || /\w+/;
+			if (mode.keywords) mode.keywords = compileKeywords(mode.keywords, language.case_insensitive);
+			cmode.keywordPatternRe = langRe(keywordPattern, true);
+			if (parent) {
+				if (!mode.begin) mode.begin = /\B|\b/;
+				cmode.beginRe = langRe(cmode.begin);
+				if (!mode.end && !mode.endsWithParent) mode.end = /\B|\b/;
+				if (mode.end) cmode.endRe = langRe(cmode.end);
+				cmode.terminatorEnd = source(cmode.end) || "";
+				if (mode.endsWithParent && parent.terminatorEnd) cmode.terminatorEnd += (mode.end ? "|" : "") + parent.terminatorEnd;
+			}
+			if (mode.illegal) cmode.illegalRe = langRe(mode.illegal);
+			if (!mode.contains) mode.contains = [];
+			mode.contains = [].concat(...mode.contains.map(function(c) {
+				return expandOrCloneMode(c === "self" ? mode : c);
+			}));
+			mode.contains.forEach(function(c) {
+				compileMode(c, cmode);
+			});
+			if (mode.starts) compileMode(mode.starts, parent);
+			cmode.matcher = buildModeRegex(cmode);
+			return cmode;
+		}
+		if (!language.compilerExtensions) language.compilerExtensions = [];
+		if (language.contains && language.contains.includes("self")) throw new Error("ERR: contains `self` is not supported at the top-level of a language.  See documentation.");
+		language.classNameAliases = inherit$1(language.classNameAliases || {});
+		return compileMode(language);
+	}
+	/**
+	* Determines if a mode has a dependency on it's parent or not
+	*
+	* If a mode does have a parent dependency then often we need to clone it if
+	* it's used in multiple places so that each copy points to the correct parent,
+	* where-as modes without a parent can often safely be re-used at the bottom of
+	* a mode chain.
+	*
+	* @param {Mode | null} mode
+	* @returns {boolean} - is there a dependency on the parent?
+	* */
+	function dependencyOnParent(mode) {
+		if (!mode) return false;
+		return mode.endsWithParent || dependencyOnParent(mode.starts);
+	}
+	/**
+	* Expands a mode or clones it if necessary
+	*
+	* This is necessary for modes with parental dependenceis (see notes on
+	* `dependencyOnParent`) and for nodes that have `variants` - which must then be
+	* exploded into their own individual modes at compile time.
+	*
+	* @param {Mode} mode
+	* @returns {Mode | Mode[]}
+	* */
+	function expandOrCloneMode(mode) {
+		if (mode.variants && !mode.cachedVariants) mode.cachedVariants = mode.variants.map(function(variant) {
+			return inherit$1(mode, { variants: null }, variant);
+		});
+		if (mode.cachedVariants) return mode.cachedVariants;
+		if (dependencyOnParent(mode)) return inherit$1(mode, { starts: mode.starts ? inherit$1(mode.starts) : null });
+		if (Object.isFrozen(mode)) return inherit$1(mode);
+		return mode;
+	}
+	var version = "11.12.0";
+	var HTMLInjectionError = class extends Error {
+		constructor(reason, html) {
+			super(reason);
+			this.name = "HTMLInjectionError";
+			this.html = html;
+		}
+	};
+	/**
+	@typedef {import('highlight.js').Mode} Mode
+	@typedef {import('highlight.js').CompiledMode} CompiledMode
+	@typedef {import('highlight.js').CompiledScope} CompiledScope
+	@typedef {import('highlight.js').Language} Language
+	@typedef {import('highlight.js').HLJSApi} HLJSApi
+	@typedef {import('highlight.js').HLJSPlugin} HLJSPlugin
+	@typedef {import('highlight.js').PluginEvent} PluginEvent
+	@typedef {import('highlight.js').HLJSOptions} HLJSOptions
+	@typedef {import('highlight.js').LanguageFn} LanguageFn
+	@typedef {import('highlight.js').HighlightedHTMLElement} HighlightedHTMLElement
+	@typedef {import('highlight.js').BeforeHighlightContext} BeforeHighlightContext
+	@typedef {import('highlight.js/private').MatchType} MatchType
+	@typedef {import('highlight.js/private').KeywordData} KeywordData
+	@typedef {import('highlight.js/private').EnhancedMatch} EnhancedMatch
+	@typedef {import('highlight.js/private').AnnotatedError} AnnotatedError
+	@typedef {import('highlight.js').AutoHighlightResult} AutoHighlightResult
+	@typedef {import('highlight.js').HighlightOptions} HighlightOptions
+	@typedef {import('highlight.js').HighlightResult} HighlightResult
+	*/
+	var escape = escapeHTML;
+	var inherit = inherit$1;
+	var NO_MATCH = Symbol("nomatch");
+	var MAX_KEYWORD_HITS = 7;
+	/**
+	* @param {any} hljs - object that is extended (legacy)
+	* @returns {HLJSApi}
+	*/
+	var HLJS = function(hljs) {
+		/** @type {Record<string, Language>} */
+		const languages = Object.create(null);
+		/** @type {Record<string, string>} */
+		const aliases = Object.create(null);
+		/** @type {HLJSPlugin[]} */
+		const plugins = [];
+		let SAFE_MODE = true;
+		const LANGUAGE_NOT_FOUND = "Could not find the language '{}', did you forget to load/include a language module?";
+		/** @type {Language} */
+		const PLAINTEXT_LANGUAGE = {
+			disableAutodetect: true,
+			name: "Plain text",
+			contains: []
+		};
+		/** @type HLJSOptions */
+		let options = {
+			ignoreUnescapedHTML: false,
+			throwUnescapedHTML: false,
+			noHighlightRe: /^(no-?highlight)$/i,
+			languageDetectRe: /\blang(?:uage)?-([\w-]+)\b/i,
+			classPrefix: "hljs-",
+			cssSelector: "pre code",
+			languages: null,
+			__emitter: TokenTreeEmitter
+		};
+		/**
+		* Tests a language name to see if highlighting should be skipped
+		* @param {string} languageName
+		*/
+		function shouldNotHighlight(languageName) {
+			return options.noHighlightRe.test(languageName);
+		}
+		/**
+		* @param {HighlightedHTMLElement} block - the HTML element to determine language for
+		*/
+		function blockLanguage(block) {
+			let classes = block.className + " ";
+			classes += block.parentNode ? block.parentNode.className : "";
+			const match = options.languageDetectRe.exec(classes);
+			if (match) {
+				const language = getLanguage(match[1]);
+				if (!language) {
+					warn(LANGUAGE_NOT_FOUND.replace("{}", match[1]));
+					warn("Falling back to no-highlight mode for this block.", block);
+				}
+				return language ? match[1] : "no-highlight";
+			}
+			return classes.split(/\s+/).find((_class) => shouldNotHighlight(_class) || getLanguage(_class));
+		}
+		/**
+		* Core highlighting function.
+		*
+		* OLD API
+		* highlight(lang, code, ignoreIllegals, continuation)
+		*
+		* NEW API
+		* highlight(code, {lang, ignoreIllegals})
+		*
+		* @param {string} codeOrLanguageName - the language to use for highlighting
+		* @param {string | HighlightOptions} optionsOrCode - the code to highlight
+		* @param {boolean} [ignoreIllegals] - whether to ignore illegal matches, default is to bail
+		*
+		* @returns {HighlightResult} Result - an object that represents the result
+		* @property {string} language - the language name
+		* @property {number} relevance - the relevance score
+		* @property {string} value - the highlighted HTML code
+		* @property {string} code - the original raw code
+		* @property {CompiledMode} top - top of the current mode stack
+		* @property {boolean} illegal - indicates whether any illegal matches were found
+		*/
+		function highlight(codeOrLanguageName, optionsOrCode, ignoreIllegals) {
+			let code = "";
+			let languageName = "";
+			if (typeof optionsOrCode === "object") {
+				code = codeOrLanguageName;
+				ignoreIllegals = optionsOrCode.ignoreIllegals;
+				languageName = optionsOrCode.language;
+			} else {
+				deprecated("10.7.0", "highlight(lang, code, ...args) has been deprecated.");
+				deprecated("10.7.0", "Please use highlight(code, options) instead.\nhttps://github.com/highlightjs/highlight.js/issues/2277");
+				languageName = codeOrLanguageName;
+				code = optionsOrCode;
+			}
+			if (ignoreIllegals === void 0) ignoreIllegals = true;
+			/** @type {BeforeHighlightContext} */
+			const context = {
+				code,
+				language: languageName
+			};
+			fire("before:highlight", context);
+			const result = context.result ? context.result : _highlight(context.language, context.code, ignoreIllegals);
+			result.code = context.code;
+			fire("after:highlight", result);
+			return result;
+		}
+		/**
+		* private highlight that's used internally and does not fire callbacks
+		*
+		* @param {string} languageName - the language to use for highlighting
+		* @param {string} codeToHighlight - the code to highlight
+		* @param {boolean?} [ignoreIllegals] - whether to ignore illegal matches, default is to bail
+		* @param {CompiledMode?} [continuation] - current continuation mode, if any
+		* @returns {HighlightResult} - result of the highlight operation
+		*/
+		function _highlight(languageName, codeToHighlight, ignoreIllegals, continuation) {
+			const keywordHits = Object.create(null);
+			/**
+			* Return keyword data if a match is a keyword
+			* @param {CompiledMode} mode - current mode
+			* @param {string} matchText - the textual match
+			* @returns {KeywordData | false}
+			*/
+			function keywordData(mode, matchText) {
+				return mode.keywords[matchText];
+			}
+			function processKeywords() {
+				if (!top.keywords) {
+					emitter.addText(modeBuffer);
+					return;
+				}
+				let lastIndex = 0;
+				top.keywordPatternRe.lastIndex = 0;
+				let match = top.keywordPatternRe.exec(modeBuffer);
+				let buf = "";
+				while (match) {
+					buf += modeBuffer.substring(lastIndex, match.index);
+					const word = language.case_insensitive ? match[0].toLowerCase() : match[0];
+					const data = keywordData(top, word);
+					if (data) {
+						const [kind, keywordRelevance] = data;
+						emitter.addText(buf);
+						buf = "";
+						keywordHits[word] = (keywordHits[word] || 0) + 1;
+						if (keywordHits[word] <= MAX_KEYWORD_HITS) relevance += keywordRelevance;
+						if (kind.startsWith("_")) buf += match[0];
+						else {
+							const cssClass = language.classNameAliases[kind] || kind;
+							emitKeyword(match[0], cssClass);
+						}
+					} else buf += match[0];
+					lastIndex = top.keywordPatternRe.lastIndex;
+					match = top.keywordPatternRe.exec(modeBuffer);
+				}
+				buf += modeBuffer.substring(lastIndex);
+				emitter.addText(buf);
+			}
+			function processSubLanguage() {
+				if (modeBuffer === "") return;
+				/** @type HighlightResult */
+				let result = null;
+				if (typeof top.subLanguage === "string") {
+					if (!languages[top.subLanguage]) {
+						emitter.addText(modeBuffer);
+						return;
+					}
+					result = _highlight(top.subLanguage, modeBuffer, true, continuations[top.subLanguage]);
+					continuations[top.subLanguage] = result._top;
+				} else result = highlightAuto(modeBuffer, top.subLanguage.length ? top.subLanguage : null);
+				if (top.relevance > 0) relevance += result.relevance;
+				emitter.__addSublanguage(result._emitter, result.language);
+			}
+			function processBuffer() {
+				if (top.subLanguage != null) processSubLanguage();
+				else processKeywords();
+				modeBuffer = "";
+			}
+			/**
+			* @param {string} text
+			* @param {string} scope
+			*/
+			function emitKeyword(keyword, scope) {
+				if (keyword === "") return;
+				emitter.startScope(scope);
+				emitter.addText(keyword);
+				emitter.endScope();
+			}
+			/**
+			* @param {CompiledScope} scope
+			* @param {RegExpMatchArray} match
+			*/
+			function emitMultiClass(scope, match) {
+				let i = 1;
+				const max = match.length - 1;
+				while (i <= max) {
+					if (!scope._emit[i]) {
+						i++;
+						continue;
+					}
+					const klass = language.classNameAliases[scope[i]] || scope[i];
+					const text = match[i];
+					if (klass) emitKeyword(text, klass);
+					else {
+						modeBuffer = text;
+						processKeywords();
+						modeBuffer = "";
+					}
+					i++;
+				}
+			}
+			/**
+			* @param {CompiledMode} mode - new mode to start
+			* @param {RegExpMatchArray} match
+			*/
+			function startNewMode(mode, match) {
+				if (mode.scope && typeof mode.scope === "string") emitter.openNode(language.classNameAliases[mode.scope] || mode.scope);
+				if (mode.beginScope) {
+					if (mode.beginScope._wrap) {
+						emitKeyword(modeBuffer, language.classNameAliases[mode.beginScope._wrap] || mode.beginScope._wrap);
+						modeBuffer = "";
+					} else if (mode.beginScope._multi) {
+						emitMultiClass(mode.beginScope, match);
+						modeBuffer = "";
+					}
+				}
+				top = Object.create(mode, { parent: { value: top } });
+				return top;
+			}
+			/**
+			* @param {CompiledMode } mode - the mode to potentially end
+			* @param {RegExpMatchArray} match - the latest match
+			* @param {string} matchPlusRemainder - match plus remainder of content
+			* @returns {CompiledMode | void} - the next mode, or if void continue on in current mode
+			*/
+			function endOfMode(mode, match, matchPlusRemainder) {
+				let matched = startsWith(mode.endRe, matchPlusRemainder);
+				if (matched) {
+					if (mode["on:end"]) {
+						const resp = new Response(mode);
+						mode["on:end"](match, resp);
+						if (resp.isMatchIgnored) matched = false;
+					}
+					if (matched) {
+						while (mode.endsParent && mode.parent) mode = mode.parent;
+						return mode;
+					}
+				}
+				if (mode.endsWithParent) return endOfMode(mode.parent, match, matchPlusRemainder);
+			}
+			/**
+			* Handle matching but then ignoring a sequence of text
+			*
+			* @param {string} lexeme - string containing full match text
+			*/
+			function doIgnore(lexeme) {
+				if (top.matcher.regexIndex === 0) {
+					modeBuffer += lexeme[0];
+					return 1;
+				} else {
+					resumeScanAtSamePosition = true;
+					return 0;
+				}
+			}
+			/**
+			* Handle the start of a new potential mode match
+			*
+			* @param {EnhancedMatch} match - the current match
+			* @returns {number} how far to advance the parse cursor
+			*/
+			function doBeginMatch(match) {
+				const lexeme = match[0];
+				const newMode = match.rule;
+				const resp = new Response(newMode);
+				const beforeCallbacks = [newMode.__beforeBegin, newMode["on:begin"]];
+				for (const cb of beforeCallbacks) {
+					if (!cb) continue;
+					cb(match, resp);
+					if (resp.isMatchIgnored) return doIgnore(lexeme);
+				}
+				if (newMode.skip) modeBuffer += lexeme;
+				else {
+					if (newMode.excludeBegin) modeBuffer += lexeme;
+					processBuffer();
+					if (!newMode.returnBegin && !newMode.excludeBegin) modeBuffer = lexeme;
+				}
+				startNewMode(newMode, match);
+				return newMode.returnBegin ? 0 : lexeme.length;
+			}
+			/**
+			* Handle the potential end of mode
+			*
+			* @param {RegExpMatchArray} match - the current match
+			*/
+			function doEndMatch(match) {
+				const lexeme = match[0];
+				const matchPlusRemainder = codeToHighlight.substring(match.index);
+				const endMode = endOfMode(top, match, matchPlusRemainder);
+				if (!endMode) return NO_MATCH;
+				const origin = top;
+				if (top.endScope && top.endScope._wrap) {
+					processBuffer();
+					emitKeyword(lexeme, top.endScope._wrap);
+				} else if (top.endScope && top.endScope._multi) {
+					processBuffer();
+					emitMultiClass(top.endScope, match);
+				} else if (origin.skip) modeBuffer += lexeme;
+				else {
+					if (!(origin.returnEnd || origin.excludeEnd)) modeBuffer += lexeme;
+					processBuffer();
+					if (origin.excludeEnd) modeBuffer = lexeme;
+				}
+				do {
+					if (top.scope) emitter.closeNode();
+					if (!top.skip && !top.subLanguage) relevance += top.relevance;
+					top = top.parent;
+				} while (top !== endMode.parent);
+				if (endMode.starts) startNewMode(endMode.starts, match);
+				return origin.returnEnd ? 0 : lexeme.length;
+			}
+			function processContinuations() {
+				const list = [];
+				for (let current = top; current !== language; current = current.parent) if (current.scope) list.unshift(current.scope);
+				list.forEach((item) => emitter.openNode(item));
+			}
+			/** @type {{type?: MatchType, index?: number, rule?: Mode}}} */
+			let lastMatch = {};
+			/**
+			*  Process an individual match
+			*
+			* @param {string} textBeforeMatch - text preceding the match (since the last match)
+			* @param {EnhancedMatch} [match] - the match itself
+			*/
+			function processLexeme(textBeforeMatch, match) {
+				const lexeme = match && match[0];
+				modeBuffer += textBeforeMatch;
+				if (lexeme == null) {
+					processBuffer();
+					return 0;
+				}
+				if (lastMatch.type === "begin" && match.type === "end" && lastMatch.index === match.index && lexeme === "") {
+					modeBuffer += codeToHighlight.slice(match.index, match.index + 1);
+					if (!SAFE_MODE) {
+						/** @type {AnnotatedError} */
+						const err = /* @__PURE__ */ new Error(`0 width match regex (${languageName})`);
+						err.languageName = languageName;
+						err.badRule = lastMatch.rule;
+						throw err;
+					}
+					return 1;
+				}
+				lastMatch = match;
+				if (match.type === "begin") return doBeginMatch(match);
+				else if (match.type === "illegal" && !ignoreIllegals) {
+					/** @type {AnnotatedError} */
+					const err = /* @__PURE__ */ new Error("Illegal lexeme \"" + lexeme + "\" for mode \"" + (top.scope || "<unnamed>") + "\"");
+					err.mode = top;
+					throw err;
+				} else if (match.type === "end") {
+					const processed = doEndMatch(match);
+					if (processed !== NO_MATCH) return processed;
+				}
+				if (match.type === "illegal" && lexeme === "") {
+					if (match.index === codeToHighlight.length);
+					else modeBuffer += "\n";
+					return 1;
+				}
+				if (iterations > 1e5 && iterations > match.index * 3) throw /* @__PURE__ */ new Error("potential infinite loop, way more iterations than matches");
+				modeBuffer += lexeme;
+				return lexeme.length;
+			}
+			const language = getLanguage(languageName);
+			if (!language) {
+				error(LANGUAGE_NOT_FOUND.replace("{}", languageName));
+				throw new Error("Unknown language: \"" + languageName + "\"");
+			}
+			const md = compileLanguage(language);
+			let result = "";
+			/** @type {CompiledMode} */
+			let top = continuation || md;
+			/** @type Record<string,CompiledMode> */
+			const continuations = {};
+			const emitter = new options.__emitter(options);
+			processContinuations();
+			let modeBuffer = "";
+			let relevance = 0;
+			let index = 0;
+			let iterations = 0;
+			let resumeScanAtSamePosition = false;
+			try {
+				if (!language.__emitTokens) {
+					top.matcher.considerAll();
+					for (;;) {
+						iterations++;
+						if (resumeScanAtSamePosition) resumeScanAtSamePosition = false;
+						else top.matcher.considerAll();
+						top.matcher.lastIndex = index;
+						const match = top.matcher.exec(codeToHighlight);
+						if (!match) break;
+						const processedCount = processLexeme(codeToHighlight.substring(index, match.index), match);
+						index = match.index + processedCount;
+					}
+					processLexeme(codeToHighlight.substring(index));
+				} else language.__emitTokens(codeToHighlight, emitter);
+				emitter.finalize();
+				result = emitter.toHTML();
+				return {
+					language: languageName,
+					value: result,
+					relevance,
+					illegal: false,
+					_emitter: emitter,
+					_top: top
+				};
+			} catch (err) {
+				if (err.message && err.message.includes("Illegal")) return {
+					language: languageName,
+					value: escape(codeToHighlight),
+					illegal: true,
+					relevance: 0,
+					_illegalBy: {
+						message: err.message,
+						index,
+						context: codeToHighlight.slice(index - 100, index + 100),
+						mode: err.mode,
+						resultSoFar: result
+					},
+					_emitter: emitter
+				};
+				else if (SAFE_MODE) return {
+					language: languageName,
+					value: escape(codeToHighlight),
+					illegal: false,
+					relevance: 0,
+					errorRaised: err,
+					_emitter: emitter,
+					_top: top
+				};
+				else throw err;
+			}
+		}
+		/**
+		* returns a valid highlight result, without actually doing any actual work,
+		* auto highlight starts with this and it's possible for small snippets that
+		* auto-detection may not find a better match
+		* @param {string} code
+		* @returns {HighlightResult}
+		*/
+		function justTextHighlightResult(code) {
+			const result = {
+				value: escape(code),
+				illegal: false,
+				relevance: 0,
+				_top: PLAINTEXT_LANGUAGE,
+				_emitter: new options.__emitter(options)
+			};
+			result._emitter.addText(code);
+			return result;
+		}
+		/**
+		Highlighting with language detection. Accepts a string with the code to
+		highlight. Returns an object with the following properties:
+		
+		- language (detected language)
+		- relevance (int)
+		- value (an HTML string with highlighting markup)
+		- secondBest (object with the same structure for second-best heuristically
+		detected language, may be absent)
+		
+		@param {string} code
+		@param {Array<string>} [languageSubset]
+		@returns {AutoHighlightResult}
+		*/
+		function highlightAuto(code, languageSubset) {
+			languageSubset = languageSubset || options.languages || Object.keys(languages);
+			const plaintext = justTextHighlightResult(code);
+			const results = languageSubset.filter(getLanguage).filter(autoDetection).map((name) => _highlight(name, code, false));
+			results.unshift(plaintext);
+			const [best, secondBest] = results.sort((a, b) => {
+				if (a.relevance !== b.relevance) return b.relevance - a.relevance;
+				if (a.language && b.language) {
+					if (getLanguage(a.language).supersetOf === b.language) return 1;
+					else if (getLanguage(b.language).supersetOf === a.language) return -1;
+				}
+				return 0;
+			});
+			/** @type {AutoHighlightResult} */
+			const result = best;
+			result.secondBest = secondBest;
+			return result;
+		}
+		/**
+		* Builds new class name for block given the language name
+		*
+		* @param {HTMLElement} element
+		* @param {string} [currentLang]
+		* @param {string} [resultLang]
+		*/
+		function updateClassName(element, currentLang, resultLang) {
+			const language = currentLang && aliases[currentLang] || resultLang;
+			element.classList.add("hljs");
+			element.classList.add(`language-${language}`);
+		}
+		/**
+		* Applies highlighting to a DOM node containing code.
+		*
+		* @param {HighlightedHTMLElement} element - the HTML element to highlight
+		*/
+		function highlightElement(element) {
+			/** @type HTMLElement */
+			let node = null;
+			const language = blockLanguage(element);
+			if (shouldNotHighlight(language)) return;
+			fire("before:highlightElement", {
+				el: element,
+				language
+			});
+			if (element.dataset.highlighted) {
+				console.log("Element previously highlighted. To highlight again, first unset `dataset.highlighted`.", element);
+				return;
+			}
+			if (element.children.length > 0) {
+				if (!options.ignoreUnescapedHTML) {
+					console.warn("One of your code blocks includes unescaped HTML. This is a potentially serious security risk.");
+					console.warn("https://github.com/highlightjs/highlight.js/wiki/security");
+					console.warn("The element with unescaped HTML:");
+					console.warn(element);
+				}
+				if (options.throwUnescapedHTML) throw new HTMLInjectionError("One of your code blocks includes unescaped HTML.", element.innerHTML);
+			}
+			node = element;
+			const text = node.textContent;
+			const result = language ? highlight(text, {
+				language,
+				ignoreIllegals: true
+			}) : highlightAuto(text);
+			element.innerHTML = result.value;
+			element.dataset.highlighted = "yes";
+			updateClassName(element, language, result.language);
+			element.result = {
+				language: result.language,
+				re: result.relevance,
+				relevance: result.relevance
+			};
+			if (result.secondBest) element.secondBest = {
+				language: result.secondBest.language,
+				relevance: result.secondBest.relevance
+			};
+			fire("after:highlightElement", {
+				el: element,
+				result,
+				text
+			});
+		}
+		/**
+		* Updates highlight.js global options with the passed options
+		*
+		* @param {Partial<HLJSOptions>} userOptions
+		*/
+		function configure(userOptions) {
+			options = inherit(options, userOptions);
+		}
+		const initHighlighting = () => {
+			highlightAll();
+			deprecated("10.6.0", "initHighlighting() deprecated.  Use highlightAll() now.");
+		};
+		function initHighlightingOnLoad() {
+			highlightAll();
+			deprecated("10.6.0", "initHighlightingOnLoad() deprecated.  Use highlightAll() now.");
+		}
+		let wantsHighlight = false;
+		/**
+		* auto-highlights all pre>code elements on the page
+		*/
+		function highlightAll() {
+			function boot() {
+				highlightAll();
+			}
+			if (document.readyState === "loading") {
+				if (!wantsHighlight) window.addEventListener("DOMContentLoaded", boot, false);
+				wantsHighlight = true;
+				return;
+			}
+			document.querySelectorAll(options.cssSelector).forEach(highlightElement);
+		}
+		/**
+		* Register a language grammar module
+		*
+		* @param {string} languageName
+		* @param {LanguageFn} languageDefinition
+		*/
+		function registerLanguage(languageName, languageDefinition) {
+			let lang = null;
+			try {
+				lang = languageDefinition(hljs);
+			} catch (error$1) {
+				error("Language definition for '{}' could not be registered.".replace("{}", languageName));
+				if (!SAFE_MODE) throw error$1;
+				else error(error$1);
+				lang = PLAINTEXT_LANGUAGE;
+			}
+			if (!lang.name) lang.name = languageName;
+			languages[languageName] = lang;
+			lang.rawDefinition = languageDefinition.bind(null, hljs);
+			if (lang.aliases) registerAliases(lang.aliases, { languageName });
+		}
+		/**
+		* Remove a language grammar module
+		*
+		* @param {string} languageName
+		*/
+		function unregisterLanguage(languageName) {
+			delete languages[languageName];
+			for (const alias of Object.keys(aliases)) if (aliases[alias] === languageName) delete aliases[alias];
+		}
+		/**
+		* @returns {string[]} List of language internal names
+		*/
+		function listLanguages() {
+			return Object.keys(languages);
+		}
+		/**
+		* @param {string} name - name of the language to retrieve
+		* @returns {Language | undefined}
+		*/
+		function getLanguage(name) {
+			name = (name || "").toLowerCase();
+			return languages[name] || languages[aliases[name]];
+		}
+		/**
+		*
+		* @param {string|string[]} aliasList - single alias or list of aliases
+		* @param {{languageName: string}} opts
+		*/
+		function registerAliases(aliasList, { languageName }) {
+			if (typeof aliasList === "string") aliasList = [aliasList];
+			aliasList.forEach((alias) => {
+				aliases[alias.toLowerCase()] = languageName;
+			});
+		}
+		/**
+		* Determines if a given language has auto-detection enabled
+		* @param {string} name - name of the language
+		*/
+		function autoDetection(name) {
+			const lang = getLanguage(name);
+			return lang && !lang.disableAutodetect;
+		}
+		/**
+		* Upgrades the old highlightBlock plugins to the new
+		* highlightElement API
+		* @param {HLJSPlugin} plugin
+		*/
+		function upgradePluginAPI(plugin) {
+			if (plugin["before:highlightBlock"] && !plugin["before:highlightElement"]) plugin["before:highlightElement"] = (data) => {
+				plugin["before:highlightBlock"](Object.assign({ block: data.el }, data));
+			};
+			if (plugin["after:highlightBlock"] && !plugin["after:highlightElement"]) plugin["after:highlightElement"] = (data) => {
+				plugin["after:highlightBlock"](Object.assign({ block: data.el }, data));
+			};
+		}
+		/**
+		* @param {HLJSPlugin} plugin
+		*/
+		function addPlugin(plugin) {
+			upgradePluginAPI(plugin);
+			plugins.push(plugin);
+		}
+		/**
+		* @param {HLJSPlugin} plugin
+		*/
+		function removePlugin(plugin) {
+			const index = plugins.indexOf(plugin);
+			if (index !== -1) plugins.splice(index, 1);
+		}
+		/**
+		*
+		* @param {PluginEvent} event
+		* @param {any} args
+		*/
+		function fire(event, args) {
+			const cb = event;
+			plugins.forEach(function(plugin) {
+				if (plugin[cb]) plugin[cb](args);
+			});
+		}
+		/**
+		* DEPRECATED
+		* @param {HighlightedHTMLElement} el
+		*/
+		function deprecateHighlightBlock(el) {
+			deprecated("10.7.0", "highlightBlock will be removed entirely in v12.0");
+			deprecated("10.7.0", "Please use highlightElement now.");
+			return highlightElement(el);
+		}
+		Object.assign(hljs, {
+			highlight,
+			highlightAuto,
+			highlightAll,
+			highlightElement,
+			highlightBlock: deprecateHighlightBlock,
+			configure,
+			initHighlighting,
+			initHighlightingOnLoad,
+			registerLanguage,
+			unregisterLanguage,
+			listLanguages,
+			getLanguage,
+			registerAliases,
+			autoDetection,
+			inherit,
+			addPlugin,
+			removePlugin
+		});
+		hljs.debugMode = function() {
+			SAFE_MODE = false;
+		};
+		hljs.safeMode = function() {
+			SAFE_MODE = true;
+		};
+		hljs.versionString = version;
+		hljs.regex = {
+			concat,
+			lookahead,
+			either,
+			optional,
+			anyNumberOfTimes
+		};
+		for (const key in MODES) if (typeof MODES[key] === "object") deepFreeze(MODES[key]);
+		Object.assign(hljs, MODES);
+		return hljs;
+	};
+	var highlight = HLJS({});
+	highlight.newInstance = () => HLJS({});
+	module.exports = highlight;
+	highlight.HighlightJS = highlight;
+	highlight.default = highlight;
+})))())).default;
+//#endregion
+//#region node_modules/highlight.js/es/languages/bash.js
+/** @type LanguageFn */
+function bash(hljs) {
+	const regex = hljs.regex;
+	const VAR = {};
+	const BRACED_VAR = {
+		begin: /\$\{/,
+		end: /\}/,
+		contains: ["self", {
+			begin: /:-/,
+			contains: [VAR]
+		}]
+	};
+	Object.assign(VAR, {
+		className: "variable",
+		variants: [{ begin: regex.concat(/\$[\w\d#@][\w\d_]*/, `(?![\\w\\d])(?![$])`) }, BRACED_VAR]
+	});
+	const SUBST = {
+		className: "subst",
+		begin: /\$\(/,
+		end: /\)/,
+		contains: [hljs.BACKSLASH_ESCAPE]
+	};
+	const COMMENT = hljs.inherit(hljs.COMMENT(), {
+		match: [/(^|\s)/, /#.*$/],
+		scope: { 2: "comment" }
+	});
+	const HERE_DOC = {
+		begin: /<<-?\s*(?=\w+)/,
+		starts: { contains: [hljs.END_SAME_AS_BEGIN({
+			begin: /(\w+)/,
+			end: /(\w+)/,
+			className: "string"
+		})] }
+	};
+	const QUOTE_STRING = {
+		className: "string",
+		begin: /"/,
+		end: /"/,
+		contains: [
+			hljs.BACKSLASH_ESCAPE,
+			VAR,
+			SUBST
+		]
+	};
+	SUBST.contains.push(QUOTE_STRING);
+	const ESCAPED_QUOTE = { match: /\\"/ };
+	const APOS_STRING = {
+		className: "string",
+		begin: /'/,
+		end: /'/
+	};
+	const ESCAPED_APOS = { match: /\\'/ };
+	const ARITHMETIC = {
+		begin: /\$?\(\(/,
+		end: /\)\)/,
+		contains: [
+			{
+				begin: /\d+#[0-9a-f]+/,
+				className: "number"
+			},
+			hljs.NUMBER_MODE,
+			VAR
+		]
+	};
+	const KNOWN_SHEBANG = hljs.SHEBANG({
+		binary: `(${[
+			"fish",
+			"bash",
+			"zsh",
+			"sh",
+			"csh",
+			"ksh",
+			"tcsh",
+			"dash",
+			"scsh"
+		].join("|")})`,
+		relevance: 10
+	});
+	const FUNCTION = {
+		className: "function",
+		begin: /\w[\w\d_]*\s*\(\s*\)\s*\{/,
+		returnBegin: true,
+		contains: [hljs.inherit(hljs.TITLE_MODE, { begin: /\w[\w\d_]*/ })],
+		relevance: 0
+	};
+	const KEYWORDS = [
+		"if",
+		"then",
+		"else",
+		"elif",
+		"fi",
+		"time",
+		"for",
+		"while",
+		"until",
+		"in",
+		"do",
+		"done",
+		"case",
+		"esac",
+		"coproc",
+		"function",
+		"select"
+	];
+	const LITERALS = ["true", "false"];
+	const PATH_MODE = { match: /(\/[a-z._-]+)+/ };
+	const SHELL_BUILT_INS = [
+		"break",
+		"cd",
+		"continue",
+		"eval",
+		"exec",
+		"exit",
+		"export",
+		"getopts",
+		"hash",
+		"pwd",
+		"readonly",
+		"return",
+		"shift",
+		"test",
+		"times",
+		"trap",
+		"umask",
+		"unset"
+	];
+	const BASH_BUILT_INS = [
+		"alias",
+		"bind",
+		"builtin",
+		"caller",
+		"command",
+		"declare",
+		"echo",
+		"enable",
+		"help",
+		"let",
+		"local",
+		"logout",
+		"mapfile",
+		"printf",
+		"read",
+		"readarray",
+		"source",
+		"sudo",
+		"type",
+		"typeset",
+		"ulimit",
+		"unalias"
+	];
+	const ZSH_BUILT_INS = [
+		"autoload",
+		"bg",
+		"bindkey",
+		"bye",
+		"cap",
+		"chdir",
+		"clone",
+		"comparguments",
+		"compcall",
+		"compctl",
+		"compdescribe",
+		"compfiles",
+		"compgroups",
+		"compquote",
+		"comptags",
+		"comptry",
+		"compvalues",
+		"dirs",
+		"disable",
+		"disown",
+		"echotc",
+		"echoti",
+		"emulate",
+		"fc",
+		"fg",
+		"float",
+		"functions",
+		"getcap",
+		"getln",
+		"history",
+		"integer",
+		"jobs",
+		"kill",
+		"limit",
+		"log",
+		"noglob",
+		"popd",
+		"print",
+		"pushd",
+		"pushln",
+		"rehash",
+		"sched",
+		"setcap",
+		"setopt",
+		"stat",
+		"suspend",
+		"ttyctl",
+		"unfunction",
+		"unhash",
+		"unlimit",
+		"unsetopt",
+		"vared",
+		"wait",
+		"whence",
+		"where",
+		"which",
+		"zcompile",
+		"zformat",
+		"zftp",
+		"zle",
+		"zmodload",
+		"zparseopts",
+		"zprof",
+		"zpty",
+		"zregexparse",
+		"zsocket",
+		"zstyle",
+		"ztcp"
+	];
+	const GNU_CORE_UTILS = [
+		"chcon",
+		"chgrp",
+		"chown",
+		"chmod",
+		"cp",
+		"dd",
+		"df",
+		"dir",
+		"dircolors",
+		"ln",
+		"ls",
+		"mkdir",
+		"mkfifo",
+		"mknod",
+		"mktemp",
+		"mv",
+		"realpath",
+		"rm",
+		"rmdir",
+		"shred",
+		"sync",
+		"touch",
+		"truncate",
+		"vdir",
+		"b2sum",
+		"base32",
+		"base64",
+		"cat",
+		"cksum",
+		"comm",
+		"csplit",
+		"cut",
+		"expand",
+		"fmt",
+		"fold",
+		"head",
+		"join",
+		"md5sum",
+		"nl",
+		"numfmt",
+		"od",
+		"paste",
+		"ptx",
+		"pr",
+		"sha1sum",
+		"sha224sum",
+		"sha256sum",
+		"sha384sum",
+		"sha512sum",
+		"shuf",
+		"sort",
+		"split",
+		"sum",
+		"tac",
+		"tail",
+		"tr",
+		"tsort",
+		"unexpand",
+		"uniq",
+		"wc",
+		"arch",
+		"basename",
+		"chroot",
+		"date",
+		"dirname",
+		"du",
+		"echo",
+		"env",
+		"expr",
+		"factor",
+		"groups",
+		"hostid",
+		"id",
+		"link",
+		"logname",
+		"nice",
+		"nohup",
+		"nproc",
+		"pathchk",
+		"pinky",
+		"printenv",
+		"printf",
+		"pwd",
+		"readlink",
+		"runcon",
+		"seq",
+		"sleep",
+		"stat",
+		"stdbuf",
+		"stty",
+		"tee",
+		"test",
+		"timeout",
+		"tty",
+		"uname",
+		"unlink",
+		"uptime",
+		"users",
+		"who",
+		"whoami",
+		"yes"
+	];
+	return {
+		name: "Bash",
+		aliases: ["sh", "zsh"],
+		keywords: {
+			$pattern: /\b[a-z][a-z0-9._-]+\b/,
+			keyword: KEYWORDS,
+			literal: LITERALS,
+			built_in: [
+				...SHELL_BUILT_INS,
+				...BASH_BUILT_INS,
+				"set",
+				"shopt",
+				...ZSH_BUILT_INS,
+				...GNU_CORE_UTILS
+			]
+		},
+		contains: [
+			KNOWN_SHEBANG,
+			hljs.SHEBANG(),
+			FUNCTION,
+			ARITHMETIC,
+			COMMENT,
+			HERE_DOC,
+			PATH_MODE,
+			QUOTE_STRING,
+			ESCAPED_QUOTE,
+			APOS_STRING,
+			ESCAPED_APOS,
+			VAR
+		]
+	};
+}
+//#endregion
+//#region node_modules/highlight.js/es/languages/diff.js
+/** @type LanguageFn */
+function diff(hljs) {
+	const regex = hljs.regex;
+	return {
+		name: "Diff",
+		aliases: ["patch"],
+		contains: [
+			{
+				className: "meta",
+				relevance: 10,
+				match: regex.either(/^@@ +-\d+,\d+ +\+\d+,\d+ +@@/, /^@@ +-\d+ +\+\d+,\d+ +@@/, /^@@ +-\d+,\d+ +\+\d+ +@@/, /^@@ +-\d+ +\+\d+ +@@/, /^\*\*\* +\d+,\d+ +\*\*\*\*$/, /^--- +\d+,\d+ +----$/)
+			},
+			{
+				className: "comment",
+				variants: [{
+					begin: regex.either(/Index: /, /^index/, /={3,}/, /^-{3}/, /^\*{3} /, /^\+{3}/, /^diff --git/),
+					end: /$/
+				}, { match: /^\*{15}$/ }]
+			},
+			{
+				className: "addition",
+				begin: /^\+/,
+				end: /$/
+			},
+			{
+				className: "deletion",
+				begin: /^-/,
+				end: /$/
+			},
+			{
+				className: "addition",
+				begin: /^!/,
+				end: /$/
+			}
+		]
+	};
+}
+//#endregion
+//#region node_modules/highlight.js/es/languages/ini.js
+function ini(hljs) {
+	const regex = hljs.regex;
+	const NUMBERS = {
+		className: "number",
+		relevance: 0,
+		variants: [{ begin: /([+-]+)?[\d]+_[\d_]+/ }, { begin: hljs.NUMBER_RE }]
+	};
+	const COMMENTS = hljs.COMMENT();
+	COMMENTS.variants = [{
+		begin: /;/,
+		end: /$/
+	}, {
+		begin: /#/,
+		end: /$/
+	}];
+	const VARIABLES = {
+		className: "variable",
+		variants: [{ begin: /\$[\w\d"][\w\d_]*/ }, { begin: /\$\{(.*?)\}/ }]
+	};
+	const LITERALS = {
+		className: "literal",
+		begin: /\bon|off|true|false|yes|no\b/
+	};
+	const STRINGS = {
+		className: "string",
+		contains: [hljs.BACKSLASH_ESCAPE],
+		variants: [
+			{
+				begin: "'''",
+				end: "'''",
+				relevance: 10
+			},
+			{
+				begin: "\"\"\"",
+				end: "\"\"\"",
+				relevance: 10
+			},
+			{
+				begin: "\"",
+				end: "\""
+			},
+			{
+				begin: "'",
+				end: "'"
+			}
+		]
+	};
+	const ARRAY = {
+		begin: /\[/,
+		end: /\]/,
+		contains: [
+			COMMENTS,
+			LITERALS,
+			VARIABLES,
+			STRINGS,
+			NUMBERS,
+			"self"
+		],
+		relevance: 0
+	};
+	const ANY_KEY = regex.either(/[A-Za-z0-9_-]+/, /"(\\"|[^"])*"/, /'[^']*'/);
+	return {
+		name: "TOML, also INI",
+		aliases: ["toml"],
+		case_insensitive: true,
+		illegal: /\S/,
+		contains: [
+			COMMENTS,
+			{
+				className: "section",
+				begin: /\[+/,
+				end: /\]+/
+			},
+			{
+				begin: regex.concat(ANY_KEY, "(\\s*\\.\\s*", ANY_KEY, ")*", regex.lookahead(/\s*=\s*[^#\s]/)),
+				className: "attr",
+				starts: {
+					end: /$/,
+					contains: [
+						COMMENTS,
+						ARRAY,
+						LITERALS,
+						VARIABLES,
+						STRINGS,
+						NUMBERS
+					]
+				}
+			}
+		]
+	};
+}
+//#endregion
+//#region node_modules/highlight.js/es/languages/json.js
+var EXTENDED_NUMBER_MODE = {
+	scope: "number",
+	match: "([-+]?)(\\b0[xX][a-fA-F0-9]+|(\\b\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?)|NaN|[-+]?Infinity",
+	relevance: 0
+};
+function json(hljs) {
+	const ATTRIBUTE = {
+		className: "attr",
+		begin: /(("(\\.|[^\\"\r\n])*")|('(\\.|[^\\'\r\n])*'))(?=\s*:)/,
+		relevance: 1.01
+	};
+	const PUNCTUATION = {
+		match: /[{}[\],:]/,
+		className: "punctuation",
+		relevance: 0
+	};
+	const LITERALS = [
+		"true",
+		"false",
+		"null"
+	];
+	const LITERALS_MODE = {
+		scope: "literal",
+		beginKeywords: LITERALS.join(" ")
+	};
+	return {
+		name: "JSON",
+		aliases: ["jsonc", "json5"],
+		keywords: { literal: LITERALS },
+		contains: [
+			ATTRIBUTE,
+			PUNCTUATION,
+			hljs.APOS_STRING_MODE,
+			hljs.QUOTE_STRING_MODE,
+			LITERALS_MODE,
+			EXTENDED_NUMBER_MODE,
+			hljs.C_LINE_COMMENT_MODE,
+			hljs.C_BLOCK_COMMENT_MODE
+		],
+		illegal: "\\S"
+	};
+}
+//#endregion
+//#region node_modules/highlight.js/es/languages/python.js
+function python(hljs) {
+	const regex = hljs.regex;
+	const IDENT_RE = /[\p{XID_Start}_]\p{XID_Continue}*/u;
+	const RESERVED_WORDS = [
+		"and",
+		"as",
+		"assert",
+		"async",
+		"await",
+		"break",
+		"case",
+		"class",
+		"continue",
+		"def",
+		"del",
+		"elif",
+		"else",
+		"except",
+		"finally",
+		"for",
+		"from",
+		"global",
+		"if",
+		"import",
+		"in",
+		"is",
+		"lambda",
+		"lazy",
+		"match",
+		"nonlocal|10",
+		"not",
+		"or",
+		"pass",
+		"raise",
+		"return",
+		"try",
+		"while",
+		"with",
+		"yield"
+	];
+	const KEYWORDS = {
+		$pattern: /[A-Za-z]\w+|__\w+__/,
+		keyword: RESERVED_WORDS,
+		built_in: [
+			"__import__",
+			"abs",
+			"aiter",
+			"all",
+			"anext",
+			"any",
+			"ascii",
+			"bin",
+			"bool",
+			"breakpoint",
+			"bytearray",
+			"bytes",
+			"callable",
+			"chr",
+			"classmethod",
+			"compile",
+			"complex",
+			"delattr",
+			"dict",
+			"dir",
+			"divmod",
+			"enumerate",
+			"eval",
+			"exec",
+			"filter",
+			"float",
+			"format",
+			"frozendict",
+			"frozenset",
+			"getattr",
+			"globals",
+			"hasattr",
+			"hash",
+			"help",
+			"hex",
+			"id",
+			"input",
+			"int",
+			"isinstance",
+			"issubclass",
+			"iter",
+			"len",
+			"list",
+			"locals",
+			"map",
+			"max",
+			"memoryview",
+			"min",
+			"next",
+			"object",
+			"oct",
+			"open",
+			"ord",
+			"pow",
+			"print",
+			"property",
+			"range",
+			"repr",
+			"reversed",
+			"round",
+			"sentinel",
+			"set",
+			"setattr",
+			"slice",
+			"sorted",
+			"staticmethod",
+			"str",
+			"sum",
+			"super",
+			"tuple",
+			"type",
+			"vars",
+			"zip"
+		],
+		literal: [
+			"__debug__",
+			"Ellipsis",
+			"False",
+			"None",
+			"NotImplemented",
+			"True"
+		],
+		type: [
+			"Any",
+			"Callable",
+			"Coroutine",
+			"Dict",
+			"List",
+			"Literal",
+			"Generic",
+			"Optional",
+			"Sequence",
+			"Set",
+			"Tuple",
+			"Type",
+			"Union"
+		]
+	};
+	const PROMPT = {
+		className: "meta",
+		begin: /^(>>>|\.\.\.) /
+	};
+	const SUBST = {
+		className: "subst",
+		begin: /\{/,
+		end: /\}/,
+		keywords: KEYWORDS,
+		illegal: /#/
+	};
+	const LITERAL_BRACKET = {
+		begin: /\{\{/,
+		relevance: 0
+	};
+	const STRING = {
+		className: "string",
+		contains: [hljs.BACKSLASH_ESCAPE],
+		variants: [
+			{
+				begin: /([uU]|[bB]|[rR]|[bB][rR]|[rR][bB])?'''/,
+				end: /'''/,
+				contains: [hljs.BACKSLASH_ESCAPE, PROMPT],
+				relevance: 10
+			},
+			{
+				begin: /([uU]|[bB]|[rR]|[bB][rR]|[rR][bB])?"""/,
+				end: /"""/,
+				contains: [hljs.BACKSLASH_ESCAPE, PROMPT],
+				relevance: 10
+			},
+			{
+				begin: /([fFtT][rR]|[rR][fFtT]|[fFtT])'''/,
+				end: /'''/,
+				contains: [
+					hljs.BACKSLASH_ESCAPE,
+					PROMPT,
+					LITERAL_BRACKET,
+					SUBST
+				]
+			},
+			{
+				begin: /([fFtT][rR]|[rR][fFtT]|[fFtT])"""/,
+				end: /"""/,
+				contains: [
+					hljs.BACKSLASH_ESCAPE,
+					PROMPT,
+					LITERAL_BRACKET,
+					SUBST
+				]
+			},
+			{
+				begin: /([uU]|[rR])'/,
+				end: /'/,
+				relevance: 10
+			},
+			{
+				begin: /([uU]|[rR])"/,
+				end: /"/,
+				relevance: 10
+			},
+			{
+				begin: /([bB]|[bB][rR]|[rR][bB])'/,
+				end: /'/
+			},
+			{
+				begin: /([bB]|[bB][rR]|[rR][bB])"/,
+				end: /"/
+			},
+			{
+				begin: /([fFtT][rR]|[rR][fFtT]|[fFtT])'/,
+				end: /'/,
+				contains: [
+					hljs.BACKSLASH_ESCAPE,
+					LITERAL_BRACKET,
+					SUBST
+				]
+			},
+			{
+				begin: /([fFtT][rR]|[rR][fFtT]|[fFtT])"/,
+				end: /"/,
+				contains: [
+					hljs.BACKSLASH_ESCAPE,
+					LITERAL_BRACKET,
+					SUBST
+				]
+			},
+			hljs.APOS_STRING_MODE,
+			hljs.QUOTE_STRING_MODE
+		]
+	};
+	const digitpart = "[0-9](_?[0-9])*";
+	const pointfloat = `(\\b(${digitpart}))?\\.(${digitpart})|\\b(${digitpart})\\.`;
+	const lookahead = `\\b|${RESERVED_WORDS.join("|")}`;
+	const NUMBER = {
+		className: "number",
+		relevance: 0,
+		variants: [
+			{ begin: `(\\b(${digitpart})|(${pointfloat}))[eE][+-]?(${digitpart})[jJ]?(?=${lookahead})` },
+			{ begin: `(${pointfloat})[jJ]?` },
+			{ begin: `\\b([1-9](_?[0-9])*|0+(_?0)*)[lLjJ]?(?=${lookahead})` },
+			{ begin: `\\b0[bB](_?[01])+[lL]?(?=${lookahead})` },
+			{ begin: `\\b0[oO](_?[0-7])+[lL]?(?=${lookahead})` },
+			{ begin: `\\b0[xX](_?[0-9a-fA-F])+[lL]?(?=${lookahead})` },
+			{ begin: `\\b(${digitpart})[jJ](?=${lookahead})` }
+		]
+	};
+	const COMMENT_TYPE = {
+		className: "comment",
+		begin: regex.lookahead(/# type:/),
+		end: /$/,
+		keywords: KEYWORDS,
+		contains: [{ begin: /# type:/ }, {
+			begin: /#/,
+			end: /\b\B/,
+			endsWithParent: true
+		}]
+	};
+	const PARAMS = {
+		className: "params",
+		variants: [{
+			className: "",
+			begin: /\(\s*\)/,
+			skip: true
+		}, {
+			begin: /\(/,
+			end: /\)/,
+			excludeBegin: true,
+			excludeEnd: true,
+			keywords: KEYWORDS,
+			contains: [
+				"self",
+				PROMPT,
+				NUMBER,
+				STRING,
+				hljs.HASH_COMMENT_MODE
+			]
+		}]
+	};
+	SUBST.contains = [
+		STRING,
+		NUMBER,
+		PROMPT
+	];
+	return {
+		name: "Python",
+		aliases: [
+			"py",
+			"gyp",
+			"ipython"
+		],
+		unicodeRegex: true,
+		keywords: KEYWORDS,
+		illegal: /(<\/|\?)|=>/,
+		contains: [
+			PROMPT,
+			NUMBER,
+			{
+				scope: "variable.language",
+				match: /\bself\b/
+			},
+			{
+				beginKeywords: "if",
+				relevance: 0
+			},
+			{
+				match: /\bor\b/,
+				scope: "keyword"
+			},
+			STRING,
+			COMMENT_TYPE,
+			hljs.HASH_COMMENT_MODE,
+			{
+				match: [
+					/\bdef/,
+					/\s+/,
+					IDENT_RE
+				],
+				scope: {
+					1: "keyword",
+					3: "title.function"
+				},
+				contains: [PARAMS]
+			},
+			{
+				variants: [{ match: [
+					/\bclass/,
+					/\s+/,
+					IDENT_RE,
+					/\s*/,
+					/\(\s*/,
+					IDENT_RE,
+					/\s*\)/
+				] }, { match: [
+					/\bclass/,
+					/\s+/,
+					IDENT_RE
+				] }],
+				scope: {
+					1: "keyword",
+					3: "title.class",
+					6: "title.class.inherited"
+				}
+			},
+			{
+				className: "meta",
+				begin: /^[\t ]*@/,
+				end: /(?=#)|$/,
+				contains: [
+					NUMBER,
+					PARAMS,
+					STRING
+				]
+			}
+		]
+	};
+}
+//#endregion
+//#region node_modules/highlight.js/es/languages/yaml.js
+function yaml(hljs) {
+	const LITERALS = "true false yes no null";
+	const KEY = {
+		className: "attr",
+		variants: [
+			{ begin: /[\w*@][\w*@ :()\./-]*:(?=[ \t]|$)/ },
+			{ begin: /"[\w*@][\w*@ :()\./-]*":(?=[ \t]|$)/ },
+			{ begin: /'[\w*@][\w*@ :()\./-]*':(?=[ \t]|$)/ }
+		]
+	};
+	const TEMPLATE_VARIABLES = {
+		className: "template-variable",
+		variants: [{
+			begin: /\{\{/,
+			end: /\}\}/
+		}, {
+			begin: /%\{/,
+			end: /\}/
+		}]
+	};
+	const SINGLE_QUOTE_STRING = {
+		className: "string",
+		relevance: 0,
+		begin: /'/,
+		end: /'/,
+		contains: [{
+			match: /''/,
+			scope: "char.escape",
+			relevance: 0
+		}]
+	};
+	const STRING = {
+		className: "string",
+		relevance: 0,
+		variants: [{
+			begin: /"/,
+			end: /"/
+		}, { begin: /\S+/ }],
+		contains: [hljs.BACKSLASH_ESCAPE, TEMPLATE_VARIABLES]
+	};
+	const CONTAINER_STRING = hljs.inherit(STRING, { variants: [
+		{
+			begin: /'/,
+			end: /'/,
+			contains: [{
+				begin: /''/,
+				relevance: 0
+			}]
+		},
+		{
+			begin: /"/,
+			end: /"/
+		},
+		{ begin: /[^\s,{}[\]]+/ }
+	] });
+	const TIMESTAMP = {
+		className: "number",
+		begin: "\\b[0-9]{4}(-[0-9][0-9]){0,2}([Tt \\t][0-9][0-9]?(:[0-9][0-9]){2})?(\\.[0-9]*)?([ \\t])*(Z|[-+][0-9][0-9]?(:[0-9][0-9])?)?\\b"
+	};
+	const VALUE_CONTAINER = {
+		end: ",",
+		endsWithParent: true,
+		excludeEnd: true,
+		keywords: LITERALS,
+		relevance: 0
+	};
+	const OBJECT = {
+		begin: /\{/,
+		end: /\}/,
+		contains: [VALUE_CONTAINER],
+		illegal: "\\n",
+		relevance: 0
+	};
+	const ARRAY = {
+		begin: "\\[",
+		end: "\\]",
+		contains: [VALUE_CONTAINER],
+		illegal: "\\n",
+		relevance: 0
+	};
+	const MODES = [
+		KEY,
+		{
+			className: "meta",
+			begin: "^---\\s*$",
+			relevance: 10
+		},
+		{
+			className: "string",
+			begin: "[\\|>]([1-9]?[+-])?[ ]*\\n( +)[^ ][^\\n]*\\n(\\2[^\\n]+\\n?)*"
+		},
+		{
+			begin: "<%[%=-]?",
+			end: "[%-]?%>",
+			subLanguage: "ruby",
+			excludeBegin: true,
+			excludeEnd: true,
+			relevance: 0
+		},
+		{
+			className: "type",
+			begin: "!\\w+![\\w#;/?:@&=+$,.~*'()[\\]]+"
+		},
+		{
+			className: "type",
+			begin: "!<[\\w#;/?:@&=+$,.~*'()[\\]]+>"
+		},
+		{
+			className: "type",
+			begin: "![\\w#;/?:@&=+$,.~*'()[\\]]+"
+		},
+		{
+			className: "type",
+			begin: "!![\\w#;/?:@&=+$,.~*'()[\\]]+"
+		},
+		{
+			className: "meta",
+			begin: "&" + hljs.UNDERSCORE_IDENT_RE + "$"
+		},
+		{
+			className: "meta",
+			begin: "\\*" + hljs.UNDERSCORE_IDENT_RE + "$"
+		},
+		{
+			className: "bullet",
+			begin: "-(?=[ ]|$)",
+			relevance: 0
+		},
+		hljs.HASH_COMMENT_MODE,
+		{
+			beginKeywords: LITERALS,
+			keywords: { literal: LITERALS }
+		},
+		TIMESTAMP,
+		{
+			className: "number",
+			begin: hljs.C_NUMBER_RE + "\\b",
+			relevance: 0
+		},
+		OBJECT,
+		ARRAY,
+		SINGLE_QUOTE_STRING,
+		STRING
+	];
+	const VALUE_MODES = [...MODES];
+	VALUE_MODES.pop();
+	VALUE_MODES.push(CONTAINER_STRING);
+	VALUE_CONTAINER.contains = VALUE_MODES;
+	return {
+		name: "YAML",
+		case_insensitive: true,
+		aliases: ["yml"],
+		contains: MODES
+	};
+}
 //#endregion
 //#region web/src/markdown.js
+for (const [name, lang] of Object.entries({
+	bash,
+	diff,
+	ini,
+	json,
+	python,
+	yaml
+})) core_default.registerLanguage(name, lang);
+function looksLikeDiff(code) {
+	return /^@@ .* @@/m.test(code) || /^--- /m.test(code) && /^\+\+\+ /m.test(code);
+}
+function highlight(code, info) {
+	const lang = (info || "").trim().split(/\s+/)[0].toLowerCase() || (looksLikeDiff(code) ? "diff" : "");
+	if (!lang || !core_default.getLanguage(lang)) return "";
+	try {
+		return core_default.highlight(code, {
+			language: lang,
+			ignoreIllegals: true
+		}).value;
+	} catch {
+		return "";
+	}
+}
 var md = new MarkdownIt({
 	html: false,
 	linkify: true,
-	breaks: true
+	breaks: true,
+	highlight
 });
 md.linkify.set({
 	fuzzyLink: false,
@@ -8362,6 +11288,132 @@ function renderMarkdown(text) {
 		cache.set(source, out);
 	}
 	return out;
+}
+//#endregion
+//#region web/src/ansi.js
+var BASIC = [
+	"#2b2419",
+	"#e06c55",
+	"#8fbf6f",
+	"#f2c14e",
+	"#6fa8dc",
+	"#c38fd6",
+	"#5fc4bf",
+	"#d8ccb4",
+	"#7a6a52",
+	"#ff8f78",
+	"#b5e08f",
+	"#ffd97a",
+	"#9cc8f0",
+	"#ddb0ee",
+	"#8ee6e0",
+	"#f8f1e3"
+];
+var CUBE = [
+	0,
+	95,
+	135,
+	175,
+	215,
+	255
+];
+function hex(r, g, b) {
+	return "#" + [
+		r,
+		g,
+		b
+	].map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+function color256(n) {
+	if (n < 16) return BASIC[n];
+	if (n < 232) {
+		const i = n - 16;
+		return hex(CUBE[Math.floor(i / 36)], CUBE[Math.floor(i / 6) % 6], CUBE[i % 6]);
+	}
+	const v = 8 + (n - 232) * 10;
+	return hex(v, v, v);
+}
+var byte = (v) => Number.isInteger(v) && v >= 0 && v <= 255;
+function extended(codes, i) {
+	if (codes[i + 1] === 5) return [byte(codes[i + 2]) ? color256(codes[i + 2]) : null, 3];
+	if (codes[i + 1] === 2) {
+		const [r, g, b] = codes.slice(i + 2, i + 5);
+		return [byte(r) && byte(g) && byte(b) ? hex(r, g, b) : null, 5];
+	}
+	return [null, 1];
+}
+function apply(style, params) {
+	const codes = params === "" ? [0] : params.split(/[;:]/).map((p) => p === "" ? 0 : Number(p));
+	const s = { ...style };
+	for (let i = 0; i < codes.length; i++) {
+		const c = codes[i];
+		if (c === 0) Object.keys(s).forEach((k) => delete s[k]);
+		else if (c === 1) s.bold = true;
+		else if (c === 2) s.dim = true;
+		else if (c === 3) s.italic = true;
+		else if (c === 4) s.underline = true;
+		else if (c === 7) s.reverse = true;
+		else if (c === 9) s.strike = true;
+		else if (c === 22) {
+			delete s.bold;
+			delete s.dim;
+		} else if (c === 23) delete s.italic;
+		else if (c === 24) delete s.underline;
+		else if (c === 27) delete s.reverse;
+		else if (c === 29) delete s.strike;
+		else if (c >= 30 && c <= 37) s.fg = BASIC[c - 30];
+		else if (c >= 90 && c <= 97) s.fg = BASIC[c - 90 + 8];
+		else if (c >= 40 && c <= 47) s.bg = BASIC[c - 40];
+		else if (c >= 100 && c <= 107) s.bg = BASIC[c - 100 + 8];
+		else if (c === 39) delete s.fg;
+		else if (c === 49) delete s.bg;
+		else if (c === 38 || c === 48 || c === 58) {
+			const [value, used] = extended(codes, i);
+			if (value && c === 38) s.fg = value;
+			if (value && c === 48) s.bg = value;
+			i += used - 1;
+		}
+	}
+	return s;
+}
+var ESCAPE = /\x1b(?:\[([0-9;:?<=>]*)([@-~])|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[@-Z\\-_]?)/g;
+function parseAnsi(input) {
+	const text = input || "";
+	const runs = [];
+	let style = {};
+	let last = 0;
+	const push = (chunk) => {
+		if (!chunk) return;
+		const prev = runs[runs.length - 1];
+		if (prev && prev.style === style) prev.text += chunk;
+		else runs.push({
+			text: chunk,
+			style
+		});
+	};
+	for (const m of text.matchAll(ESCAPE)) {
+		push(text.slice(last, m.index));
+		last = m.index + m[0].length;
+		if (m[2] === "m" && /^[0-9;:]*$/.test(m[1])) style = apply(style, m[1]);
+	}
+	push(text.slice(last));
+	return runs;
+}
+function runStyle(style) {
+	let fg = style.fg, bg = style.bg;
+	if (style.reverse) [fg, bg] = [bg || "var(--term-bg)", fg || "var(--term-fg)"];
+	const css = {};
+	if (fg) css.color = fg;
+	if (bg) css.background = bg;
+	if (style.bold) css.fontWeight = "bold";
+	if (style.dim) css.opacity = "0.65";
+	if (style.italic) css.fontStyle = "italic";
+	const lines = [style.underline && "underline", style.strike && "line-through"].filter(Boolean);
+	if (lines.length) css.textDecoration = lines.join(" ");
+	return Object.keys(css).length ? css : void 0;
+}
+function trimAnsiEnd(text) {
+	return (text || "").replace(/(?:\s|\x1b\[[0-9;:]*m)+$/, "");
 }
 //#endregion
 //#region web/src/teammates.js
@@ -9240,6 +12292,14 @@ function Overview({ state, refresh, machine, harness, setHarness, unreadFor }) {
     <${Kanban} state=${state} refresh=${refresh} />
   </div>`;
 }
+function terminalRuns(text) {
+	const runs = parseAnsi(trimAnsiEnd(text));
+	if (!runs.some((r) => r.text.trim())) return "(pane is blank)";
+	return runs.map((r) => {
+		const css = runStyle(r.style);
+		return css ? m$1`<span style=${css}>${r.text}</span>` : r.text;
+	});
+}
 function Scope({ user, refresh }) {
 	const [open, setOpen] = d(false);
 	const [data, setData] = d(null);
@@ -9277,7 +12337,7 @@ function Scope({ user, refresh }) {
       <span>${data ? data.pane_label : ""}</span>
       <span style="margin-left:auto">${open ? "live capture · 2s" : "show terminal"}</span>
     </summary>
-    ${data && data.error ? m$1`<div class="err">could not capture pane: ${data.error}</div>` : m$1`<pre ref=${preRef} onScroll=${onScroll}>${data ? (data.text || "").replace(/\s+$/, "") || "(pane is blank)" : "capturing pane…"}</pre>`}
+    ${data && data.error ? m$1`<div class="err">could not capture pane: ${data.error}</div>` : m$1`<pre ref=${preRef} onScroll=${onScroll}>${data ? terminalRuns(data.text) : "capturing pane…"}</pre>`}
     <${TerminalInput} user=${user} />
   </details>`;
 }

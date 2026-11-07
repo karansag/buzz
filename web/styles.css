@@ -16,6 +16,14 @@
     --state-idle: #a89878;
     --state-unknown: #a89878;
     --state-stopped: #e06c55;
+    /* Fenced code in messages. */
+    --code-keyword: #e48a6a;
+    --code-number: #f2c14e;
+    --code-attr: #9cc8f0;
+    --code-meta: #6fa8dc;
+    /* The terminal view's default text and background (also for reverse video). */
+    --term-fg: #e8dcc4;
+    --term-bg: #16120c;
     --mono: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
     --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   }
@@ -281,7 +289,7 @@
   .scope:not([open]) .bar { border-bottom: 0; }
   .scope .bar .t { font-family: var(--serif); font-style: italic; font-size: 15px; color: var(--cream); }
   .scope pre {
-    padding: 14px 16px; font-size: 12px; line-height: 1.45; color: #cfe3b8;
+    padding: 14px 16px; font-size: 12px; line-height: 1.45; color: var(--term-fg);
     height: 380px; overflow: auto; white-space: pre-wrap; word-break: break-word;
     background-image: repeating-linear-gradient(0deg, rgba(255,255,255,.015) 0 1px, transparent 1px 3px);
   }
@@ -485,6 +493,16 @@
   }
   .msg .md pre { padding: 8px 10px; border-radius: 6px; background: rgba(0,0,0,.32); border: 1px solid var(--line); overflow-x: auto; }
   .msg .md pre code { padding: 0; border: 0; background: none; white-space: pre; }
+  /* Fenced code colors (highlight.js classes), in the dashboard's palette. */
+  .md .hljs-comment, .md .hljs-quote { color: var(--cream-dim); font-style: italic; }
+  .md .hljs-keyword, .md .hljs-selector-tag, .md .hljs-built_in, .md .hljs-type { color: var(--code-keyword); }
+  .md .hljs-string, .md .hljs-regexp, .md .hljs-symbol { color: var(--moss); }
+  .md .hljs-number, .md .hljs-literal { color: var(--code-number); }
+  .md .hljs-title, .md .hljs-section, .md .hljs-name { color: var(--honey); }
+  .md .hljs-attr, .md .hljs-attribute, .md .hljs-variable, .md .hljs-template-variable, .md .hljs-params { color: var(--code-attr); }
+  .md .hljs-meta { color: var(--code-meta); }
+  .md .hljs-addition { color: var(--moss); background: rgba(143,191,111,.12); }
+  .md .hljs-deletion { color: var(--alert); background: rgba(224,108,85,.12); }
   .msg .md blockquote { padding-left: .8em; border-left: 2px solid var(--honey-dim); color: var(--cream-dim); }
   .msg .md hr { border: 0; border-top: 1px solid var(--line); margin: .8em 0; }
   .msg .md table { border-collapse: collapse; display: block; overflow-x: auto; }

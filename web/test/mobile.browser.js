@@ -1407,3 +1407,31 @@ test('reply to one agent message by button or right-click', async () => {
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
+
+test('the terminal view shows pane colors and chat colors code and diffs', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  const E = '\x1b';
+  await page.route('**/api/peek/**', r => r.fulfill({ json: { pane_label: 'agent-swarm:0.1', error: null,
+    text: `plain ${E}[31mred${E}[0m ${E}[1;38;5;174mpink${E}[0m <b>not bold</b>\n${E}[39m\n` } }));
+  state.messages.push({ id: 61, sender: 'stoat', recipient: 'owner', ts: state.now, status: 'delivered', attachments: [],
+    content: 'Patch:\n```\n--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-old\n+new\n```\n```python\ndef f(): pass\n```' });
+  try {
+    await page.goto(base + '#/agent/stoat');
+    await page.locator('.scope summary').click();
+    const pre = page.locator('.scope pre');
+    await pre.getByText('red', { exact: true }).waitFor();
+    const color = text => pre.locator('span', { hasText: text }).evaluate(e => {
+      const s = getComputedStyle(e); return [s.color, s.fontWeight];
+    });
+    assert.deepEqual(await color('red'), ['rgb(224, 108, 85)', '400']);
+    assert.deepEqual(await color('pink'), ['rgb(215, 135, 135)', '700']);
+    assert.equal(await pre.locator('b').count(), 0);
+    assert.match(await pre.innerText(), /^plain red pink <b>not bold<\/b>$/);
+    const bubble = page.locator('.thread .msg .md').last();
+    const tint = sel => bubble.locator(sel).first().evaluate(e => getComputedStyle(e).color);
+    assert.equal(await tint('.hljs-addition'), 'rgb(143, 191, 111)');
+    assert.equal(await tint('.hljs-deletion'), 'rgb(224, 108, 85)');
+    assert.equal(await bubble.locator('.hljs-keyword').first().innerText(), 'def');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
