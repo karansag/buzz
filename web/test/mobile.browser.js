@@ -1408,13 +1408,13 @@ test('reply to one agent message by button or right-click', async () => {
   } finally { await page.close(); }
 });
 
-test('the terminal view shows pane colors and chat colors code and diffs', async () => {
+test('the terminal view shows pane colors and chat colors code, diffs and Markdown', async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   const E = '\x1b';
   await page.route('**/api/peek/**', r => r.fulfill({ json: { pane_label: 'agent-swarm:0.1', error: null,
     text: `plain ${E}[31mred${E}[0m ${E}[1;38;5;174mpink${E}[0m <b>not bold</b>\n${E}[39m\n` } }));
   state.messages.push({ id: 61, sender: 'stoat', recipient: 'owner', ts: state.now, status: 'delivered', attachments: [],
-    content: 'Patch:\n```\n--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-old\n+new\n```\n```python\ndef f(): pass\n```' });
+    content: 'Patch:\n```\n--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-old\n+new\n```\n```python\ndef f(): pass\n```\n\nRun `buzz tasks` **now**:\n\n- one\n\n| a | b |\n|---|---|\n| 1 | 2 |' });
   try {
     await page.goto(base + '#/agent/stoat');
     await page.locator('.scope summary').click();
@@ -1432,6 +1432,13 @@ test('the terminal view shows pane colors and chat colors code and diffs', async
     assert.equal(await tint('.hljs-addition'), 'rgb(143, 191, 111)');
     assert.equal(await tint('.hljs-deletion'), 'rgb(224, 108, 85)');
     assert.equal(await bubble.locator('.hljs-keyword').first().innerText(), 'def');
+    // Inline code, bold and table headers are off honey (rgb(242, 169, 59)),
+    // which marks the dashboard's own controls; fenced code keeps its colors.
+    assert.equal(await tint('p > code'), 'rgb(156, 200, 240)');
+    assert.equal(await tint('strong'), 'rgb(255, 247, 230)');
+    assert.equal(await tint('th'), 'rgb(255, 247, 230)');
+    assert.equal(await bubble.locator('li').first().evaluate(e => getComputedStyle(e, '::marker').color), 'rgb(168, 152, 120)');
+    assert.notEqual(await tint('pre code'), 'rgb(156, 200, 240)');
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });

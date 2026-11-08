@@ -21,6 +21,11 @@
     --code-number: #f2c14e;
     --code-attr: #9cc8f0;
     --code-meta: #6fa8dc;
+    /* Markdown in messages: inline code, bold, and table headers stay off
+       honey, which marks the dashboard's own controls. */
+    --md-code: #9cc8f0;
+    --md-strong: #fff7e6;
+    --md-th-bg: rgba(240,230,210,.07);
     /* The terminal view's default text and background (also for reverse video). */
     --term-fg: #e8dcc4;
     --term-bg: #16120c;
@@ -481,6 +486,8 @@
   .msg .md p, .msg .md ul, .msg .md ol, .msg .md pre, .msg .md blockquote, .msg .md table { margin: 0 0 .6em; }
   .msg .md ul, .msg .md ol { padding-left: 1.4em; }
   .msg .md li + li { margin-top: .15em; }
+  .msg .md li::marker { color: var(--cream-dim); }
+  .msg .md strong { color: var(--md-strong); font-weight: 650; }
   .msg .md h1, .msg .md h2, .msg .md h3, .msg .md h4, .msg .md h5, .msg .md h6 {
     font-size: 1em; font-weight: 600; margin: .8em 0 .35em; color: var(--honey);
   }
@@ -489,10 +496,10 @@
   .msg .md a:hover { color: var(--cream); }
   .msg .md code {
     font-family: var(--mono); font-size: .95em; padding: .05em .35em; border-radius: 3px;
-    background: rgba(0,0,0,.28); border: 1px solid var(--line);
+    background: rgba(0,0,0,.28); border: 1px solid var(--line); color: var(--md-code);
   }
   .msg .md pre { padding: 8px 10px; border-radius: 6px; background: rgba(0,0,0,.32); border: 1px solid var(--line); overflow-x: auto; }
-  .msg .md pre code { padding: 0; border: 0; background: none; white-space: pre; }
+  .msg .md pre code { padding: 0; border: 0; background: none; white-space: pre; color: inherit; }
   /* Fenced code colors (highlight.js classes), in the dashboard's palette. */
   .md .hljs-comment, .md .hljs-quote { color: var(--cream-dim); font-style: italic; }
   .md .hljs-keyword, .md .hljs-selector-tag, .md .hljs-built_in, .md .hljs-type { color: var(--code-keyword); }
@@ -507,7 +514,7 @@
   .msg .md hr { border: 0; border-top: 1px solid var(--line); margin: .8em 0; }
   .msg .md table { border-collapse: collapse; display: block; overflow-x: auto; }
   .msg .md th, .msg .md td { border: 1px solid var(--line); padding: 3px 7px; text-align: left; }
-  .msg .md th { color: var(--honey); font-weight: 600; }
+  .msg .md th { color: var(--md-strong); background: var(--md-th-bg); font-weight: 650; }
   .msg.right .bubble { background: rgba(242,169,59,.09); border-color: rgba(242,169,59,.3); }
   .msg.fresh .bubble { animation: pop .35s ease; }
   @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.97); } }
