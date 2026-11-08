@@ -2,6 +2,7 @@ import { OwnerNote } from "./owner-note.js";
 import { QuickSwitcher } from "./quick-switch.js";
 import { useAgentHistory } from "./agent-history.js";
 import { TaskTrash } from "./task-trash.js";
+import { confirmDialog, showNotice } from "./dialogs.js";
 import { TaskStatusActions } from "./task-status.js";
 import { html, render } from "htm/preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
@@ -77,11 +78,11 @@ function CompactButton({ r }) {
   const [busy, setBusy] = useState(false);
   if (!r.pane_alive || !r.compact_command) return null;
   const compact = async () => {
-    if (!confirm(`Compact ${r.user_id}'s context? This types ${r.compact_command} into its pane.`)) return;
+    if (!await confirmDialog(`Compact ${r.user_id}'s context? This types ${r.compact_command} into its pane.`)) return;
     setBusy(true);
     const res = await typeInto(r.user_id, { text: r.compact_command });
     setBusy(false);
-    if (!res.ok) alert(`Could not compact ${r.user_id}: ${await failure(res)}`);
+    if (!res.ok) await showNotice(`Could not compact ${r.user_id}: ${await failure(res)}`);
   };
   return html`<button type="button" class="mini" disabled=${busy}
     title=${`Type ${r.compact_command} into ${r.user_id}'s pane to compact its context`}
@@ -91,14 +92,14 @@ function CompactButton({ r }) {
 // Stopping kills the agent's tmux pane. If its page is open, go to another
 // running agent's page, or the overview if none are left.
 async function stopAgent(r, state, focusUser, refresh) {
-  if (!confirm(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
+  if (!await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
   const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/stop`, { method: "POST" }).catch(() => null);
   if (res?.ok) {
     if (focusUser === r.user_id) {
       const next = state.recipients.find(x => x.pane_alive && x.user_id !== r.user_id);
       location.hash = next ? focusHash(next.user_id) : "#/";
     }
-  } else alert(`Could not stop ${r.user_id}. Check its status before trying again.`);
+  } else await showNotice(`Could not stop ${r.user_id}. Check its status before trying again.`);
   refresh();
 }
 
@@ -107,14 +108,14 @@ async function stopAgent(r, state, focusUser, refresh) {
 // any that are running. Returns the hub's answer, or null if not confirmed.
 async function retireAgents(ids, refresh) {
   const names = ids.length > 6 ? `${ids.slice(0, 6).join(", ")} and ${ids.length - 6} more` : ids.join(", ");
-  if (!ids.length || !confirm(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. Messages and tasks are kept.`)) return null;
+  if (!ids.length || !await confirmDialog(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. Messages and tasks are kept.`)) return null;
   try {
     const response = await fetch("/recipients/retire", { method: "POST", headers: JSONH, body: JSON.stringify({ user_ids: ids }) });
     const body = await response.json().catch(() => null);
-    if (!response.ok || !body?.ok) { alert("Could not retire. Try again."); return null; }
-    if (body.kept_live.length) alert(`Still running, so not retired: ${body.kept_live.join(", ")}`);
+    if (!response.ok || !body?.ok) { await showNotice("Could not retire. Try again."); return null; }
+    if (body.kept_live.length) await showNotice(`Still running, so not retired: ${body.kept_live.join(", ")}`);
     return body;
-  } catch { alert("Could not retire. Try again."); return null; }
+  } catch { await showNotice("Could not retire. Try again."); return null; }
   finally { refresh(); }
 }
 
@@ -133,7 +134,7 @@ function StopAgentButton({ r, refresh }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const stop = async () => {
-    if (busy || !confirm(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
+    if (busy || !await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -196,7 +197,7 @@ function ModelLabel({ r, refresh }) {
       method: "POST", headers: JSONH, body: JSON.stringify({ model: value }),
     });
     setBusy(false);
-    if (!res.ok) { alert(`Could not update the model label for ${r.user_id}.`); return; }
+    if (!res.ok) { await showNotice(`Could not update the model label for ${r.user_id}.`); return; }
     setEditing(false);
     refresh();
   };
@@ -361,7 +362,7 @@ function Resend({ m, refresh }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const resend = async () => {
-    if (!window.confirm(
+    if (!await confirmDialog(
       "The outcome of this message is unknown: the agent may already have it. Send it again as a new message?"
     )) return;
     setBusy(true);
@@ -601,7 +602,7 @@ function TeamManage({ team, members, refresh, onDone }) {
     const body = queen ? { queen, objective: objective.trim() || null } : { queen: null };
     const res = await fetch(`/teams/${team.id}`, { method: "PATCH", headers: JSONH, body: JSON.stringify(body) }).catch(() => null);
     setBusy(false);
-    if (!res?.ok) { alert(`Could not change the queen of ${team.name}.`); return; }
+    if (!res?.ok) { await showNotice(`Could not change the queen of ${team.name}.`); return; }
     onDone();
     refresh();
   };
@@ -623,9 +624,9 @@ function TeamManage({ team, members, refresh, onDone }) {
 
 // Removing a team leaves its agents running, outside any team.
 async function removeTeam(team, refresh) {
-  if (!confirm(`Remove team ${team.name}? Its agents keep running.`)) return;
+  if (!await confirmDialog(`Remove team ${team.name}? Its agents keep running.`)) return;
   const res = await fetch(`/teams/${team.id}`, { method: "DELETE" }).catch(() => null);
-  if (!res?.ok) { alert(`Could not remove ${team.name}.`); return; }
+  if (!res?.ok) { await showNotice(`Could not remove ${team.name}.`); return; }
   refresh();
 }
 

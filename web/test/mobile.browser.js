@@ -21,8 +21,19 @@ async function setup(width, height, touch = true) {
   page.setDefaultTimeout(5000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
+  // The Mac app's web view shows no native JS dialogs, so the page must not use them.
+  page.on('dialog', d => { errors.push(`native ${d.type()}: ${d.message()}`); d.dismiss(); });
   const state = await mock(page);
   return { page, state, errors };
+}
+// Answers the page's own confirm or notice dialog and returns its message.
+async function answer(page, button = 'OK') {
+  const dialog = page.locator('dialog.page-dialog[open]');
+  await dialog.waitFor();
+  const message = await dialog.locator('.page-dialog-message').textContent();
+  await dialog.getByRole('button', { name: button, exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
+  return message;
 }
 async function fit(page) {
   await page.locator('img').evaluateAll(images => Promise.all(images.map(img => {
@@ -568,19 +579,19 @@ test('offline agents show per team and can be retired, there or from their page'
     state.recipients = state.recipients.filter(x => !ids.includes(x.user_id));
     await r.fulfill({ json: { ok: true, retired: ids, kept_live: [], unknown: [] } });
   });
-  const dialogs = [];
-  page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
   try {
     await page.goto(base + '#/');
     const team = page.locator('#agent-sidebar .team-bees-group', { hasText: 'agent-swarm' });
     await team.locator('.team-bees-offline', { hasText: '1 offline: old-ghost' }).waitFor();
     await team.locator('button.retire').click();
+    const question = await answer(page);
     await page.locator('#agent-sidebar .team-bees-offline', { hasText: 'old-ghost' }).waitFor({ state: 'detached' });
     assert.deepEqual(asked, [['old-ghost']]);
-    assert.match(dialogs[0], /Retire old-ghost\? It leaves the dashboard and its team\. Messages and tasks are kept\./);
+    assert.match(question, /Retire old-ghost\? It leaves the dashboard and its team\. Messages and tasks are kept\./);
     // A stopped agent's own page offers retire instead of stop.
     await page.goto(base + '#/agent/stopped-agent');
     await page.locator('.fhead button.retire', { hasText: 'retire agent' }).click();
+    await answer(page);
     await page.waitForFunction(() => location.hash === '#/');
     assert.deepEqual(asked[1], ['stopped-agent']);
     assert.deepEqual(errors, []);
@@ -775,8 +786,6 @@ test('team view: the crown button picks a queen and the ✕ removes the team', a
     state.teams[0].queen = body.queen;
     await route.fulfill({ json: { ok: true, team: state.teams[0] } });
   });
-  const dialogs = [];
-  page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
   try {
     await page.goto(base + '#/');
     const team = page.locator('#agent-sidebar .team-bees-group', { has: page.locator('.team-bees-name', { hasText: /^agent-swarm$/ }) });
@@ -793,9 +802,10 @@ test('team view: the crown button picks a queen and the ✕ removes the team', a
     // Clicking the crown button does not fold the team.
     assert.equal(await team.evaluate(d => d.open), true);
     await team.getByRole('button', { name: 'Remove team agent-swarm' }).click();
+    const question = await answer(page);
     await team.waitFor({ state: 'detached' });
     assert.deepEqual(deletes, [1]);
-    assert.match(dialogs[0], /Remove team agent-swarm\? Its agents keep running\./);
+    assert.match(question, /Remove team agent-swarm\? Its agents keep running\./);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
@@ -809,8 +819,6 @@ test('team view: dragging a chip onto the stop zone stops that agent', async () 
     state.recipients.find(r => r.user_id === user).pane_alive = false;
     await route.fulfill({ json: { ok: true, already_stopped: false } });
   });
-  const dialogs = [];
-  page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
   try {
     await page.goto(base + '#/agent/stoat');
     await page.waitForSelector('#agent-sidebar .team-bees');
@@ -827,9 +835,10 @@ test('team view: dragging a chip onto the stop zone stops that agent', async () 
     const target = await zone.boundingBox();
     await page.mouse.move(target.x + 40, target.y + 10, { steps: 5 });
     await page.mouse.up();
+    const question = await answer(page);
     await page.waitForFunction(() => location.hash !== '#/agent/stoat');
     assert.deepEqual(stops, ['stoat']);
-    assert.match(dialogs[0], /^Stop stoat on /);
+    assert.match(question, /^Stop stoat on /);
     assert.equal(await page.locator('.team-bees-stop').count(), 0);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
@@ -996,18 +1005,16 @@ test('detail stop confirms, handles failure, retries, and keeps history on the p
   try {
     await page.goto(base + '#/agent/stoat');
     const stop = page.locator('.fhead').getByRole('button', { name: 'stop agent', exact: true });
-    page.once('dialog', dialog => dialog.dismiss());
     await stop.click();
+    await answer(page, 'Cancel');
     assert.equal(calls, 0);
-    page.once('dialog', dialog => {
-      assert.match(dialog.message(), /stoat on karans-linux/);
-      return dialog.accept();
-    });
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent.trim()), 'stop agent');
     await stop.click();
+    assert.match(await answer(page), /stoat on karans-linux/);
     await page.getByText('Stop not confirmed. Check the agent\'s status before retrying.', { exact: true }).waitFor();
     assert.equal(await stop.isEnabled(), true);
-    page.once('dialog', dialog => dialog.accept());
     await stop.click();
+    await answer(page);
     await page.getByText('Agent stopped. Messages and tasks are kept.', { exact: true }).waitFor();
     await stop.waitFor({ state: 'detached' });
     assert.equal(calls, 2);
@@ -1017,6 +1024,61 @@ test('detail stop confirms, handles failure, retries, and keeps history on the p
     await page.goto(base + '#/agent/stopped-agent');
     await page.waitForSelector('.fhead');
     assert.equal(await page.locator('.fhead .stop-agent').count(), 0);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('compact and stop ask in the page: Esc cancels, Enter confirms, errors show a notice', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  state.recipients.find(r => r.user_id === 'stoat').compact_command = '/compact';
+  const typed = [];
+  await page.route('**/agents/stoat/terminal', async route => {
+    typed.push(route.request().postDataJSON());
+    if (typed.length === 1) return route.fulfill({ status: 409, json: { detail: { error: 'pane is busy' } } });
+    await route.fulfill({ json: { ok: true } });
+  });
+  const stops = [];
+  await page.route('**/agents/stoat/stop', async route => {
+    stops.push(route.request().method());
+    state.recipients.find(r => r.user_id === 'stoat').pane_alive = false;
+    await route.fulfill({ json: { ok: true, already_stopped: false } });
+  });
+  const focused = () => page.evaluate(() => document.activeElement?.textContent.trim());
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const compact = page.getByRole('button', { name: 'compact', exact: true });
+    const dialog = page.locator('dialog.page-dialog[open]');
+    await compact.click();
+    await dialog.waitFor();
+    assert.equal(await dialog.locator('.page-dialog-message').textContent(),
+      "Compact stoat's context? This types /compact into its pane.");
+    assert.equal(await focused(), 'OK');
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'detached' });
+    assert.deepEqual(typed, []);
+    assert.equal(await focused(), 'compact');
+
+    await compact.click();
+    await dialog.waitFor();
+    await page.keyboard.press('Enter');
+    assert.equal(await answer(page), 'Could not compact stoat: pane is busy');
+    assert.deepEqual(typed, [{ text: '/compact' }]);
+
+    const sent = page.waitForResponse(r => r.url().endsWith('/agents/stoat/terminal'));
+    await compact.click();
+    await answer(page);
+    await sent;
+    await page.getByRole('button', { name: 'compact', exact: true }).waitFor();
+    assert.equal(typed.length, 2);
+    assert.equal(await dialog.count(), 0);
+
+    const stop = page.locator('.fhead').getByRole('button', { name: 'stop agent', exact: true });
+    await stop.click();
+    await dialog.waitFor();
+    assert.match(await dialog.locator('.page-dialog-message').textContent(), /^Stop stoat on karans-linux\? /);
+    await page.keyboard.press('Enter');
+    await page.getByText('Agent stopped. Messages and tasks are kept.', { exact: true }).waitFor();
+    assert.deepEqual(stops, ['POST']);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
@@ -1346,24 +1408,23 @@ test('desktop hive task trash: cancel, failure, success, and card drop', async (
     await page.goto(base+'#/');
     await page.locator('canvas').waitFor();
     if (process.env.TASK339_SCREENSHOT) await page.locator('.hive-panel').screenshot({path:process.env.TASK339_SCREENSHOT});
-    page.once('dialog', d => { assert.match(d.message(), /#74: Long path regression/); d.dismiss(); });
     await drag();
+    assert.match(await answer(page, 'Cancel'), /#74: Long path regression/);
     assert.deepEqual(deleted, []);
     fail = true;
-    page.once('dialog', d => d.accept());
     await drag();
+    await answer(page);
     await page.getByRole('status').filter({hasText:'Task has dependent tasks'}).waitFor();
     assert.equal(state.tasks.some(t => t.id === 74), true);
     fail = false;
-    page.once('dialog', d => d.accept());
     await drag();
+    await answer(page);
     await page.waitForFunction(() => !window.__hive.taskCells().some(c => c.task.id === 74));
     assert.deepEqual(deleted, [74,74]);
     // HTML task-card drops use the same corner and confirmation.
     state.tasks.push({id:74,title:'Long path regression',status:'open',created_at:state.now,depends_on:[]});
     await page.reload();
     await page.locator('canvas').waitFor();
-    page.once('dialog', d => d.accept());
     await page.evaluate(() => {
       const canvas = document.querySelector('canvas');
       const r = document.querySelector('.hive-trash-zone').getBoundingClientRect();
@@ -1372,6 +1433,7 @@ test('desktop hive task trash: cancel, failure, success, and card drop', async (
       canvas.dispatchEvent(new DragEvent('dragover',{bubbles:true,clientX:r.x+10,clientY:r.y+10,dataTransfer}));
       canvas.dispatchEvent(new DragEvent('drop',{bubbles:true,clientX:r.x+10,clientY:r.y+10,dataTransfer}));
     });
+    await answer(page);
     await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent.includes('Trashed task #74'));
     assert.deepEqual(deleted, [74,74,74]);
     assert.deepEqual(errors, []);
