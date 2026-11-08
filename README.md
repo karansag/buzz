@@ -248,6 +248,8 @@ Press **Cmd/Ctrl+K** to search all agents, or **Cmd/Ctrl+Shift+K** to search tea
 
 On an agent page, **Cmd+Shift+L** on Mac or **Ctrl+Shift+L** elsewhere toggles conversation focus, including while typing. Escape exits focus. Plain F is left to browser extensions such as Vimium.
 
+On an agent page, **Cmd+Shift+Y** on Mac or **Ctrl+Shift+Y** elsewhere opens or closes the terminal pane. Chat and terminal drafts are preserved. The shortcut is shown in the terminal heading.
+
 On desktop, **Cmd+B** on Mac or **Ctrl+B** elsewhere toggles the agent sidebar. The shortcut also works from the reply box without moving the cursor.
 
 Teammates are listed at the top of the page; Alt+[ and Alt+] move between

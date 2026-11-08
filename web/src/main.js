@@ -781,6 +781,27 @@ function terminalRuns(text) {
 
 function Scope({ user, refresh }) {
   const [open, setOpen] = useState(false);
+  const scopeRef = useRef(null);
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const shortcut = mac ? "⌘⇧Y" : "Ctrl+Shift+Y";
+  useLayoutEffect(() => {
+    const onKey = e => {
+      const modifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (!modifier || !e.shiftKey || e.altKey || e.code !== "KeyY" || e.isComposing
+          || e.defaultPrevented || document.querySelector("dialog[open], .thread.focused")) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.repeat) return;
+      const scope = scopeRef.current;
+      const next = !scope.open;
+      if (!next && scope.contains(document.activeElement)) scope.querySelector("summary")?.focus();
+      scope.open = next;
+      setOpen(next);
+      if (next) scope.scrollIntoView({ block: "nearest" });
+    };
+    addEventListener("keydown", onKey, true);
+    return () => removeEventListener("keydown", onKey, true);
+  }, [mac]);
   const [data, setData] = useState(null);
   const preRef = useRef(null);
   const pinned = useRef(true);
@@ -808,9 +829,9 @@ function Scope({ user, refresh }) {
     const el = e.target;
     pinned.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
   };
-  return html`<details class="scope" onToggle=${e => setOpen(e.currentTarget.open)}>
-    <summary class="bar">
-      <span class="t">terminal</span>
+  return html`<details class="scope" ref=${scopeRef} onToggle=${e => setOpen(e.currentTarget.open)}>
+    <summary class="bar" title=${`Toggle terminal (${shortcut})`}>
+      <span class="t">terminal</span><kbd>${shortcut}</kbd>
       <span>${data ? data.pane_label : ""}</span>
       <span style="margin-left:auto">${open ? "live capture · 2s" : "show terminal"}</span>
     </summary>

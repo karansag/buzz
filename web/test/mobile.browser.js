@@ -1483,3 +1483,44 @@ test('owner notes edit inline, persist beside live status, and clear', async () 
     assert.deepEqual(errors,[]);
   } finally { await page.close(); }
 });
+
+for (const platform of ['MacIntel','Linux x86_64']) {
+  test(`terminal shortcut toggles the detail pane without losing drafts: ${platform}`, async () => {
+    const {page, errors} = await setup(1440,1000,false);
+    await page.addInitScript(platform => Object.defineProperty(navigator,'platform',{value:platform}),platform);
+    const modifier = platform === 'MacIntel' ? 'Meta' : 'Control';
+    try {
+      await page.goto(base+'#/agent/stoat');
+      const scope = page.locator('.scope');
+      assert.equal(await scope.getAttribute('open'),null);
+      const composer = page.locator('.thread .composer textarea').first();
+      await composer.fill('keep this chat draft');
+      await composer.press(`${modifier}+Shift+y`);
+      await page.waitForFunction(() => document.querySelector('.scope').open);
+      await scope.locator('pre').filter({hasText:'Reviewing mobile layouts'}).waitFor();
+      assert.equal(await composer.inputValue(),'keep this chat draft');
+      const input = scope.getByRole('textbox');
+      await input.fill('/model');
+      await input.press(`${modifier}+Shift+y`);
+      await page.waitForFunction(() => !document.querySelector('.scope').open);
+      assert.equal(await scope.locator('summary').evaluate(e => e === document.activeElement),true);
+      await page.keyboard.press(`${modifier}+Shift+y`);
+      assert.equal(await input.inputValue(),'/model');
+      // Bare typing, wrong modifiers, and key repeat never toggle it.
+      await page.keyboard.press('y');
+      await page.keyboard.press(`${modifier}+y`);
+      await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyY',shiftKey:true,repeat:true,ctrlKey:navigator.platform!=='MacIntel',metaKey:navigator.platform==='MacIntel'})));
+      assert.equal(await scope.evaluate(e => e.open),true);
+      await page.keyboard.press(`${modifier}+k`);
+      await page.keyboard.press(`${modifier}+Shift+y`);
+      assert.equal(await scope.evaluate(e => e.open),true);
+      await page.keyboard.press('Escape');
+      await page.keyboard.press(`${modifier}+Shift+y`);
+      await page.waitForFunction(() => !document.querySelector('.scope').open);
+      await scope.locator('summary').click();
+      await page.keyboard.press(`${modifier}+Shift+y`);
+      await page.waitForFunction(() => !document.querySelector('.scope').open);
+      assert.deepEqual(errors,[]);
+    } finally { await page.close(); }
+  });
+}
