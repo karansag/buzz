@@ -191,3 +191,33 @@ def test_owner_reminder_history_survives_database_reopen(tmp_path):
     assert not db.owner_reply_reminder_due(conn, 'otter', since=900, now=1100, idle_seconds=1500)
     assert db.owner_reply_reminder_due(conn, 'otter', since=900, now=2500, idle_seconds=1500)
     conn.close()
+
+
+def test_reply_migration_legacy_preview_and_missing_original(tmp_path):
+    path = tmp_path / 'replies.sqlite'
+    conn = db.connect(path)
+    original = db.record_message(conn, 'stoat', 'owner', None, 'Original message', 'delivered')
+    legacy_text = f'Old answer\n\n(reply to message {original}; `buzz messages --id {original}` shows it)'
+    legacy = db.record_message(conn, 'owner', 'stoat', None, legacy_text, 'delivered')
+    conn.execute('ALTER TABLE messages DROP COLUMN reply_to')
+    conn.commit()
+    conn.close()
+    conn = db.connect(path)
+    old = db.get_message(conn, legacy)
+    assert old['reply_to'] == original
+    assert old['reply_preview']['content'] == 'Original message'
+    assert old['content'] == 'Old answer'
+    assert conn.execute('SELECT reply_to FROM messages WHERE id=?', (legacy,)).fetchone()[0] == original
+    untouched = db.record_message(conn, 'owner', 'stoat', None, legacy_text, 'delivered')
+    reply = db.record_message(conn, 'owner', 'stoat', None, 'New answer', 'delivered', reply_to=original)
+    conn.close()
+    conn = db.connect(path)
+    assert db.get_message(conn, reply)['reply_to'] == original
+    assert db.get_message(conn, untouched)['reply_to'] is None
+    assert db.get_message(conn, untouched)['content'] == legacy_text
+    conn.execute('DELETE FROM messages WHERE id=?', (original,))
+    conn.commit()
+    retained = db.get_message(conn, reply)
+    assert retained['reply_to'] == original
+    assert retained['reply_preview'] is None
+    conn.close()

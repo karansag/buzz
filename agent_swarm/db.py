@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import wraps
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -306,6 +307,17 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
     if "attachments" not in task_cols:
         conn.execute("ALTER TABLE tasks ADD COLUMN attachments TEXT")
     msg_cols = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+    if "reply_to" not in msg_cols:
+        # Convert the old composer suffix once, atomically with the column.
+        with conn:
+            conn.execute("SAVEPOINT reply_backfill")
+            conn.execute("ALTER TABLE messages ADD COLUMN reply_to INTEGER")
+            suffix = re.compile(r'(?:^|\n\n)\(reply to message ([1-9]\d*); `(?:buzz|agent-swarm) messages --id \1` shows it\)$')
+            for row in conn.execute("SELECT id, content FROM messages").fetchall():
+                if match := suffix.search(row["content"]):
+                    conn.execute("UPDATE messages SET reply_to=?, content=? WHERE id=?",
+                                 (int(match[1]), row["content"][:match.start()], row["id"]))
+            conn.execute("RELEASE SAVEPOINT reply_backfill")
     if "attachments" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN attachments TEXT")
     if "status" not in msg_cols:
@@ -879,6 +891,7 @@ def record_message(
     delivery_error: str | None = None,
     attachments: list[str] | None = None,
     client_id: str | None = None,
+    reply_to: int | None = None,
 ) -> int:
     """Store a message. `status` is one of MESSAGE_STATUSES.
 
@@ -903,7 +916,7 @@ def record_message(
             raise DuplicateMessage(_message(row))
     cur = conn.execute(
         "INSERT INTO messages(sender, recipient, context, content, ts, delivered, delivery_error, "
-        "attachments, status, client_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "attachments, status, client_id, reply_to) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         (
             sender,
             recipient,
@@ -915,6 +928,7 @@ def record_message(
             json.dumps(attachments) if attachments else None,
             status,
             client_id,
+            reply_to,
         ),
     )
     conn.commit()
@@ -924,14 +938,14 @@ def record_message(
 @_serialized
 def get_message(conn: sqlite3.Connection, message_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM messages WHERE id=?", (message_id,)).fetchone()
-    return _message(row) if row else None
+    return _messages(conn, [row])[0] if row else None
 
 
 def message_by_client_id(conn: sqlite3.Connection, sender: str, client_id: str) -> dict | None:
     row = conn.execute(
         "SELECT * FROM messages WHERE sender=? AND client_id=?", (sender, client_id)
     ).fetchone()
-    return _message(row) if row else None
+    return _messages(conn, [row])[0] if row else None
 
 
 @_serialized
@@ -1013,7 +1027,7 @@ def fetch_messages(
         rows = conn.execute(
             "SELECT * FROM messages ORDER BY ts DESC LIMIT ?", (limit,)
         ).fetchall()
-    return [_message(r) for r in rows]
+    return _messages(conn, rows)
 
 
 @_serialized
@@ -1033,7 +1047,7 @@ def agent_messages_page(conn: sqlite3.Connection, user: str, limit: int = 300,
         f"SELECT * FROM messages WHERE {' AND '.join(clauses)} ORDER BY id {order} LIMIT ?",
         (*args, limit + 1),
     ).fetchall()
-    return {"messages": [_message(r) for r in rows[:limit]], "has_more": len(rows) > limit}
+    return {"messages": _messages(conn, rows[:limit]), "has_more": len(rows) > limit}
 
 
 @_serialized
@@ -1046,7 +1060,7 @@ def fetch_messages_after(
         "SELECT * FROM messages WHERE id > ? AND ts >= ? ORDER BY id ASC LIMIT ?",
         (after_id, since_ts, limit),
     ).fetchall()
-    return [_message(r) for r in rows]
+    return _messages(conn, rows)
 
 
 @_serialized
@@ -1083,6 +1097,24 @@ def attachment_last_used(conn: sqlite3.Connection) -> dict[str, float]:
     for row in conn.execute("SELECT DISTINCT j.value FROM tasks t, json_each(t.attachments) j"):
         used[row[0]] = time.time()
     return used
+
+
+def _messages(conn: sqlite3.Connection, rows: list[sqlite3.Row]) -> list[dict]:
+    """Attach reply previews in one query per page, including off-page parents."""
+    messages = [_message(row) for row in rows]
+    ids = {m["reply_to"] for m in messages if m.get("reply_to") is not None}
+    originals = {}
+    if ids:
+        marks = ",".join("?" for _ in ids)
+        originals = {r["id"]: r for r in conn.execute(
+            f"SELECT id, sender, content FROM messages WHERE id IN ({marks})", tuple(ids)
+        )}
+    for message in messages:
+        parent = originals.get(message.get("reply_to"))
+        message["reply_preview"] = ({"id": parent["id"], "sender": parent["sender"],
+                                     "content": " ".join(parent["content"].split())[:100]}
+                                    if parent else None)
+    return messages
 
 
 def _message(row: sqlite3.Row) -> dict:

@@ -38,6 +38,7 @@ export function unansweredOutcome(err) {
 // a new message and gets a new id.
 export function draftClientId(draft, retryOf, makeId) {
   const same = retryOf && retryOf.text === draft.text && retryOf.context === draft.context
+    && (retryOf.reply_to ?? null) === (draft.reply_to ?? null)
     && JSON.stringify(retryOf.images || []) === JSON.stringify(draft.images || []);
   return same ? retryOf.clientId : makeId();
 }

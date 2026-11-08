@@ -61,6 +61,12 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 	}
 })();
 //#endregion
+//#region web/src/replies.js
+function replySnippet(message, limit = 100) {
+	const text = (message.content || "").replace(/\s+/g, " ").trim() || "(files)";
+	return text.length > limit ? `${text.slice(0, limit)}…` : text;
+}
+//#endregion
 //#region node_modules/preact/dist/preact.module.js
 var n$1;
 var l$1;
@@ -500,2417 +506,6 @@ function C(n, t) {
 }
 function D(n, t) {
 	return "function" == typeof t ? t(n) : t;
-}
-//#endregion
-//#region web/src/machines.js
-var COLORS = [
-	"#80bfff",
-	"#c4a0f5",
-	"#91a4ee",
-	"#ed9bc4",
-	"#adc87f",
-	"#edba83",
-	"#65d5c0",
-	"#d2bd79"
-];
-var machineName = (name) => name || "Unknown machine";
-function machineColor(name) {
-	let hash = 2166136261;
-	for (const c of machineName(name)) hash = Math.imul(hash ^ c.codePointAt(0), 16777619);
-	return COLORS[(hash >>> 0) % COLORS.length];
-}
-function machineList(nodes = [], recipients = []) {
-	const all = new Map(nodes.map((n) => [machineName(n.name), {
-		...n,
-		name: machineName(n.name)
-	}]));
-	for (const r of recipients) {
-		const name = machineName(r.node);
-		if (!all.has(name)) all.set(name, {
-			name,
-			connected: false,
-			missing: true
-		});
-	}
-	return [...all.values()].map((n) => {
-		const agents = recipients.filter((r) => machineName(r.node) === n.name);
-		return {
-			...n,
-			total: agents.length,
-			live: agents.filter((r) => r.pane_alive).length
-		};
-	}).sort((a, b) => Number(!!b.local) - Number(!!a.local) || a.name.localeCompare(b.name));
-}
-//#endregion
-//#region web/src/shared.js
-var POLL_MS = 2e3;
-var PEEK_MS = 2e3;
-var JSONH = { "content-type": "application/json" };
-var FLAVOR_ICON = {
-	claude: "✳",
-	codex: "◇",
-	pi: "π",
-	hermes: "☿",
-	generic: "▪"
-};
-var HARNESSES = Object.freeze({
-	claude: {
-		key: "claude",
-		label: "Claude",
-		color: "#d8905f",
-		mark: "✳"
-	},
-	codex: {
-		key: "codex",
-		label: "Codex",
-		color: "#56b4e9",
-		mark: "◇"
-	},
-	pi: {
-		key: "pi",
-		label: "Pi",
-		color: "#3cb44b",
-		mark: "π"
-	},
-	hermes: {
-		key: "hermes",
-		label: "Hermes",
-		color: "#e5c14f",
-		mark: "☿"
-	},
-	generic: {
-		key: "generic",
-		label: "Generic",
-		color: "#9aa1a8",
-		mark: "▪"
-	}
-});
-function harnessStyle(flavor) {
-	return HARNESSES[String(flavor || "generic").toLowerCase()] || HARNESSES.generic;
-}
-function harnessChoices(recipients = []) {
-	const generic = recipients.some((r) => r.pane_alive && harnessStyle(r.flavor).key === "generic");
-	return Object.values(HARNESSES).filter((h) => h.key !== "generic" || generic);
-}
-function agentShown(r, machine, harness) {
-	return (machine === null || machineName(r.node) === machine) && (harness === null || harnessStyle(r.flavor).key === harness);
-}
-function HarnessFilter({ recipients, harness, setHarness }) {
-	return m$1`<span class="harness-filter" role="group" aria-label="Filter agents by harness">
-    ${harnessChoices(recipients).map((h) => m$1`<button key=${h.key} type="button" class="harness-swatch"
-      style=${`--harness:${h.color}`} aria-pressed=${harness === h.key} aria-label=${`Only ${h.label} agents`}
-      title=${harness === h.key ? `Showing only ${h.label} agents. Click to show all.` : `Show only ${h.label} agents`}
-      onClick=${() => setHarness(harness === h.key ? null : h.key)}>${h.mark}</button>`)}
-  </span>`;
-}
-var WORKING_HALO = {
-	color: "#9be879",
-	fill: "rgba(155,232,121,.14)"
-};
-var STATE = {
-	working: {
-		cls: "working",
-		word: "working",
-		color: "var(--state-working)"
-	},
-	needs_attention: {
-		cls: "attention",
-		word: "needs attention",
-		color: "var(--state-attention)"
-	},
-	idle: {
-		cls: "idle",
-		word: "idle",
-		color: "var(--state-idle)"
-	},
-	unknown: {
-		cls: "unknown",
-		word: "unknown",
-		color: "var(--state-unknown)"
-	},
-	stopped: {
-		cls: "stopped",
-		word: "stopped",
-		color: "var(--state-stopped)"
-	}
-};
-function agentStatus(r) {
-	if (!r.pane_alive) return "stopped";
-	const s = r.activity && r.activity.status;
-	if (s && s !== "unknown") return s;
-	return "unknown";
-}
-var ANIMAL_EMOJI = {
-	otter: "🦦",
-	badger: "🦡",
-	panda: "🐼",
-	raccoon: "🦝",
-	hedgehog: "🦔",
-	viper: "🐍",
-	gecko: "🦎",
-	newt: "🦎",
-	salamander: "🦎",
-	capybara: "🦫",
-	manatee: "🦭",
-	lemur: "🐒",
-	kestrel: "🦅",
-	magpie: "🐦‍⬛",
-	ibis: "🦩",
-	heron: "🪿",
-	puffin: "🐧",
-	narwhal: "🐳",
-	axolotl: "🐟",
-	quokka: "🐨",
-	wombat: "🐨",
-	dormouse: "🐁",
-	shrew: "🐁",
-	fennec: "🦊",
-	mongoose: "🦦",
-	stoat: "🦦",
-	marten: "🦦",
-	ferret: "🦦",
-	ocelot: "🐆",
-	pangolin: "🦎",
-	tapir: "🐗",
-	civet: "🐱"
-};
-function hue(name) {
-	let h = 0;
-	for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
-	return h;
-}
-function rel(ts, now) {
-	const d = Math.max(0, now - ts);
-	if (d < 50) return "just now";
-	if (d < 3600) return `${Math.round(d / 60)}m ago`;
-	if (d < 86400) return `${Math.round(d / 3600)}h ago`;
-	return `${Math.round(d / 86400)}d ago`;
-}
-var SUMMARY_SOURCE = {
-	owner: "noted by you",
-	agent: "said by the agent",
-	title: "from its pane title"
-};
-function pairKey(a, b) {
-	return [a, b].sort().join(" ");
-}
-var disp = (u) => u === "owner" ? m$1`<span class="owner-name">owner</span>` : u;
-var focusHash = (u) => `#/agent/${encodeURIComponent(u)}`;
-async function patchTask(id, patch) {
-	try {
-		const r = await fetch(`/tasks/${id}`, {
-			method: "PATCH",
-			headers: JSONH,
-			body: JSON.stringify(patch)
-		});
-		if (r.ok) return { ok: true };
-		return {
-			ok: false,
-			error: (await r.json().catch(() => null))?.detail?.error || `request failed (${r.status})`
-		};
-	} catch {
-		return {
-			ok: false,
-			error: "Update not confirmed. Refresh the board before retrying."
-		};
-	}
-}
-function Avatar({ name, size }) {
-	const base = name.replace(/-\d+$/, "");
-	const emoji = ANIMAL_EMOJI[base];
-	return m$1`<div class=${`hex ${size || ""}`} style=${`--hue: hsl(${hue(name)} 42% 58%)`}>
-    ${emoji || m$1`<span class="mono2">${base.slice(0, 2)}</span>`}
-  </div>`;
-}
-function MachineBadge({ node }) {
-	return m$1`<span class="machine-badge" style=${`--machine:${machineColor(node)}`} title=${`Machine: ${machineName(node)}`}><span class="machine-mark" aria-hidden="true"></span>${machineName(node)}</span>`;
-}
-function Bee({ node, flavor, size = "", working = false }) {
-	const harness = harnessStyle(flavor);
-	return m$1`<svg class=${`agent-bee ${size}`} style=${`--machine:${machineColor(node)}`} viewBox="0 0 56 42" role="img" aria-label=${`${machineName(node)} machine, ${harness.label} harness${working ? ", working" : ""}`}>
-    <title>${harness.label} harness: ${harness.mark} and stripes · ${machineName(node)}: body and border</title>
-    ${working && m$1`<g class="bee-working-halo" style=${`--working:${WORKING_HALO.color}`}>
-      <circle cx="27" cy="21" r="28" fill=${WORKING_HALO.fill} stroke=${WORKING_HALO.color} stroke-width="2.5" />
-    </g>`}
-    <ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(-25 23 10)" />
-    <ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(25 23 32)" />
-    <ellipse cx="26" cy="21" rx="19" ry="10" fill=${machineColor(node)} />
-    <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7" />
-    <path d="M19 12v18M29 11v20" stroke=${harness.color} stroke-width="4" />
-    <circle cx="44" cy="21" r="6" fill="#16120c" /><circle cx="46" cy="19" r="1.3" fill="#f0e6d2" />
-  </svg>`;
-}
-//#endregion
-//#region web/src/owner-note.js
-function OwnerNote({ agent, refresh }) {
-	const [editing, setEditing] = d(false);
-	const [text, setText] = d("");
-	const [busy, setBusy] = d(false);
-	const [error, setError] = d("");
-	const save = async (value) => {
-		setBusy(true);
-		setError("");
-		try {
-			const response = await fetch(`/agents/${encodeURIComponent(agent.user_id)}/owner-note`, {
-				method: "PUT",
-				headers: JSONH,
-				body: JSON.stringify({ text: value })
-			});
-			if (!response.ok) {
-				const body = await response.json();
-				throw new Error(body.detail?.error || "Could not save note.");
-			}
-			setEditing(false);
-			refresh?.();
-		} catch (err) {
-			setError(err.message);
-		} finally {
-			setBusy(false);
-		}
-	};
-	return m$1`<div class="owner-note" aria-label=${`Owner note for ${agent.user_id}`}>
-    ${editing ? m$1`<form onSubmit=${(e) => {
-		e.preventDefault();
-		save(text);
-	}}>
-      <label>Your note<textarea aria-label=${`Your note for ${agent.user_id}`} maxLength="1000" rows="2"
-        value=${text} disabled=${busy} onInput=${(e) => setText(e.target.value)} /></label>
-      <div class="owner-note-actions"><button type="submit" disabled=${busy}>Save note</button>
-        <button type="button" disabled=${busy} onClick=${() => {
-		setEditing(false);
-		setError("");
-	}}>Cancel</button>
-        ${agent.owner_note && m$1`<button type="button" disabled=${busy} onClick=${() => save("")}>Clear note</button>`}</div>
-    </form>` : m$1`<button type="button" class="owner-note-edit" aria-label=${`${agent.owner_note ? "Edit" : "Add"} owner note for ${agent.user_id}`}
-      onClick=${() => {
-		setText(agent.owner_note || "");
-		setError("");
-		setEditing(true);
-	}}>
-      ${agent.owner_note ? `📌 you: ${agent.owner_note}` : "+ your note"}</button>`}
-    ${error && m$1`<span role="alert">${error}</span>`}
-  </div>`;
-}
-//#endregion
-//#region web/src/quick-switch.js
-function switchOptions(state, mode, query) {
-	if (!state) return [];
-	const teams = state.teams || [];
-	const agents = state.recipients;
-	let options;
-	if (mode === "teams") options = teams.map((team) => {
-		const members = agents.filter((a) => a.team_id === team.id).sort((a, b) => Number(b.pane_alive) - Number(a.pane_alive) || Number(b.user_id === team.queen) - Number(a.user_id === team.queen) || a.user_id.localeCompare(b.user_id));
-		const target = members[0];
-		return {
-			id: `team-${team.id}`,
-			name: team.name,
-			target,
-			detail: target ? `${members.filter((a) => a.pane_alive).length} live · opens ${target.user_id}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
-			search: [team.name, ...members.map((a) => a.user_id)].join(" ")
-		};
-	});
-	else options = agents.map((a) => {
-		const team = teams.find((t) => t.id === a.team_id)?.name || "no team";
-		return {
-			id: `agent-${a.user_id}`,
-			name: a.user_id,
-			target: a,
-			detail: `${team} · ${a.node || "unknown machine"} · ${a.pane_alive ? (a.activity?.status || "online").replaceAll("_", " ") : "offline"}`,
-			search: [
-				a.user_id,
-				team,
-				a.node,
-				a.flavor,
-				a.model
-			].filter(Boolean).join(" ")
-		};
-	});
-	const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-	return options.filter((o) => words.every((w) => o.search.toLowerCase().includes(w))).sort((a, b) => Number(!a.target) - Number(!b.target) || Number(!a.target?.pane_alive) - Number(!b.target?.pane_alive) || a.name.localeCompare(b.name));
-}
-function QuickSwitcher({ state, navigate }) {
-	const [mode, setMode] = d(null);
-	const [query, setQuery] = d("");
-	const [selected, setSelected] = d(null);
-	const dialog = A(null), input = A(null), previous = A(null);
-	const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-	const shortcut = mac ? "⌘" : "Ctrl+";
-	const open = (next) => {
-		if (!state) return;
-		if (!dialog.current?.open) previous.current = document.activeElement;
-		setQuery("");
-		setSelected(null);
-		setMode(next);
-	};
-	const close = () => {
-		dialog.current?.close();
-		setMode(null);
-	};
-	_(() => {
-		const onKey = (e) => {
-			const platformModifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-			if (e.isComposing || e.altKey || !platformModifier || e.code !== "KeyK") return;
-			e.preventDefault();
-			e.stopImmediatePropagation();
-			if (!e.repeat) open(e.shiftKey ? "teams" : "agents");
-		};
-		addEventListener("keydown", onKey, true);
-		return () => removeEventListener("keydown", onKey, true);
-	});
-	_(() => {
-		if (mode) {
-			if (!dialog.current.open) dialog.current.showModal();
-			input.current?.focus();
-		}
-	}, [mode]);
-	const options = switchOptions(state, mode, query);
-	const enabled = options.filter((o) => o.target);
-	const current = enabled.find((o) => o.id === selected) || enabled[0];
-	_(() => {
-		if (mode && current) document.getElementById(`switch-${current.id}`)?.scrollIntoView({ block: "nearest" });
-	}, [mode, current?.id]);
-	const choose = (option) => {
-		if (!option?.target) return;
-		close();
-		navigate(option.target.user_id, previous.current);
-	};
-	const onKey = (e) => {
-		e.stopPropagation();
-		if (e.isComposing) return;
-		if (e.key === "Escape") {
-			e.preventDefault();
-			close();
-		}
-		if (["ArrowDown", "ArrowUp"].includes(e.key)) {
-			e.preventDefault();
-			if (enabled.length) {
-				const index = enabled.findIndex((o) => o.id === current?.id);
-				setSelected(enabled[(index + (e.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length].id);
-			}
-		}
-		if (e.key === "Enter" && e.target === input.current) {
-			e.preventDefault();
-			choose(current);
-		}
-	};
-	return m$1`<div class="quick-switch-launchers">
-    <button type="button" class="mini" disabled=${!state} onClick=${() => open("teams")} title=${`Switch teams (${shortcut}Shift+K)`}>teams <kbd>${shortcut}⇧K</kbd></button>
-    <button type="button" class="mini" disabled=${!state} onClick=${() => open("agents")} title=${`Switch agents (${shortcut}K)`}>agents <kbd>${shortcut}K</kbd></button>
-    <dialog class="quick-switch" ref=${dialog} aria-labelledby="switch-title" onKeyDown=${onKey}
-      onCancel=${(e) => {
-		e.preventDefault();
-		close();
-	}}>
-      <div class="quick-switch-head"><h2 id="switch-title">${mode === "teams" ? "Switch team" : "Switch agent"}</h2>
-        <button type="button" class="mini" onClick=${close}>close</button></div>
-      <input ref=${input} type="search" aria-label=${mode === "teams" ? "Find team" : "Find agent"}
-        role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="switch-results"
-        aria-activedescendant=${current ? `switch-${current.id}` : void 0}
-        placeholder=${mode === "teams" ? "Search teams…" : "Search name, team, machine, or harness…"}
-        value=${query} onInput=${(e) => {
-		setQuery(e.target.value);
-		setSelected(null);
-	}} />
-      <div id="switch-results" role="listbox" aria-label="Matches" class="quick-switch-results">
-        ${options.map((o) => m$1`<div key=${o.id} id=${`switch-${o.id}`} role="option" aria-selected=${current?.id === o.id}
-          aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
-          onClick=${() => choose(o)}>
-          ${o.target && m$1`<${Bee} node=${o.target.node} flavor=${o.target.flavor} size="small" working=${o.target.activity?.status === "working"} />`}
-          <span><b>${o.name}</b><small>${o.detail}</small></span>
-        </div>`)}
-        ${!options.length && m$1`<p class="empty">No matches.</p>`}
-      </div>
-      <p class="quick-switch-help">↑ ↓ select · Enter open · Esc close</p>
-    </dialog>
-  </div>`;
-}
-//#endregion
-//#region web/src/agent-history.js
-function useAgentHistory(user) {
-	const [history, setHistory] = d({
-		messages: [],
-		loaded: false,
-		more: false,
-		busy: false,
-		error: ""
-	});
-	const older = A(() => {});
-	h(() => {
-		let active = true, polling = false, loadingOlder = false;
-		let newest = null, oldest = null;
-		const abort = new AbortController();
-		const read = async (query) => {
-			const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages?${query}`, { signal: abort.signal });
-			if (!response.ok) throw Error("History unavailable");
-			const page = await response.json();
-			if (!Array.isArray(page.messages) || typeof page.has_more !== "boolean") throw Error("Invalid history");
-			return page;
-		};
-		const merge = (page, initial = false, isOlder = false) => {
-			if (!active) return;
-			const ids = page.messages.map((m) => m.id);
-			if (ids.length) {
-				newest = Math.max(newest ?? 0, ...ids);
-				oldest = Math.min(oldest ?? Infinity, ...ids);
-			} else if (initial) newest = 0;
-			setHistory((prev) => ({
-				...prev,
-				loaded: true,
-				error: "",
-				more: initial || isOlder ? page.has_more : prev.more,
-				messages: [...new Map([...prev.messages, ...page.messages].map((m) => [m.id, m])).values()]
-			}));
-		};
-		const poll = async () => {
-			if (polling) return;
-			polling = true;
-			try {
-				const initial = newest === null;
-				let page = await read(initial ? "limit=300" : `after=${newest}&limit=300`);
-				merge(page, initial);
-				while (active && !initial && page.has_more) {
-					page = await read(`after=${newest}&limit=300`);
-					merge(page);
-				}
-			} catch {
-				if (active) setHistory((prev) => ({
-					...prev,
-					error: "Could not load conversation history. Retrying…"
-				}));
-			} finally {
-				polling = false;
-			}
-		};
-		older.current = async () => {
-			if (loadingOlder || oldest === null) return;
-			loadingOlder = true;
-			setHistory((prev) => ({
-				...prev,
-				busy: true
-			}));
-			try {
-				merge(await read(`before=${oldest}&limit=300`), false, true);
-			} catch {
-				if (active) setHistory((prev) => ({
-					...prev,
-					error: "Could not load older messages. Please try again."
-				}));
-			} finally {
-				loadingOlder = false;
-				if (active) setHistory((prev) => ({
-					...prev,
-					busy: false
-				}));
-			}
-		};
-		poll();
-		const timer = setInterval(poll, POLL_MS);
-		return () => {
-			active = false;
-			abort.abort();
-			clearInterval(timer);
-		};
-	}, [user]);
-	return {
-		...history,
-		loadOlder: () => older.current()
-	};
-}
-//#endregion
-//#region web/src/task-trash.js
-async function trashTask(task) {
-	if (!confirm(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files will remain.`)) return false;
-	const response = await fetch(`/tasks/${task.id}`, { method: "DELETE" });
-	const body = await response.json();
-	if (!response.ok) throw new Error(body.detail?.error || "Could not trash task.");
-	return true;
-}
-function TaskTrash({ task, refresh, onDeleted }) {
-	const [busy, setBusy] = d(false);
-	const [error, setError] = d("");
-	const remove = async () => {
-		setBusy(true);
-		setError("");
-		try {
-			if (!await trashTask(task)) return;
-			onDeleted?.();
-			refresh();
-		} catch (err) {
-			setError(`${err.message} Refresh to check the task before retrying.`);
-		} finally {
-			setBusy(false);
-		}
-	};
-	return m$1`<span class="task-trash"><button type="button" class="mini danger" disabled=${busy}
-    title=${`Permanently trash task #${task.id}`} onClick=${remove}>${busy ? "Trashing…" : "⌫ Trash"}</button>
-    ${error && m$1`<span role="alert" class="tnote-err">${error}</span>`}</span>`;
-}
-//#endregion
-//#region web/src/task-status.js
-function TaskStatusActions({ task, refresh }) {
-	const [editing, setEditing] = d(false);
-	const [note, setNote] = d(task.note || "");
-	const [busy, setBusy] = d(false);
-	const [error, setError] = d("");
-	const change = async (patch) => {
-		setBusy(true);
-		setError("");
-		try {
-			const result = await patchTask(task.id, patch);
-			if (!result.ok) {
-				setError(result.error);
-				return;
-			}
-			setEditing(false);
-			await refresh();
-		} catch {
-			setError("Could not update the task. Try again.");
-		} finally {
-			setBusy(false);
-		}
-	};
-	const complete = () => {
-		const verification = (editing ? note : task.note || "").trim();
-		if (!verification) {
-			setEditing(true);
-			return;
-		}
-		change({
-			status: "done",
-			note: verification
-		});
-	};
-	return m$1`<div class=${`task-status-actions ${editing ? "editing" : ""}`}>
-    ${task.status === "done" ? m$1`<button type="button" class="mini" disabled=${busy}
-          onClick=${() => change({ status: task.assignee || task.team_id ? "picked_up" : "open" })}>Reopen</button>` : m$1`${task.status === "open" && m$1`<button type="button" class="mini"
-          disabled=${busy || !(task.assignee || task.team_id)}
-          title=${task.assignee || task.team_id ? "Start work on this task" : "Assign this task first"}
-          onClick=${() => change({ status: "picked_up" })}>Start work</button>`}
-        <button type="button" class="mini" disabled=${busy || editing && !note.trim()}
-          onClick=${complete}>${busy ? "Updating…" : "Complete task"}</button>`}
-    ${editing && task.status !== "done" && m$1`<div class="task-verification">
-      <label>Verification note <span aria-hidden="true">*</span>
-        <textarea rows="3" value=${note} autofocus
-          placeholder="How to use or verify the result, and where to look."
-          onInput=${(e) => setNote(e.target.value)}></textarea>
-      </label>
-      <button type="button" class="mini" disabled=${busy}
-        onClick=${() => {
-		setEditing(false);
-		setError("");
-	}}>Cancel</button>
-    </div>`}
-    ${error && m$1`<span class="task-action-error" role="alert">${error}</span>`}
-  </div>`;
-}
-//#endregion
-//#region web/src/outcome.js
-function structured(body) {
-	return body !== null && typeof body === "object" && !Array.isArray(body);
-}
-function deliveryOutcome(httpOk, body) {
-	if (!structured(body)) return {
-		status: "uncertain",
-		reason: "the server's answer could not be read"
-	};
-	const b = body;
-	if (b.status === "delivered") return {
-		status: "delivered",
-		reason: null
-	};
-	if (b.status === "unknown") return {
-		status: "unknown",
-		reason: b.delivery_error || "result lost"
-	};
-	if (b.status === "failed") return {
-		status: "failed",
-		reason: b.delivery_error || "delivery failed"
-	};
-	const detail = structured(b.detail) ? b.detail : {};
-	if (detail.status === "unknown") return {
-		status: "unknown",
-		reason: detail.error || detail.detail || "result lost"
-	};
-	if (!httpOk && (detail.error || b.error)) return {
-		status: "failed",
-		reason: detail.error || b.error
-	};
-	return {
-		status: "uncertain",
-		reason: "the server's answer was not recognised"
-	};
-}
-function unansweredOutcome(err) {
-	return {
-		status: "uncertain",
-		reason: err && err.message || "no answer from the server"
-	};
-}
-function draftClientId(draft, retryOf, makeId) {
-	return retryOf && retryOf.text === draft.text && retryOf.context === draft.context && JSON.stringify(retryOf.images || []) === JSON.stringify(draft.images || []) ? retryOf.clientId : makeId();
-}
-function spawnTarget(nodes, selected, harnesses) {
-	const all = Array.isArray(nodes) ? nodes : [];
-	const dirsOf = (n) => n && Array.isArray(n.spawn_dirs) ? n.spawn_dirs : [];
-	const here = {
-		ok: true,
-		remote: false,
-		node: null,
-		harnesses,
-		dirs: dirsOf(all.find((n) => n.local) || null),
-		reason: null
-	};
-	if (!selected) return here;
-	const n = all.find((x) => x.name === selected);
-	const blocked = (reason) => ({
-		ok: false,
-		remote: true,
-		node: selected,
-		harnesses: [],
-		dirs: [],
-		reason
-	});
-	if (!n) return blocked(`${selected} is no longer enrolled`);
-	if (n.local) return here;
-	if (!n.connected) return blocked(`${selected} is not connected`);
-	const offered = (harnesses || []).filter((h) => (n.harnesses || []).includes(h.flavor));
-	if (offered.length === 0) return blocked(`${selected} reports no spawnable harness`);
-	return {
-		ok: true,
-		remote: true,
-		node: selected,
-		harnesses: offered,
-		dirs: dirsOf(n),
-		reason: null
-	};
-}
-function spawnOutcome(httpOk, body) {
-	if (!structured(body)) return {
-		status: "uncertain",
-		reason: "the server's answer could not be read"
-	};
-	const b = body;
-	if (b.launch === "ok" && b.user_id) return {
-		status: "ok",
-		reason: null,
-		user: b.user_id
-	};
-	if (b.launch === "unknown") return {
-		status: "unknown",
-		reason: b.launch_error || "the launch command did not report back",
-		user: b.user_id
-	};
-	const detail = structured(b.detail) ? b.detail : {};
-	if (detail.status === "unknown") return {
-		status: "unknown",
-		reason: detail.detail || detail.error || "no report"
-	};
-	if (!httpOk && (detail.status === "failed" || detail.error || detail.detail || b.error)) return {
-		status: "failed",
-		reason: detail.detail || detail.error || b.error || "spawn failed"
-	};
-	return {
-		status: "uncertain",
-		reason: "the server's answer was not recognised"
-	};
-}
-//#endregion
-//#region web/src/use-media.js
-var COMPACT_LAYOUT = "(max-width: 1000px), (max-width: 1200px) and (pointer: coarse)";
-function useMedia(query) {
-	const [matches, setMatches] = d(() => matchMedia(query).matches);
-	h(() => {
-		const media = matchMedia(query);
-		const update = () => setMatches(media.matches);
-		update();
-		media.addEventListener("change", update);
-		return () => media.removeEventListener("change", update);
-	}, [query]);
-	return matches;
-}
-//#endregion
-//#region web/src/attachments.js
-var attachmentLabel = (name) => name.includes(".file.") ? name.slice(name.indexOf(".file.") + 6) : "Image";
-var isImage = (name) => /^[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(name);
-var MAX_FILES = 10;
-var MAX_BYTES = 10 * 1024 * 1024;
-var hasFiles = (e) => [...e.dataTransfer?.types || []].includes("Files");
-function useAttachments(files, setFiles, setStatus, scope) {
-	const [uploading, setUploading] = d(0);
-	const [dragging, setDragging] = d(false);
-	const session = A(null);
-	const filesRef = A(files);
-	filesRef.current = files;
-	h(() => {
-		const current = {
-			active: true,
-			pending: 0
-		};
-		session.current = current;
-		setUploading(0);
-		return () => {
-			current.active = false;
-		};
-	}, [scope]);
-	const addFiles = async (incoming) => {
-		const current = session.current;
-		if (!current?.active) return;
-		const batch = [...incoming || []];
-		if (filesRef.current.length + current.pending + batch.length > MAX_FILES) {
-			setStatus(`Up to ${MAX_FILES} attachments per task or message.`);
-			return;
-		}
-		current.pending += batch.length;
-		setUploading(current.pending);
-		for (const file of batch) {
-			if (!current.active) break;
-			try {
-				if (file.size > MAX_BYTES) throw Error("larger than 10 MB");
-				const response = await fetch("/attachments", {
-					method: "POST",
-					headers: {
-						"content-type": file.type || "application/octet-stream",
-						"x-attachment-filename": encodeURIComponent(file.name || "attachment")
-					},
-					body: file
-				});
-				const body = await response.json();
-				if (!response.ok || !body.name) throw Error(body.detail?.error || `upload failed (${response.status})`);
-				if (current.active) {
-					const next = [.../* @__PURE__ */ new Set([...filesRef.current, body.name])];
-					filesRef.current = next;
-					setFiles(next);
-				}
-			} catch (error) {
-				if (current.active) setStatus(`${file.name || "File"} not added: ${error.message}`);
-			} finally {
-				current.pending--;
-				if (current.active) setUploading(current.pending);
-			}
-		}
-	};
-	return {
-		uploading,
-		dragging,
-		addFiles,
-		remove: (name) => setFiles((prev) => prev.filter((x) => x !== name)),
-		onPaste: (e) => {
-			const pasted = [...e.clipboardData?.files || []];
-			if (pasted.length) {
-				e.preventDefault();
-				addFiles(pasted);
-			}
-		},
-		dropProps: {
-			onDragOver: (e) => {
-				if (hasFiles(e)) {
-					e.preventDefault();
-					setDragging(true);
-				}
-			},
-			onDragLeave: (e) => {
-				if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false);
-			},
-			onDrop: (e) => {
-				if (hasFiles(e)) {
-					e.preventDefault();
-					setDragging(false);
-					addFiles(e.dataTransfer.files);
-				}
-			}
-		}
-	};
-}
-function AttachmentLink({ name }) {
-	const [missing, setMissing] = d(false);
-	if (missing) return m$1`<span class="image-expired">Attachment unavailable</span>`;
-	return m$1`<a class=${isImage(name) ? "image-link" : "file-link"} href=${`/attachments/${name}`} target="_blank" rel="noopener" title=${isImage(name) ? "Open image" : `Download ${attachmentLabel(name)}`}>
-    ${isImage(name) ? m$1`<img src=${`/attachments/${name}`} alt="Attached image" loading="lazy" onError=${() => setMissing(true)} />` : m$1`<span aria-hidden="true">▤</span> ${attachmentLabel(name)} <span aria-hidden="true">↓</span>`}
-  </a>`;
-}
-function AttachmentList({ files = [] }) {
-	return files.length > 0 && m$1`<div class="attachment-list">${files.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}</div>`;
-}
-function AttachmentPicker({ files, controls, disabled = false }) {
-	const input = A(null);
-	return m$1`<div class="attachment-picker">
-    <div class="attachment-tools"><button type="button" class="mini" disabled=${disabled} onClick=${() => input.current?.click()}>+ attach files</button><span>Paste or drop files · 10 MB each · up to 10</span></div>
-    <input ref=${input} type="file" multiple hidden disabled=${disabled} onChange=${(e) => {
-		controls.addFiles(e.target.files);
-		e.target.value = "";
-	}} />
-    ${(files.length > 0 || controls.uploading > 0) && m$1`<div class="compose-images">${files.map((name) => m$1`<figure key=${name} class="compose-image">
-      <${AttachmentLink} name=${name} /><button type="button" class="remove" disabled=${disabled} onClick=${() => controls.remove(name)} aria-label=${`Remove ${attachmentLabel(name)}`}>×</button>
-    </figure>`)}${controls.uploading > 0 && m$1`<span role="status">Uploading ${controls.uploading}…</span>`}</div>`}
-  </div>`;
-}
-//#endregion
-//#region web/src/hive.js
-var TASK_CELL_RADIUS = 18;
-var TASK_CELL_CLEARANCE = 22;
-var DANCE_MS = 7e3;
-function taskCellClearsTeams(point, boxes) {
-	return boxes.every((box) => point.x <= box.x - TASK_CELL_CLEARANCE || point.x >= box.x + box.w + TASK_CELL_CLEARANCE || point.y <= box.y - TASK_CELL_CLEARANCE || point.y >= box.y + box.h + TASK_CELL_CLEARANCE);
-}
-function placeTaskCell(ideal, boxes, occupied, width) {
-	const bounds = {
-		minX: TASK_CELL_CLEARANCE,
-		maxX: Math.max(TASK_CELL_CLEARANCE, width - TASK_CELL_CLEARANCE),
-		minY: TASK_CELL_CLEARANCE,
-		maxY: 260 - TASK_CELL_CLEARANCE
-	};
-	const candidate = (x, y) => ({
-		x: Math.max(bounds.minX, Math.min(bounds.maxX, x)),
-		y: Math.max(bounds.minY, Math.min(bounds.maxY, y))
-	});
-	const usable = (point) => taskCellClearsTeams(point, boxes) && occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= 34);
-	const start = candidate(ideal.x, ideal.y);
-	if (usable(start)) return start;
-	const step = 17;
-	const limit = Math.hypot(width, 260);
-	for (let radius = step; radius <= limit; radius += step) {
-		const samples = Math.max(12, Math.ceil(Math.PI * 2 * radius / step));
-		for (let i = 0; i < samples; i++) {
-			const angle = -Math.PI / 2 + i * Math.PI * 2 / samples;
-			const point = candidate(ideal.x + Math.cos(angle) * radius, ideal.y + Math.sin(angle) * radius);
-			if (usable(point)) return point;
-		}
-	}
-	return start;
-}
-function CompactBees({ state, machine, harness = null, refresh }) {
-	const agents = (state.recipients || []).filter((r) => r.pane_alive && agentShown(r, machine, harness));
-	return m$1`<nav class="compact-hive" aria-label="Live agents">
-    <div class="compact-hive-heading"><span>${agents.length} live agents</span><span>Tap a bee to open</span></div>
-    <div class="bee-grid">${agents.map((r) => {
-		const status = agentStatus(r);
-		const st = STATE[status] || STATE.unknown;
-		const harness = harnessStyle(r.flavor);
-		return m$1`<div key=${r.user_id} class="bee-tile-wrap"><a class="bee-tile" href=${focusHash(r.user_id)} style=${`--machine:${machineColor(r.node)}`}>
-        <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
-        <span class="bee-name">${r.user_id}</span>
-        <span class="bee-machine">${machineName(r.node)}</span>
-        <span class="bee-state"><span class=${`status ${st.cls}`} aria-hidden="true"></span>${st.word} · ${harness.mark} ${harness.label}</span>
-      </a><${OwnerNote} agent=${r} refresh=${refresh} /></div>`;
-	})}</div>
-    ${!agents.length && m$1`<p class="compact-hive-empty">No live ${harness ? `${harnessStyle(harness).label} ` : ""}agents${machine ? ` on ${machine}` : ""}. Offline agents are listed under their team.</p>`}
-  </nav>`;
-}
-function HiveTaskDetail({ task, state, refresh, onClose }) {
-	const [busy, setBusy] = d(false);
-	const [error, setError] = d("");
-	const assign = async (e) => {
-		const value = e.target.value;
-		setBusy(true);
-		setError("");
-		try {
-			const result = await patchTask(task.id, value.startsWith("t:") ? { team_id: Number(value.slice(2)) } : {
-				assignee: value || null,
-				team_id: null
-			});
-			if (!result.ok) setError(result.error);
-			else refresh();
-		} catch {
-			setError("Could not assign task. Try again.");
-		} finally {
-			setBusy(false);
-		}
-	};
-	const agents = [.../* @__PURE__ */ new Set([...(state.recipients || []).map((r) => r.user_id), ...task.assignee ? [task.assignee] : []])];
-	return m$1`<section class="hive-task-detail" aria-label=${`Task #${task.id} details`}>
-    <header><h3>#${task.id} · ${task.title}</h3>
-      <button type="button" class="mini" onClick=${onClose}>Collapse</button></header>
-    <p>${task.status.replaceAll("_", " ")} · ${task.assignee || "unassigned"}${task.team_id ? ` · team ${(state.teams || []).find((t) => t.id === task.team_id)?.name || task.team_id}` : ""}</p>
-    ${task.description && m$1`<p class="task-description">${task.description}</p>`}
-    ${task.depends_on?.length > 0 && m$1`<p>Depends on ${task.depends_on.map((id) => `#${id}`).join(", ")}</p>`}
-    ${task.worktree && m$1`<p>Worktree: ${task.worktree_node || ""} ${task.worktree}</p>`}
-    <${AttachmentList} files=${task.attachments} />
-    ${task.note && m$1`<p class="task-description">${task.note}</p>`}
-    <label class="hive-task-assignment">Assign to
-      <select aria-label=${`Assign task #${task.id}`} value=${task.team_id ? `t:${task.team_id}` : task.assignee || ""} disabled=${busy || task.status === "done"} onChange=${assign}>
-        <option value="">unassigned</option>
-        <optgroup label="Teams">${(state.teams || []).map((t) => m$1`<option value=${`t:${t.id}`}>${t.name}</option>`)}</optgroup>
-        <optgroup label="Agents">${agents.map((a) => m$1`<option value=${a}>${a}</option>`)}</optgroup>
-      </select>
-    </label>
-    ${error && m$1`<p role="alert">${error}</p>`}
-    <${TaskStatusActions} task=${task} refresh=${refresh} />
-    <${TaskTrash} task=${task} refresh=${refresh} onDeleted=${onClose} />
-  </section>`;
-}
-function HiveView({ state, refresh, machine, harness = null, setHarness = () => {}, compactBody = null }) {
-	const compact = useMedia(COMPACT_LAYOUT);
-	const [selectedTask, setSelectedTask] = d(null);
-	const taskDetail = (state.tasks || []).find((t) => t.id === selectedTask);
-	const machineRef = A(machine);
-	machineRef.current = machine;
-	const harnessRef = A(harness);
-	harnessRef.current = harness;
-	const canvasRef = A(null);
-	const stateRef = A(state);
-	const beesRef = A(/* @__PURE__ */ new Map());
-	const streaksRef = A([]);
-	const pendingRef = A([]);
-	const lastSeenRef = A(null);
-	const hoverRef = A(null);
-	const taskHoverRef = A(null);
-	const taskCellsRef = A([]);
-	const taskStatusesRef = A(null);
-	const pendingShipmentsRef = A([]);
-	const shipmentsRef = A([]);
-	const dragTaskRef = A(null);
-	const dragBeeRef = A(null);
-	const dragPointRef = A(null);
-	const dropTargetRef = A(null);
-	const dropTeamRef = A(null);
-	const dragBoxRef = A(null);
-	const teamBoxesRef = A([]);
-	const drawRef = A(null);
-	const danceRef = A(null);
-	const [dropStatus, setDropStatus] = d("");
-	stateRef.current = state;
-	const legendHarnesses = harnessChoices(state.recipients);
-	const messages = state.messages || [];
-	const maxId = Math.max(0, ...messages.map((m) => m.id));
-	if (lastSeenRef.current === null) lastSeenRef.current = maxId;
-	else if (maxId > lastSeenRef.current) {
-		if (!compact) pendingRef.current.push(...messages.filter((m) => m.id > lastSeenRef.current).slice(-8));
-		lastSeenRef.current = maxId;
-	}
-	const taskSnapshot = new Map((state.tasks || []).map((t) => [t.id, t]));
-	if (taskStatusesRef.current === null) taskStatusesRef.current = taskSnapshot;
-	else {
-		for (const task of state.tasks || []) {
-			const before = taskStatusesRef.current.get(task.id);
-			if (!compact && before && before.status !== "done" && task.status === "done") pendingShipmentsRef.current.push(task);
-		}
-		taskStatusesRef.current = taskSnapshot;
-	}
-	h(() => {
-		if (compact) {
-			pendingRef.current = [];
-			pendingShipmentsRef.current = [];
-			return;
-		}
-		const canvas = canvasRef.current;
-		const ctx = canvas.getContext("2d");
-		const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-		let frame = 0;
-		let cssWidth = 0;
-		let lastDraw = 0;
-		const POS_KEY = "agent-swarm-hive-team-pos";
-		const teamPos = /* @__PURE__ */ new Map();
-		try {
-			for (const [k, v] of Object.entries(JSON.parse(localStorage.getItem(POS_KEY) || "{}"))) if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) teamPos.set(Number(k), {
-				x: v.x,
-				y: v.y
-			});
-		} catch {}
-		const savePos = () => {
-			const known = new Set((stateRef.current.teams || []).map((t) => t.id));
-			const obj = {};
-			for (const [id, p] of teamPos) if (known.has(id)) obj[id] = {
-				x: Math.round(p.x),
-				y: Math.round(p.y)
-			};
-			try {
-				localStorage.setItem(POS_KEY, JSON.stringify(obj));
-			} catch {}
-		};
-		const hex = (x, y, radius, fill, stroke) => {
-			ctx.beginPath();
-			for (let i = 0; i < 6; i++) {
-				const a = i * Math.PI / 3;
-				const px = x + Math.cos(a) * radius;
-				const py = y + Math.sin(a) * radius;
-				i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-			}
-			ctx.closePath();
-			ctx.fillStyle = fill;
-			ctx.fill();
-			ctx.strokeStyle = stroke;
-			ctx.lineWidth = 1;
-			ctx.stroke();
-		};
-		const token = (task, x, y) => {
-			hex(x, y, 8, "rgba(242,169,59,.15)", "#b97f27");
-			ctx.fillStyle = "#f2a93b";
-			ctx.font = "8px ui-monospace, monospace";
-			ctx.textAlign = "center";
-			ctx.textBaseline = "middle";
-			ctx.fillText(`#${task.id}`, x, y + .5);
-		};
-		const ensureSize = () => {
-			const width = Math.max(1, canvas.clientWidth);
-			const dpr = devicePixelRatio || 1;
-			if (width !== cssWidth || canvas.width !== Math.round(width * dpr)) {
-				cssWidth = width;
-				canvas.width = Math.round(width * dpr);
-				canvas.height = Math.round(260 * dpr);
-			}
-			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-			return width;
-		};
-		const point = (a, b, c, u) => {
-			const v = 1 - u;
-			return {
-				x: v * v * a.x + 2 * v * u * c.x + u * u * b.x,
-				y: v * v * a.y + 2 * v * u * c.y + u * u * b.y
-			};
-		};
-		const draw = (now, still = false) => {
-			const width = ensureSize();
-			const data = stateRef.current;
-			const running = (data.recipients || []).filter((r) => r.pane_alive);
-			const live = new Set(running.map((r) => r.user_id));
-			const bees = beesRef.current;
-			for (const name of bees.keys()) if (!live.has(name)) bees.delete(name);
-			ctx.clearRect(0, 0, width, 260);
-			const center = {
-				x: width / 2,
-				y: 118
-			};
-			const ownerNode = {
-				x: width / 2,
-				y: 235
-			};
-			const done = (data.tasks || []).filter((t) => t.status === "done").length;
-			const doneX = width - 28;
-			hex(doneX - 7, 34, 11, "rgba(143,191,111,.07)", "#567546");
-			hex(doneX, 28, 14, "rgba(143,191,111,.15)", "#8fbf6f");
-			ctx.fillStyle = "#8fbf6f";
-			ctx.textAlign = "right";
-			ctx.textBaseline = "middle";
-			ctx.fillText(`shipped · ${done}`, doneX - 24, 28);
-			const teamsList = data.teams || [];
-			const teamById = new Map(teamsList.map((t) => [t.id, t]));
-			const teamColor = (name, alpha) => `hsl(${hue(name)} 45% 62% / ${alpha})`;
-			const grouped = [...running].sort((a, b) => (a.team_id && teamById.has(a.team_id) ? a.team_id : 1e9) - (b.team_id && teamById.has(b.team_id) ? b.team_id : 1e9));
-			const positioned = new Set([...teamPos.keys()].filter((id) => teamById.has(id)));
-			const posOf = (id) => {
-				const p = teamPos.get(id);
-				return {
-					x: Math.max(56, Math.min(width - 56, p.x)),
-					y: Math.max(58, Math.min(202, p.y))
-				};
-			};
-			const clusterCount = /* @__PURE__ */ new Map();
-			for (const r of grouped) if (r.team_id && positioned.has(r.team_id)) clusterCount.set(r.team_id, (clusterCount.get(r.team_id) || 0) + 1);
-			const looseList = grouped.filter((r) => !(r.team_id && positioned.has(r.team_id)));
-			const looseIndex = new Map(looseList.map((r, i) => [r.user_id, i]));
-			const clusterSeen = /* @__PURE__ */ new Map();
-			const homes = grouped.map((r) => {
-				if (r.team_id && positioned.has(r.team_id)) {
-					const pos = posOf(r.team_id);
-					const count = clusterCount.get(r.team_id);
-					const j = clusterSeen.get(r.team_id) || 0;
-					clusterSeen.set(r.team_id, j + 1);
-					const cols = Math.min(3, count);
-					const rows = Math.ceil(count / cols);
-					const row = Math.floor(j / cols);
-					const inRow = row === rows - 1 ? count - row * cols : cols;
-					return {
-						x: pos.x + (j % cols - (inRow - 1) / 2) * 58,
-						y: pos.y + (row - (rows - 1) / 2) * 46
-					};
-				}
-				const i = looseIndex.get(r.user_id);
-				const angle = Math.PI + i / Math.max(1, looseList.length) * Math.PI * 2;
-				return {
-					x: center.x + Math.cos(angle) * Math.min(width * .36, 330),
-					y: 132 + Math.sin(angle) * 67
-				};
-			});
-			teamBoxesRef.current = [];
-			{
-				const bounds = /* @__PURE__ */ new Map();
-				grouped.forEach((r, i) => {
-					if (!r.team_id || !teamById.has(r.team_id)) return;
-					const h = homes[i];
-					const b = bounds.get(r.team_id) || {
-						minX: h.x,
-						maxX: h.x,
-						minY: h.y,
-						maxY: h.y
-					};
-					b.minX = Math.min(b.minX, h.x);
-					b.maxX = Math.max(b.maxX, h.x);
-					b.minY = Math.min(b.minY, h.y);
-					b.maxY = Math.max(b.maxY, h.y);
-					bounds.set(r.team_id, b);
-				});
-				let emptyX = 12;
-				for (const t of teamsList) {
-					const b = bounds.get(t.id);
-					const pos = positioned.has(t.id) ? posOf(t.id) : null;
-					const box = b ? {
-						x: b.minX - 44,
-						y: b.minY - 40,
-						w: b.maxX - b.minX + 88,
-						h: b.maxY - b.minY + 90
-					} : pos ? {
-						x: pos.x - 47,
-						y: pos.y - 22,
-						w: 94,
-						h: 44
-					} : {
-						x: emptyX,
-						y: 28,
-						w: 94,
-						h: 44
-					};
-					if (!b && !pos) emptyX += 104;
-					box.x = Math.max(4, box.x);
-					box.y = Math.max(24, box.y);
-					box.w = Math.min(box.w, width - box.x - 4);
-					box.h = Math.min(box.h, 254 - box.y);
-					teamBoxesRef.current.push({
-						id: t.id,
-						name: t.name,
-						queen: t.queen,
-						...box
-					});
-				}
-				const draggingSomething = dragTaskRef.current !== null || dragBeeRef.current;
-				for (const box of teamBoxesRef.current) {
-					const over = draggingSomething && dropTeamRef.current === box.id;
-					const moving = dragBoxRef.current === box.id;
-					ctx.save();
-					ctx.strokeStyle = teamColor(box.name, over || moving ? .95 : .4);
-					ctx.lineWidth = over || moving ? 2 : 1;
-					ctx.setLineDash(over || moving ? [] : [5, 4]);
-					ctx.beginPath();
-					ctx.roundRect(box.x, box.y, box.w, box.h, 12);
-					ctx.stroke();
-					if (over || moving) {
-						ctx.fillStyle = teamColor(box.name, over ? .08 : .05);
-						ctx.beginPath();
-						ctx.roundRect(box.x, box.y, box.w, box.h, 12);
-						ctx.fill();
-					}
-					ctx.restore();
-					ctx.fillStyle = teamColor(box.name, .95);
-					ctx.font = "9px ui-monospace, monospace";
-					ctx.textAlign = "left";
-					ctx.textBaseline = "alphabetic";
-					ctx.fillText(box.queen ? `${box.name} · ♛ ${box.queen}` : box.name, box.x + 8, box.y + 11);
-				}
-			}
-			const waiting = (data.tasks || []).filter((t) => t.status !== "done" && (!t.assignee || !live.has(t.assignee)));
-			const carriedCount = (data.tasks || []).filter((t) => t.status !== "done" && t.assignee && live.has(t.assignee)).length;
-			const visible = waiting.slice(0, 15);
-			const cols = Math.min(5, Math.max(1, Math.ceil(Math.sqrt(visible.length || 1))));
-			const rows = Math.ceil(visible.length / cols);
-			const cellX = 38, cellY = 34;
-			taskCellsRef.current = [];
-			if (dragTaskRef.current === null && !dragBeeRef.current && dragBoxRef.current === null) {
-				ctx.fillStyle = "#a89878";
-				ctx.font = "10px ui-monospace, monospace";
-				ctx.textAlign = "center";
-				ctx.textBaseline = "middle";
-				ctx.fillText(`task comb · ${waiting.length} waiting · ${carriedCount} carried`, center.x, 17);
-			}
-			const doneIds = new Set((data.tasks || []).filter((t) => t.status === "done").map((t) => t.id));
-			const occupiedTaskCells = [];
-			visible.forEach((task, i) => {
-				const col = i % cols, row = Math.floor(i / cols);
-				const { x, y } = placeTaskCell({
-					x: center.x + (col - (cols - 1) / 2) * cellX,
-					y: center.y - (rows - 1) * cellY / 2 + row * cellY + (col % 2 ? cellY / 2 : 0)
-				}, teamBoxesRef.current, occupiedTaskCells, width);
-				occupiedTaskCells.push({
-					x,
-					y
-				});
-				const stranded = task.assignee && !live.has(task.assignee);
-				const team = task.team_id && teamById.get(task.team_id) || null;
-				const blocked = (task.depends_on || []).some((d) => !doneIds.has(d));
-				taskCellsRef.current.push({
-					x,
-					y,
-					task,
-					stranded,
-					team,
-					blocked
-				});
-			});
-			const cellById = new Map(taskCellsRef.current.map((c) => [c.task.id, c]));
-			ctx.save();
-			ctx.strokeStyle = "rgba(242,169,59,.3)";
-			ctx.lineWidth = 1;
-			for (const cell of taskCellsRef.current) for (const dep of cell.task.depends_on || []) {
-				const from = cellById.get(dep);
-				if (!from) continue;
-				ctx.beginPath();
-				ctx.moveTo(from.x, from.y);
-				ctx.lineTo(cell.x, cell.y);
-				ctx.stroke();
-			}
-			ctx.restore();
-			for (const cell of taskCellsRef.current) {
-				const { x, y, task, stranded, team, blocked } = cell;
-				const lifted = dragPointRef.current && dragTaskRef.current === task.id;
-				if (lifted) ctx.globalAlpha = .3;
-				ctx.save();
-				if (blocked) ctx.setLineDash([3, 3]);
-				hex(x, y, TASK_CELL_RADIUS, stranded ? "rgba(224,108,85,.10)" : team ? teamColor(team.name, .12) : "rgba(242,169,59,.12)", stranded ? "#e06c55" : team ? teamColor(team.name, .8) : "#b97f27");
-				ctx.restore();
-				ctx.fillStyle = stranded ? "#e06c55" : "#f2a93b";
-				ctx.font = "9px ui-monospace, monospace";
-				ctx.textAlign = "center";
-				ctx.textBaseline = "middle";
-				ctx.fillText(`#${task.id}`, x, y + .5);
-				if (lifted) ctx.globalAlpha = 1;
-			}
-			if (waiting.length > visible.length) {
-				ctx.fillStyle = "#a89878";
-				ctx.font = "9px ui-monospace, monospace";
-				ctx.textAlign = "center";
-				ctx.textBaseline = "middle";
-				ctx.fillText(`+${waiting.length - visible.length} more`, center.x, 202);
-			}
-			hex(ownerNode.x, ownerNode.y, 8, "rgba(242,169,59,.09)", "#b97f27");
-			ctx.fillStyle = "#f2a93b";
-			ctx.font = "9px ui-monospace, monospace";
-			ctx.textAlign = "center";
-			ctx.textBaseline = "alphabetic";
-			ctx.fillText("owner", ownerNode.x, 253);
-			const beeData = grouped.map((r, i) => {
-				const name = r.user_id;
-				const seed = hue(name);
-				const harness = harnessStyle(r.flavor);
-				const mine = (data.tasks || []).filter((t) => t.assignee === name && t.status !== "done").sort((a, b) => (a.status === "picked_up" ? -1 : 1) - (b.status === "picked_up" ? -1 : 1) || b.updated_at - a.updated_at);
-				const picked = mine.find((t) => t.status === "picked_up");
-				const assigned = !picked && mine.find((t) => t.status === "open");
-				const primary = picked || assigned;
-				const extras = mine.filter((t) => !primary || t.id !== primary.id);
-				const phase = seed / 57;
-				const working = agentStatus(r) === "working";
-				const busy = !!picked || working;
-				const speed = busy ? 2.5 : 1;
-				const clustered = r.team_id && positioned.has(r.team_id);
-				const amp = (busy ? 26 : 18) * (clustered ? .55 : 1);
-				const q = still ? 0 : now / 8e3 * Math.PI * 2 * speed + phase;
-				return {
-					r,
-					name,
-					seed,
-					harness,
-					x: homes[i].x + (still ? 0 : Math.sin(q) * amp),
-					y: homes[i].y + (still ? 0 : Math.sin(q * 1.7 + phase) * amp * .55),
-					dx: still ? 1 : Math.cos(q),
-					dy: still ? 0 : Math.cos(q * 1.7 + phase) * .94,
-					q,
-					picked,
-					assigned,
-					primary,
-					extras,
-					working,
-					busy
-				};
-			});
-			for (const bee of beeData) {
-				for (const box of teamBoxesRef.current) {
-					if (bee.r.team_id === box.id) continue;
-					const m = 14;
-					if (bee.x <= box.x - m || bee.x >= box.x + box.w + m || bee.y <= box.y - m || bee.y >= box.y + box.h + m) continue;
-					const out = [
-						{
-							d: bee.x - (box.x - m),
-							x: box.x - m,
-							y: bee.y
-						},
-						{
-							d: box.x + box.w + m - bee.x,
-							x: box.x + box.w + m,
-							y: bee.y
-						},
-						{
-							d: bee.y - (box.y - m),
-							x: bee.x,
-							y: box.y - m
-						},
-						{
-							d: box.y + box.h + m - bee.y,
-							x: bee.x,
-							y: box.y + box.h + m
-						}
-					].reduce((a, b) => a.d <= b.d ? a : b);
-					bee.x = out.x;
-					bee.y = out.y;
-				}
-				bee.x = Math.max(16, Math.min(width - 16, bee.x));
-				bee.y = Math.max(34, Math.min(bee.picked || bee.working ? 208 : 224, bee.y));
-			}
-			const dance = danceRef.current;
-			if (dance && !still) {
-				const u = (now - dance.start) / DANCE_MS;
-				if (u >= 1) danceRef.current = null;
-				else if (u >= 0) {
-					const ease = (v) => v * v * (3 - 2 * v);
-					const mix = ease(Math.min(1, u / .15, (1 - u) / .15));
-					const rx = Math.min(width * .38, 300);
-					const loop = (t) => {
-						const s = Math.sin(t), c = Math.cos(t), k = 1 + s * s;
-						return {
-							x: center.x + rx * c / k,
-							y: 128 + rx * .62 * s * c / k
-						};
-					};
-					ctx.save();
-					ctx.strokeStyle = `rgba(242,169,59,${.28 * mix})`;
-					ctx.setLineDash([2, 5]);
-					ctx.beginPath();
-					for (let k = 0; k <= 96; k++) {
-						const p = loop(k / 96 * Math.PI * 2);
-						k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
-					}
-					ctx.stroke();
-					ctx.restore();
-					beeData.forEach((bee, i) => {
-						const t = u * Math.PI * 4 + i / (beeData.length + .5) * Math.PI * 2;
-						const a = loop(t), b = loop(t + .01);
-						const tx = b.x - a.x, ty = b.y - a.y;
-						const len = Math.hypot(tx, ty) || 1;
-						const middle = Math.exp(-(((a.x - center.x) / 60) ** 2));
-						const shimmy = Math.sin(now / 35) * 7 * middle;
-						const fx = a.x - ty / len * shimmy, fy = a.y + tx / len * shimmy;
-						bee.x += (fx - bee.x) * mix;
-						bee.y += (fy - bee.y) * mix;
-						if (mix > .5) {
-							bee.dx = tx;
-							bee.dy = ty;
-						}
-						bee.dancing = true;
-					});
-				}
-			}
-			for (const bee of beeData) {
-				const { r, name, harness, x, y, dx, dy, q, picked, assigned, primary, extras, working, busy, dancing } = bee;
-				const doing = r.summaries?.find((s) => s.source !== "owner");
-				bees.set(name, {
-					x,
-					y,
-					task: primary,
-					node: machineName(r.node),
-					harness: harness.key,
-					doing: [doing?.text, r.owner_note && `you: ${r.owner_note}`].filter(Boolean).join(" · ")
-				});
-				ctx.save();
-				if (!agentShown(r, machineRef.current, harnessRef.current)) ctx.globalAlpha = .18;
-				if (assigned) token(assigned, x + 22, y + Math.sin(q * .8) * 3);
-				const bearing = Math.atan2(dy, dx);
-				ctx.save();
-				ctx.translate(x, y);
-				ctx.rotate(bearing);
-				if (working) {
-					ctx.save();
-					ctx.fillStyle = WORKING_HALO.fill;
-					ctx.strokeStyle = WORKING_HALO.color;
-					ctx.lineWidth = 2.5;
-					ctx.shadowColor = WORKING_HALO.color;
-					ctx.shadowBlur = 12;
-					ctx.beginPath();
-					ctx.arc(0, 0, 24, 0, Math.PI * 2);
-					ctx.fill();
-					ctx.stroke();
-					ctx.restore();
-				}
-				const flap = still ? 0 : Math.sin(now / 1e3 * (dancing ? 60 : busy ? 44 : 30)) * .35;
-				ctx.fillStyle = "rgba(240,230,210,.5)";
-				ctx.beginPath();
-				ctx.ellipse(-2, -7, 6, 3, -.45 - flap, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.beginPath();
-				ctx.ellipse(-2, 7, 6, 3, .45 + flap, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.fillStyle = machineColor(r.node);
-				ctx.beginPath();
-				ctx.ellipse(0, 0, 12, 6, 0, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.fillStyle = "#16120c";
-				ctx.fillRect(-5, -6, 4.5, 12);
-				ctx.fillRect(1, -6, 4.5, 12);
-				ctx.fillStyle = harness.color;
-				ctx.fillRect(-4, -6, 2.5, 12);
-				ctx.fillRect(2, -6, 2.5, 12);
-				ctx.fillStyle = "#16120c";
-				ctx.beginPath();
-				ctx.arc(11, 0, 3.5, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.restore();
-				if (picked) token(picked, x, y + 16);
-				extras.slice(0, 4).forEach((task, j) => {
-					const a = -1.15 + j * .75;
-					token(task, x + Math.cos(a) * 25, y + Math.sin(a) * 22);
-				});
-				if (extras.length > 4) {
-					ctx.fillStyle = "#a89878";
-					ctx.font = "8px ui-monospace, monospace";
-					ctx.textAlign = "center";
-					ctx.textBaseline = "middle";
-					ctx.fillText(`+${extras.length - 4}`, x + 29, y + 12);
-				}
-				const labelY = y + (picked ? 35 : working ? 34 : 19);
-				ctx.font = "10px ui-monospace, monospace";
-				ctx.textBaseline = "alphabetic";
-				const markGap = 3;
-				const markW = ctx.measureText(harness.mark).width;
-				const shortName = name.length > 20 ? `${name.slice(0, 19)}…` : name;
-				const nameW = ctx.measureText(shortName).width;
-				const labelLeft = x - (markW + markGap + nameW) / 2;
-				ctx.textAlign = "left";
-				ctx.fillStyle = harness.color;
-				ctx.fillText(harness.mark, labelLeft, labelY);
-				ctx.fillStyle = "#a89878";
-				ctx.fillText(shortName, labelLeft + markW + markGap, labelY);
-				ctx.textAlign = "center";
-				ctx.font = "8px ui-monospace, monospace";
-				ctx.fillStyle = machineColor(r.node);
-				ctx.fillText(machineName(r.node), x, labelY + 11);
-				const attention = r.activity && r.activity.status === "needs_attention";
-				if (attention) {
-					ctx.fillStyle = "#f2a93b";
-					ctx.font = "bold 13px ui-monospace, monospace";
-					ctx.textBaseline = "alphabetic";
-					ctx.fillText("!", x, y - 14);
-				}
-				const myTeam = r.team_id && teamById.get(r.team_id) || null;
-				if (myTeam && myTeam.queen === name) {
-					ctx.fillStyle = "#f2a93b";
-					ctx.font = "11px ui-monospace, monospace";
-					ctx.textAlign = "center";
-					ctx.textBaseline = "alphabetic";
-					ctx.fillText("♛", x, y - (attention ? 26 : 14));
-				}
-				ctx.restore();
-			}
-			if (dragTaskRef.current !== null && dragPointRef.current) {
-				const dragged = (data.tasks || []).find((t) => t.id === dragTaskRef.current);
-				if (dragged) token(dragged, dragPointRef.current.x, dragPointRef.current.y);
-			}
-			const dragBee = dragBeeRef.current && bees.get(dragBeeRef.current);
-			if (dragBee && dragPointRef.current) {
-				const p = dragPointRef.current;
-				const draggedRecipient = grouped.find((r) => r.user_id === dragBeeRef.current);
-				ctx.save();
-				ctx.strokeStyle = "rgba(240,230,210,.3)";
-				ctx.setLineDash([3, 4]);
-				ctx.beginPath();
-				ctx.moveTo(dragBee.x, dragBee.y);
-				ctx.lineTo(p.x, p.y);
-				ctx.stroke();
-				ctx.restore();
-				ctx.save();
-				ctx.globalAlpha = .85;
-				ctx.fillStyle = machineColor(draggedRecipient?.node);
-				ctx.beginPath();
-				ctx.ellipse(p.x, p.y, 12, 6, 0, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.fillStyle = harnessStyle(draggedRecipient?.flavor).color;
-				ctx.fillRect(p.x - 4, p.y - 6, 2.5, 12);
-				ctx.fillRect(p.x + 2, p.y - 6, 2.5, 12);
-				ctx.restore();
-			}
-			const dropLabel = (label, ax, ay) => {
-				ctx.font = "11px ui-monospace, monospace";
-				const labelW = ctx.measureText(label).width + 14;
-				const lx = Math.max(5, Math.min(width - labelW - 5, ax - labelW / 2));
-				const ly = Math.max(5, ay);
-				ctx.fillStyle = "#241c11";
-				ctx.beginPath();
-				ctx.roundRect(lx, ly, labelW, 21, 6);
-				ctx.fill();
-				ctx.strokeStyle = "#f2a93b";
-				ctx.stroke();
-				ctx.fillStyle = "#f0e6d2";
-				ctx.textAlign = "left";
-				ctx.textBaseline = "middle";
-				ctx.fillText(label, lx + 7, ly + 11);
-			};
-			const banner = (text) => {
-				ctx.fillStyle = "#f2a93b";
-				ctx.font = "11px ui-monospace, monospace";
-				ctx.textAlign = "center";
-				ctx.textBaseline = "alphabetic";
-				ctx.fillText(text, width / 2, 18);
-			};
-			const targetBox = dropTeamRef.current != null && teamBoxesRef.current.find((b) => b.id === dropTeamRef.current);
-			const dropTarget = dropTargetRef.current && bees.get(dropTargetRef.current);
-			if (dragTaskRef.current && dropTarget) {
-				ctx.save();
-				ctx.strokeStyle = "#f2a93b";
-				ctx.lineWidth = 2;
-				ctx.shadowColor = "rgba(242,169,59,.8)";
-				ctx.shadowBlur = 13;
-				ctx.beginPath();
-				ctx.arc(dropTarget.x, dropTarget.y, 24, 0, Math.PI * 2);
-				ctx.stroke();
-				ctx.restore();
-				dropLabel(`assign #${dragTaskRef.current} to ${dropTargetRef.current}`, dropTarget.x, Math.max(5, dropTarget.y - 43));
-			} else if (dragTaskRef.current && targetBox) dropLabel(`assign #${dragTaskRef.current} to team ${targetBox.name}`, targetBox.x + targetBox.w / 2, Math.max(5, targetBox.y - 26));
-			else if (dragTaskRef.current) banner(`drop task #${dragTaskRef.current} on a bee, team, or trash corner`);
-			else if (dragBeeRef.current && targetBox) dropLabel(`move ${dragBeeRef.current} to team ${targetBox.name}`, targetBox.x + targetBox.w / 2, Math.max(5, targetBox.y - 26));
-			else if (dragBeeRef.current) {
-				const r = grouped.find((x) => x.user_id === dragBeeRef.current);
-				const home = r && r.team_id && teamById.get(r.team_id);
-				banner(home ? `release to take ${dragBeeRef.current} out of team ${home.name}` : `drop ${dragBeeRef.current} on a team`);
-			} else if (dragBoxRef.current !== null) {
-				const moving = teamBoxesRef.current.find((b) => b.id === dragBoxRef.current);
-				if (moving) banner(`release to place team ${moving.name}`);
-			}
-			const endpoint = (name) => name === "owner" ? ownerNode : bees.get(name) || ownerNode;
-			if (!still && pendingRef.current.length) {
-				const born = now;
-				streaksRef.current.push(...pendingRef.current.splice(0, 8).map((m) => ({
-					born,
-					a: { ...endpoint(m.sender) },
-					b: { ...endpoint(m.recipient) },
-					id: m.id
-				})));
-			} else if (still) pendingRef.current.length = 0;
-			streaksRef.current = streaksRef.current.filter((s) => now - s.born < 900);
-			if (!still) for (const s of streaksRef.current) {
-				const u = Math.min(1, (now - s.born) / 900);
-				const c = {
-					x: (s.a.x + s.b.x) / 2,
-					y: (s.a.y + s.b.y) / 2 - 40
-				};
-				for (let i = 9; i >= 0; i--) {
-					const p = point(s.a, s.b, c, Math.max(0, u - i * .025));
-					ctx.fillStyle = `rgba(242,169,59,${(10 - i) / 13})`;
-					ctx.beginPath();
-					ctx.arc(p.x, p.y, i ? 1.2 : 2.5, 0, Math.PI * 2);
-					ctx.fill();
-				}
-			}
-			if (!still && pendingShipmentsRef.current.length) {
-				const born = now;
-				shipmentsRef.current.push(...pendingShipmentsRef.current.splice(0).map((task) => ({
-					born,
-					task,
-					a: { ...bees.get(task.assignee) || ownerNode },
-					b: {
-						x: doneX,
-						y: 28
-					}
-				})));
-			} else if (still) pendingShipmentsRef.current.length = 0;
-			shipmentsRef.current = shipmentsRef.current.filter((s) => now - s.born < 1100);
-			if (!still) for (const shipment of shipmentsRef.current) {
-				const u = Math.min(1, (now - shipment.born) / 1100);
-				const c = {
-					x: (shipment.a.x + shipment.b.x) / 2,
-					y: Math.min(shipment.a.y, shipment.b.y) - 45
-				};
-				const p = point(shipment.a, shipment.b, c, u);
-				ctx.save();
-				ctx.globalAlpha = Math.min(1, (1 - u) * 2.4);
-				token(shipment.task, p.x, p.y);
-				ctx.restore();
-			}
-			const hovered = hoverRef.current && bees.get(hoverRef.current);
-			if (hovered) {
-				const said = hovered.doing || hovered.task && hovered.task.title;
-				const title = said ? ` · ${said.length > 70 ? `${said.slice(0, 69)}…` : said}` : "";
-				const harnessLabel = harnessStyle(hovered.harness).label;
-				const label = `${hoverRef.current} · ${hovered.node} · ${harnessLabel}${title}`;
-				ctx.font = "10px ui-monospace, monospace";
-				const w = ctx.measureText(label).width + 12;
-				const tx = Math.max(4, Math.min(width - w - 4, hovered.x - w / 2));
-				const ty = Math.max(4, hovered.y - 31);
-				ctx.fillStyle = "#241c11";
-				ctx.beginPath();
-				ctx.roundRect(tx, ty, w, 19, 5);
-				ctx.fill();
-				ctx.strokeStyle = "#3a2d1a";
-				ctx.stroke();
-				ctx.fillStyle = "#f0e6d2";
-				ctx.textAlign = "left";
-				ctx.textBaseline = "middle";
-				ctx.fillText(label, tx + 6, ty + 10);
-			}
-			const taskCell = taskHoverRef.current;
-			if (!hovered && taskCell) {
-				const task = taskCell.task;
-				const stateLabel = taskCell.stranded ? `assigned to stopped ${task.assignee}` : taskCell.team ? `team ${taskCell.team.name}` : "waiting";
-				const blockedLabel = taskCell.blocked ? ` · blocked (after ${(task.depends_on || []).map((d) => `#${d}`).join(" ")})` : "";
-				const label = `#${task.id} · ${task.title} · ${stateLabel}${blockedLabel} · click to expand · drag to assign`;
-				ctx.font = "10px ui-monospace, monospace";
-				const w = Math.min(width - 16, ctx.measureText(label).width + 12);
-				const tx = Math.max(8, Math.min(width - w - 8, taskCell.x - w / 2));
-				const ty = Math.min(232, taskCell.y + 25);
-				ctx.fillStyle = "#241c11";
-				ctx.beginPath();
-				ctx.roundRect(tx, ty, w, 19, 5);
-				ctx.fill();
-				ctx.strokeStyle = taskCell.stranded ? "#e06c55" : "#b97f27";
-				ctx.stroke();
-				ctx.fillStyle = "#f0e6d2";
-				ctx.textAlign = "left";
-				ctx.textBaseline = "middle";
-				ctx.fillText(label, tx + 6, ty + 10, w - 12);
-			}
-		};
-		drawRef.current = draw;
-		const at = (e) => {
-			const r = canvas.getBoundingClientRect();
-			return {
-				x: e.clientX - r.left,
-				y: e.clientY - r.top
-			};
-		};
-		const hit = (e) => {
-			const p = at(e);
-			return [...beesRef.current].find(([, b]) => Math.hypot(p.x - b.x, p.y - b.y) < 24)?.[0] || null;
-		};
-		const hitTask = (e) => {
-			const p = at(e);
-			return taskCellsRef.current.find((cell) => Math.hypot(p.x - cell.x, p.y - cell.y) < 20) || null;
-		};
-		const hitTeam = (e) => {
-			const p = at(e);
-			return teamBoxesRef.current.find((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) || null;
-		};
-		const trashZone = canvas.parentElement.querySelector(".hive-trash-zone");
-		const hitTrash = (e) => {
-			const r = trashZone.getBoundingClientRect();
-			return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-		};
-		const highlightTrash = (e, task) => {
-			trashZone.classList.toggle("active", !!task);
-			trashZone.classList.toggle("over", !!task && hitTrash(e));
-		};
-		const removeTask = async (id) => {
-			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
-			if (!task) return;
-			try {
-				if (!await trashTask(task)) return;
-				setSelectedTask((selected) => selected === id ? null : selected);
-				setDropStatus(`Trashed task #${id}.`);
-				refresh();
-			} catch (err) {
-				setDropStatus(`${err.message} Refresh to check the task before retrying.`);
-			}
-		};
-		const taskId = (e) => {
-			const raw = e.dataTransfer?.getData("application/x-agent-swarm-task") || e.dataTransfer?.getData("text/plain");
-			return /^\d+$/.test(raw || "") ? Number(raw) : null;
-		};
-		const clearDrop = () => {
-			trashZone.classList.remove("active", "over");
-			dragTaskRef.current = null;
-			dragBeeRef.current = null;
-			dragPointRef.current = null;
-			dropTargetRef.current = null;
-			dropTeamRef.current = null;
-			dragBoxRef.current = null;
-			canvas.style.cursor = "default";
-			if (reduced) draw(performance.now(), true);
-		};
-		const teamCenter = (id) => {
-			const stored = teamPos.get(id);
-			if (stored) return stored;
-			const members = (stateRef.current.recipients || []).filter((r) => r.team_id === id && r.pane_alive).map((r) => beesRef.current.get(r.user_id)).filter(Boolean);
-			if (members.length) return {
-				x: members.reduce((s, b) => s + b.x, 0) / members.length,
-				y: members.reduce((s, b) => s + b.y, 0) / members.length
-			};
-			const box = teamBoxesRef.current.find((b) => b.id === id);
-			return box ? {
-				x: box.x + box.w / 2,
-				y: box.y + box.h / 2
-			} : null;
-		};
-		const assign = async (id, assignee) => {
-			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
-			if (!task || task.status === "done") {
-				setDropStatus(`Task #${id} cannot be assigned by drag.`);
-				return;
-			}
-			if (task.assignee === assignee) {
-				setDropStatus(`#${id} is already assigned to ${assignee}.`);
-				return;
-			}
-			try {
-				if (!(await fetch(`/tasks/${id}`, {
-					method: "PATCH",
-					headers: JSONH,
-					body: JSON.stringify({ assignee })
-				})).ok) throw new Error("assignment failed");
-				setDropStatus(`Assigned #${id} to ${assignee}.`);
-				refresh();
-			} catch {
-				setDropStatus(`Could not assign #${id}; task was not changed.`);
-			}
-		};
-		const assignTeam = async (id, box) => {
-			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
-			if (!task || task.status === "done") {
-				setDropStatus(`Task #${id} cannot be assigned by drag.`);
-				return;
-			}
-			if (task.team_id === box.id) {
-				setDropStatus(`#${id} is already assigned to team ${box.name}.`);
-				return;
-			}
-			try {
-				if (!(await fetch(`/tasks/${id}`, {
-					method: "PATCH",
-					headers: JSONH,
-					body: JSON.stringify({ team_id: box.id })
-				})).ok) throw new Error("assignment failed");
-				setDropStatus(`Assigned #${id} to team ${box.name}.`);
-				refresh();
-			} catch {
-				setDropStatus(`Could not assign #${id}; task was not changed.`);
-			}
-		};
-		const setBeeTeam = async (user, teamId, doneLabel) => {
-			try {
-				if (!(await fetch(`/agents/${encodeURIComponent(user)}/team`, {
-					method: "POST",
-					headers: JSONH,
-					body: JSON.stringify({ team_id: teamId })
-				})).ok) throw new Error("move failed");
-				setDropStatus(doneLabel);
-				refresh();
-			} catch {
-				setDropStatus(`Could not move ${user}.`);
-			}
-		};
-		let press = null;
-		let suppressClick = false;
-		const pointerDown = (e) => {
-			if (e.button !== 0) return;
-			const bee = hit(e);
-			if (bee) {
-				press = {
-					bee,
-					start: at(e),
-					moved: false
-				};
-				canvas.setPointerCapture(e.pointerId);
-				return;
-			}
-			const cell = hitTask(e);
-			if (cell) {
-				press = {
-					id: cell.task.id,
-					start: at(e),
-					moved: false
-				};
-				canvas.setPointerCapture(e.pointerId);
-				return;
-			}
-			const box = hitTeam(e);
-			if (!box) return;
-			const p = at(e);
-			const c = teamCenter(box.id) || {
-				x: box.x + box.w / 2,
-				y: box.y + box.h / 2
-			};
-			press = {
-				boxId: box.id,
-				start: p,
-				off: {
-					x: c.x - p.x,
-					y: c.y - p.y
-				},
-				moved: false
-			};
-			canvas.setPointerCapture(e.pointerId);
-		};
-		const pointerMove = (e) => {
-			if (!press) return;
-			const p = at(e);
-			if (!press.moved && Math.hypot(p.x - press.start.x, p.y - press.start.y) < 5) return;
-			press.moved = true;
-			hoverRef.current = null;
-			taskHoverRef.current = null;
-			if (press.boxId != null) {
-				dragBoxRef.current = press.boxId;
-				teamPos.set(press.boxId, {
-					x: p.x + press.off.x,
-					y: p.y + press.off.y
-				});
-				canvas.style.cursor = "grabbing";
-				if (reduced) draw(performance.now(), true);
-				return;
-			}
-			dragPointRef.current = p;
-			highlightTrash(e, press.id);
-			if (press.bee) {
-				dragBeeRef.current = press.bee;
-				const box = hitTeam(e);
-				dropTeamRef.current = box ? box.id : null;
-				canvas.style.cursor = "grabbing";
-			} else {
-				dragTaskRef.current = press.id;
-				dropTargetRef.current = hit(e);
-				const box = dropTargetRef.current ? null : hitTeam(e);
-				dropTeamRef.current = box ? box.id : null;
-				canvas.style.cursor = hitTrash(e) || dropTargetRef.current || dropTeamRef.current != null ? "copy" : "grabbing";
-			}
-			if (reduced) draw(performance.now(), true);
-		};
-		const pointerUp = async (e) => {
-			if (!press) return;
-			const { id, bee, boxId, moved } = press;
-			press = null;
-			if (!moved) return;
-			suppressClick = true;
-			if (boxId != null) {
-				savePos();
-				clearDrop();
-				return;
-			}
-			const trash = !bee && hitTrash(e);
-			const targetBee = hit(e);
-			const box = hitTeam(e);
-			clearDrop();
-			if (trash) {
-				await removeTask(id);
-				return;
-			}
-			if (bee) {
-				const r = (stateRef.current.recipients || []).find((x) => x.user_id === bee);
-				const teams = stateRef.current.teams || [];
-				const current = r && teams.find((t) => t.id === r.team_id);
-				if (box && (!current || current.id !== box.id)) await setBeeTeam(bee, box.id, `Moved ${bee} to team ${box.name}.`);
-				else if (!box && current) await setBeeTeam(bee, null, `Removed ${bee} from team ${current.name}.`);
-				return;
-			}
-			if (targetBee) await assign(id, targetBee);
-			else if (box) await assignTeam(id, box);
-		};
-		const pointerCancel = () => {
-			press = null;
-			clearDrop();
-		};
-		const move = (e) => {
-			if (press) return;
-			hoverRef.current = hit(e);
-			taskHoverRef.current = hoverRef.current ? null : hitTask(e);
-			const overBox = !hoverRef.current && !taskHoverRef.current && hitTeam(e);
-			canvas.style.cursor = hoverRef.current ? "pointer" : taskHoverRef.current || overBox ? "grab" : "default";
-			if (reduced) draw(performance.now(), true);
-		};
-		const leave = () => {
-			if (press) return;
-			hoverRef.current = null;
-			taskHoverRef.current = null;
-			if (dragTaskRef.current) clearDrop();
-			else {
-				canvas.style.cursor = "default";
-				if (reduced) draw(performance.now(), true);
-			}
-		};
-		const click = (e) => {
-			if (suppressClick) {
-				suppressClick = false;
-				return;
-			}
-			const name = hit(e);
-			if (name) {
-				location.hash = focusHash(name);
-				return;
-			}
-			const cell = hitTask(e);
-			if (cell) setSelectedTask((id) => id === cell.task.id ? null : cell.task.id);
-		};
-		const dragOver = (e) => {
-			const id = taskId(e);
-			if (id === null && !Array.from(e.dataTransfer?.types || []).includes("application/x-agent-swarm-task")) return;
-			e.preventDefault();
-			e.dataTransfer.dropEffect = "move";
-			dragTaskRef.current = id;
-			highlightTrash(e, true);
-			dropTargetRef.current = hit(e);
-			const box = dropTargetRef.current ? null : hitTeam(e);
-			dropTeamRef.current = box ? box.id : null;
-			canvas.style.cursor = hitTrash(e) || dropTargetRef.current || dropTeamRef.current != null ? "copy" : "not-allowed";
-			if (reduced) draw(performance.now(), true);
-		};
-		const dragLeave = (e) => {
-			if (e.target === canvas) clearDrop();
-		};
-		const drop = async (e) => {
-			const id = taskId(e);
-			const trash = hitTrash(e);
-			const assignee = hit(e);
-			const box = hitTeam(e);
-			e.preventDefault();
-			clearDrop();
-			if (id === null) return;
-			if (trash) await removeTask(id);
-			else if (assignee) await assign(id, assignee);
-			else if (box) await assignTeam(id, box);
-		};
-		window.__hive = {
-			bees: () => beesRef.current,
-			teamBoxes: () => teamBoxesRef.current,
-			taskCells: () => taskCellsRef.current,
-			dancing: () => danceRef.current !== null
-		};
-		canvas.addEventListener("mousemove", move);
-		canvas.addEventListener("mouseleave", leave);
-		canvas.addEventListener("click", click);
-		canvas.addEventListener("pointerdown", pointerDown);
-		canvas.addEventListener("pointermove", pointerMove);
-		canvas.addEventListener("pointerup", pointerUp);
-		canvas.addEventListener("pointercancel", pointerCancel);
-		canvas.addEventListener("dragover", dragOver);
-		canvas.addEventListener("dragleave", dragLeave);
-		canvas.addEventListener("drop", drop);
-		canvas.addEventListener("dragend", clearDrop);
-		window.addEventListener("dragend", clearDrop);
-		const resize = new ResizeObserver(() => {
-			if (reduced) draw(performance.now(), true);
-		});
-		resize.observe(canvas);
-		if (reduced) draw(performance.now(), true);
-		else {
-			const tick = (now) => {
-				if (!document.hidden && now - lastDraw >= 32) {
-					draw(now);
-					lastDraw = now;
-				}
-				frame = requestAnimationFrame(tick);
-			};
-			frame = requestAnimationFrame(tick);
-		}
-		return () => {
-			resize.disconnect();
-			cancelAnimationFrame(frame);
-			drawRef.current = null;
-			delete window.__hive;
-			canvas.removeEventListener("mousemove", move);
-			canvas.removeEventListener("mouseleave", leave);
-			canvas.removeEventListener("click", click);
-			canvas.removeEventListener("pointerdown", pointerDown);
-			canvas.removeEventListener("pointermove", pointerMove);
-			canvas.removeEventListener("pointerup", pointerUp);
-			canvas.removeEventListener("pointercancel", pointerCancel);
-			canvas.removeEventListener("dragover", dragOver);
-			canvas.removeEventListener("dragleave", dragLeave);
-			canvas.removeEventListener("drop", drop);
-			canvas.removeEventListener("dragend", clearDrop);
-			window.removeEventListener("dragend", clearDrop);
-		};
-	}, [compact]);
-	h(() => {
-		if (matchMedia("(prefers-reduced-motion: reduce)").matches && drawRef.current) drawRef.current(performance.now(), true);
-	}, [
-		state,
-		machine,
-		harness
-	]);
-	return m$1`<div class="hive-panel">${compact ? compactBody || m$1`<${CompactBees} state=${state} machine=${machine} harness=${harness} refresh=${refresh} />` : m$1`<div class="hive-scroll"><canvas ref=${canvasRef} tabindex="0"
-    aria-label="Live activity. Bee body color and the machine name below each bee identify its machine, matching the machine selector. Stripe color and the symbol beside the agent name identify its harness. Drag a comb cell or a task card onto a bee or a team outline to assign the task, or onto the trash corner to permanently delete it after confirmation; drag a bee into or out of a team outline to change its team; drag a team outline by its empty space to move the whole team somewhere else. Bees outside a team are kept out of team outlines. The task assignee select and the sidebar team boxes are the keyboard and touch alternatives."></canvas><div class="hive-trash-zone" aria-hidden="true"><strong>⌫ Trash task</strong><span>Drag a task here</span></div></div>`}
-    <div class="harness-legend" aria-label="Bee harness legend">
-      <span class="legend-title">Body = machine · stripes + symbol = harness</span>
-      <span class="working-halo-key" style=${`--working:${WORKING_HALO.color}`}><span aria-hidden="true"></span>Green halo = working</span>
-      ${legendHarnesses.map((h) => compact ? m$1`<span class="harness-key" key=${h.key}>
-            <span class="harness-swatch" style=${`--harness:${h.color}`}>${h.mark}</span>${h.label}</span>` : m$1`<button type="button" class="harness-key" key=${h.key} aria-pressed=${harness === h.key}
-            title=${harness === h.key ? "Click to show all harnesses" : `Highlight only ${h.label} agents`}
-            onClick=${() => setHarness(harness === h.key ? null : h.key)}>
-            <span class="harness-swatch" style=${`--harness:${h.color}`}>${h.mark}</span>${h.label}</button>`)}
-      ${!compact && !matchMedia("(prefers-reduced-motion: reduce)").matches && m$1`<button type="button" class="hive-dance"
-        title="Every bee flies a figure eight for a few seconds"
-        onClick=${() => {
-		if (!danceRef.current) danceRef.current = { start: performance.now() };
-	}}>🐝 waggle dance</button>`}
-    </div>
-    <div class="hive-task-picker"><label>Expand task <select value=${selectedTask ?? ""}
-      onChange=${(e) => setSelectedTask(e.target.value ? Number(e.target.value) : null)}>
-      <option value="">${compact ? "Choose a task…" : "Click a honeycomb or choose a task…"}</option>
-      ${(state.tasks || []).filter((t) => t.status !== "done" || t.id === selectedTask).map((t) => m$1`<option value=${t.id}>#${t.id} · ${t.title}</option>`)}
-    </select></label></div>
-    ${taskDetail && m$1`<${HiveTaskDetail} key=${taskDetail.id} task=${taskDetail} state=${state} refresh=${refresh} onClose=${() => setSelectedTask(null)} />`}
-    <span class="hive-drop-status" role="status" aria-live="polite">${dropStatus}</span></div>`;
-}
-//#endregion
-//#region web/src/tabs.js
-function forwardShortcuts(frame) {
-	let win;
-	try {
-		win = frame.contentWindow;
-		win.document;
-	} catch {
-		return;
-	}
-	win.addEventListener("keydown", (e) => {
-		if (!(e.altKey || e.ctrlKey || e.metaKey)) return;
-		const copy = new KeyboardEvent("keydown", {
-			key: e.key,
-			code: e.code,
-			altKey: e.altKey,
-			ctrlKey: e.ctrlKey,
-			metaKey: e.metaKey,
-			shiftKey: e.shiftKey,
-			repeat: e.repeat,
-			cancelable: true
-		});
-		if (!window.dispatchEvent(copy)) e.preventDefault();
-	});
-}
-function TabView({ name, tabs }) {
-	if (!tabs.includes(name)) return m$1`<div class="empty">No tab named <b>${name}</b>. Tabs come from the hub's
-      <code>AGENT_SWARM_TABS</code> setting, e.g. <code>usage=http://127.0.0.1:8531</code>.</div>`;
-	const src = `/tabs/${encodeURIComponent(name)}/`;
-	return m$1`<section class="tab-view">
-    <div class="tab-bar"><h2>${name}</h2><a class="mini" href=${src} target="_blank" rel="noopener">open alone ↗</a></div>
-    <iframe key=${name} class="tab-frame" src=${src} title=${name} onLoad=${(e) => forwardShortcuts(e.currentTarget)}></iframe>
-  </section>`;
-}
-//#endregion
-//#region web/src/views.js
-var TAB_ROUTE = "#/tab/";
-var tabHash = (name) => `${TAB_ROUTE}${encodeURIComponent(name)}`;
-function stepView(hash, views, by) {
-	return views[(Math.max(0, views.findIndex((v) => v !== "#/" && (hash === v || hash.startsWith(`${v}?`)))) + by + views.length) % views.length];
-}
-//#endregion
-//#region web/src/agent-chips.js
-function agentChips(agentCount, recipients, selected) {
-	const live = new Set(recipients.filter((r) => r.pane_alive).map((r) => r.user_id));
-	const counts = new Map([...agentCount].filter(([a]) => live.has(a) || a === selected));
-	if (selected && !counts.has(selected)) counts.set(selected, 0);
-	return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-}
-//#endregion
-//#region web/src/history.js
-var HISTORY_ROUTE = "#/tasks";
-var STATUSES = [
-	["", "all"],
-	["open", "open"],
-	["picked_up", "picked up"],
-	["done", "done"]
-];
-function historyHash({ q = "", status = "", agent = "", sort = "newest" } = {}) {
-	const p = new URLSearchParams();
-	if (q) p.set("q", q);
-	if (status) p.set("status", status);
-	if (agent) p.set("agent", agent);
-	if (sort === "oldest") p.set("sort", "oldest");
-	const s = p.toString();
-	return s ? `${HISTORY_ROUTE}?${s}` : HISTORY_ROUTE;
-}
-function parseHash(hash) {
-	const i = hash.indexOf("?");
-	const p = new URLSearchParams(i < 0 ? "" : hash.slice(i + 1));
-	return {
-		q: p.get("q") || "",
-		status: p.get("status") || "",
-		agent: p.get("agent") || "",
-		sort: p.get("sort") === "oldest" ? "oldest" : "newest"
-	};
-}
-function taskRecords(tasks, teams) {
-	const teamName = new Map((teams || []).map((t) => [t.id, t.name]));
-	return tasks.map((t) => ({
-		key: `task:${t.id}`,
-		kind: "task",
-		id: t.id,
-		status: t.status,
-		ts: t.created_at,
-		agents: t.assignee ? [t.assignee] : [],
-		fields: {
-			title: t.title || "",
-			description: t.description || "",
-			note: t.note || "",
-			assignee: t.assignee || "",
-			worktree: t.worktree || "",
-			team: teamName.get(t.team_id) || ""
-		},
-		src: t
-	}));
-}
-function statusRecords(recipients) {
-	return (recipients || []).flatMap((r) => (r.summaries || []).map((s, i) => ({
-		key: `status:${r.user_id}:${s.ts}:${i}`,
-		kind: "status",
-		ts: s.ts,
-		agents: [r.user_id],
-		fields: {
-			status: s.text,
-			agent: r.user_id
-		},
-		src: {
-			...s,
-			user_id: r.user_id,
-			current: i === 0
-		}
-	})));
-}
-var tokenize = (q) => q.toLowerCase().split(/\s+/).filter(Boolean);
-function matches(rec, tokens) {
-	return tokens.every((tok) => {
-		const idTok = /^#(\d+)$/.exec(tok);
-		if (idTok) return rec.id === Number(idTok[1]);
-		if (/^\d+$/.test(tok) && rec.id === Number(tok)) return true;
-		return Object.values(rec.fields).some((v) => v.toLowerCase().includes(tok));
-	});
-}
-var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-function markRe(tokens) {
-	const words = tokens.filter((t) => !/^#\d+$/.test(t));
-	return words.length ? new RegExp(`(${words.map(escapeRe).join("|")})`, "gi") : null;
-}
-function hl(text, re) {
-	if (!re || !text) return text;
-	return text.split(re).map((part, i) => i % 2 ? m$1`<mark>${part}</mark>` : part);
-}
-var CLIP = 220;
-function excerpt(text, re) {
-	if (text.length <= CLIP) return text;
-	let start = 0;
-	if (re) {
-		re.lastIndex = 0;
-		const m = re.exec(text);
-		re.lastIndex = 0;
-		if (m && m.index > CLIP - 60) start = Math.max(0, m.index - 70);
-	}
-	const end = Math.min(text.length, start + CLIP);
-	return `${start > 0 ? "…" : ""}${text.slice(start, end).trimEnd()}${end < text.length ? "…" : ""}`;
-}
-var fmtDate = (ts) => (/* @__PURE__ */ new Date(ts * 1e3)).toLocaleString([], {
-	month: "short",
-	day: "numeric",
-	hour: "2-digit",
-	minute: "2-digit"
-});
-function Clipped({ label, text, re }) {
-	const [open, setOpen] = d(false);
-	if (!text) return null;
-	const long = text.length > CLIP;
-	return m$1`<div class="h-field">
-    ${label && m$1`<span class="h-label">${label}</span>`}
-    <span class="h-text">${hl(open || !long ? text : excerpt(text, re), re)}</span>
-    ${long && m$1` <button type="button" class="h-more" onClick=${() => setOpen(!open)}>${open ? "less" : "more"}</button>`}
-  </div>`;
-}
-function TaskEdit({ task, refresh, done }) {
-	const [title, setTitle] = d(task.title);
-	const [description, setDescription] = d(task.description || "");
-	const [busy, setBusy] = d(false);
-	const [error, setError] = d("");
-	const save = async (e) => {
-		e.preventDefault();
-		setBusy(true);
-		setError("");
-		const result = await patchTask(task.id, {
-			title,
-			description
-		});
-		setBusy(false);
-		if (!result.ok) {
-			setError(result.error);
-			return;
-		}
-		done();
-		await refresh();
-	};
-	return m$1`<form class="h-edit" onSubmit=${save}>
-    <label>Title <input value=${title} required autofocus onInput=${(e) => setTitle(e.target.value)} /></label>
-    <label>Description <textarea rows="5" value=${description}
-      onInput=${(e) => setDescription(e.target.value)}></textarea></label>
-    <div class="h-edit-actions">
-      <button type="submit" class="mini" disabled=${busy || !title.trim()}>${busy ? "Saving…" : "Save"}</button>
-      <button type="button" class="mini" disabled=${busy} onClick=${done}>Cancel</button>
-      ${error && m$1`<span class="task-action-error" role="alert">${error}</span>`}
-    </div>
-  </form>`;
-}
-function TaskTile({ rec, re, now, filterAgent, refresh }) {
-	const t = rec.src;
-	const f = rec.fields;
-	const [editing, setEditing] = d(false);
-	if (editing) return m$1`<article class=${`htile ${t.status}`}>
-      <div class="h-title"><span class="h-id">#${t.id}</span> editing</div>
-      <${TaskEdit} task=${t} refresh=${refresh} done=${() => setEditing(false)} />
-    </article>`;
-	return m$1`<article class=${`htile ${t.status}`}>
-    <div class="h-who">
-      ${t.assignee ? m$1`<${Avatar} name=${t.assignee} size="tiny" />
-          <a class="agent-link h-agent" href=${focusHash(t.assignee)}
-            title=${`Open ${t.assignee} and message it`}>${hl(t.assignee, re)}</a>
-          <button type="button" class="h-only" onClick=${() => filterAgent(t.assignee)}
-            title=${`Show only ${t.assignee}'s tasks`} aria-label=${`Show only ${t.assignee}'s tasks`}>⌕</button>` : m$1`<span class="h-noagent">unassigned</span>`}
-      <span class=${`pill ${t.status}`}>${t.status.replace("_", " ")}</span>
-    </div>
-    <div class="h-title"><span class="h-id">#${t.id}</span> ${hl(f.title, re)}</div>
-    <${Clipped} text=${f.description} re=${re} />
-    <${AttachmentList} files=${t.attachments} />
-    <${Clipped} label="how to verify" text=${f.note} re=${re} />
-    <div class="h-meta">
-      <span title=${fmtDate(t.created_at)}>created ${fmtDate(t.created_at)}</span>
-      ${t.status === "done" ? m$1`<span title=${`last updated ${fmtDate(t.updated_at)}`}>closed ${fmtDate(t.updated_at)} · ${rel(t.updated_at, now)}</span>` : m$1`<span>updated ${rel(t.updated_at, now)}</span>`}
-      ${f.team && m$1`<span>team ${hl(f.team, re)}</span>`}
-      ${f.worktree && m$1`<span class="h-wt" title=${f.worktree}>${hl(f.worktree, re)}</span>`}
-    </div>
-    <div class="h-actions">
-      <button type="button" class="mini" onClick=${() => setEditing(true)}
-        aria-label=${`Edit task #${t.id}`}>Edit</button>
-      <${TaskStatusActions} task=${t} refresh=${refresh} />
-      <${TaskTrash} task=${t} refresh=${refresh} />
-    </div>
-  </article>`;
-}
-function StatusTile({ rec, re, now, filterAgent }) {
-	const s = rec.src;
-	return m$1`<article class="htile status-line">
-    <div class="h-who">
-      <${Avatar} name=${s.user_id} size="tiny" />
-      <a class="agent-link h-agent" href=${focusHash(s.user_id)}
-        title=${`Open ${s.user_id} and message it`}>${hl(s.user_id, re)}</a>
-      <button type="button" class="h-only" onClick=${() => filterAgent(s.user_id)}
-        title=${`Show only ${s.user_id}`} aria-label=${`Show only ${s.user_id}`}>⌕</button>
-      <span class="pill statusline">${s.current ? "status now" : "status"}</span>
-    </div>
-    <div class="h-title">${hl(s.text, re)}</div>
-    <div class="h-meta">
-      <span title=${fmtDate(s.ts)}>${fmtDate(s.ts)} · ${rel(s.ts, now)}</span>
-      <span>${SUMMARY_SOURCE[s.source] || s.source}</span>
-    </div>
-  </article>`;
-}
-var TILE = {
-	task: TaskTile,
-	status: StatusTile
-};
-function HistoryView({ state, refresh }) {
-	const [s, setS] = d(() => parseHash(location.hash));
-	const inputRef = A(null);
-	h(() => {
-		const onHash = () => {
-			if (location.hash.startsWith("#/tasks")) setS(parseHash(location.hash));
-		};
-		const onKey = (e) => {
-			if (e.key === "/" && ![
-				"INPUT",
-				"SELECT",
-				"TEXTAREA"
-			].includes(document.activeElement.tagName)) {
-				e.preventDefault();
-				inputRef.current?.focus();
-			}
-		};
-		addEventListener("hashchange", onHash);
-		addEventListener("keydown", onKey);
-		return () => {
-			removeEventListener("hashchange", onHash);
-			removeEventListener("keydown", onKey);
-		};
-	}, []);
-	const update = (patch) => {
-		const next = {
-			...s,
-			...patch
-		};
-		setS(next);
-		history.replaceState(null, "", historyHash(next));
-	};
-	const filterAgent = (a) => update({ agent: s.agent === a ? "" : a });
-	const tasks = T(() => taskRecords(state.tasks, state.teams), [state.tasks, state.teams]);
-	const lines = T(() => statusRecords(state.recipients), [state.recipients]);
-	const tokens = tokenize(s.q);
-	const re = markRe(tokens);
-	const withLines = (tokens.length || s.agent) && !s.status;
-	const records = withLines ? tasks.concat(lines) : tasks;
-	const textHits = tokens.length ? records.filter((r) => matches(r, tokens)) : records;
-	const inStatus = (r) => !s.status || r.status === s.status;
-	const hasAgent = (r) => !s.agent || r.agents.includes(s.agent);
-	const statusCount = {};
-	for (const r of textHits) {
-		if (!hasAgent(r)) continue;
-		statusCount[""] = (statusCount[""] || 0) + 1;
-		if (r.status) statusCount[r.status] = (statusCount[r.status] || 0) + 1;
-	}
-	const agentCount = /* @__PURE__ */ new Map();
-	for (const r of textHits) {
-		if (!inStatus(r)) continue;
-		for (const a of r.agents) agentCount.set(a, (agentCount.get(a) || 0) + 1);
-	}
-	const agents = agentChips(agentCount, state.recipients, s.agent);
-	const shown = textHits.filter((r) => inStatus(r) && hasAgent(r)).sort((a, b) => s.sort === "oldest" ? a.ts - b.ts : b.ts - a.ts);
-	return m$1`<div class="history">
-    <h2>task history <span class="count">· ${shown.length} of ${tasks.length} tasks${withLines ? ` + ${lines.length} status lines` : ""}</span></h2>
-    <div class="h-controls">
-      <input ref=${inputRef} type="text" class="h-search" value=${s.q} autofocus
-        placeholder="search tasks, notes, status lines, agent, worktree, #id…  ( / to focus )"
-        aria-label="Search all tasks"
-        onInput=${(e) => update({ q: e.target.value })}
-        onKeyDown=${(e) => {
-		if (e.key === "Escape" && s.q) {
-			e.stopPropagation();
-			update({ q: "" });
-		}
-	}} />
-      <div class="h-chips" role="group" aria-label="Filter by status">
-        ${STATUSES.map(([v, label]) => m$1`<button type="button" key=${v}
-          class=${`h-chip ${s.status === v ? "on" : ""}`} aria-pressed=${s.status === v}
-          onClick=${() => update({ status: v })}>${label} <span class="n">${statusCount[v] || 0}</span></button>`)}
-      </div>
-      <button type="button" class="mini h-sort" onClick=${() => update({ sort: s.sort === "oldest" ? "newest" : "oldest" })}
-        title="Flip the order (by creation time)">${s.sort === "oldest" ? "oldest first ↑" : "newest first ↓"}</button>
-    </div>
-    <div class="h-agents">
-      <span class="h-label">${tokens.length ? "who worked on this" : "by agent"}</span>
-      ${agents.length === 0 ? m$1`<span class="h-noagent">nobody</span>` : agents.map(([a, n]) => m$1`<button type="button" key=${a}
-            class=${`h-agentchip ${s.agent === a ? "on" : ""}`} aria-pressed=${s.agent === a}
-            style=${`--hue: hsl(${hue(a)} 42% 58%)`}
-            title=${s.agent === a ? "Clear the agent filter" : `Show only ${a}'s tasks`}
-            onClick=${() => filterAgent(a)}>${a} <span class="n">${n}</span></button>`)}
-      ${(s.q || s.status || s.agent) && m$1`<button type="button" class="mini" onClick=${() => update({
-		q: "",
-		status: "",
-		agent: ""
-	})}>clear filters</button>`}
-    </div>
-    ${shown.length === 0 ? m$1`<div class="empty">No tasks match${s.q ? m$1` "<b>${s.q}</b>"` : ""}.</div>` : m$1`<div class="h-grid">
-          ${shown.map((r) => {
-		return m$1`<${TILE[r.kind]} key=${r.key} rec=${r} re=${re} now=${state.now} filterAgent=${filterAgent} refresh=${refresh} />`;
-	})}
-        </div>`}
-  </div>`;
-}
-//#endregion
-//#region web/src/scroll-follow.js
-function createBottomFollower() {
-	let pinned = true;
-	let lastTop = 0;
-	return {
-		onScroll(el) {
-			const top = Math.max(0, el.scrollTop);
-			if (top + el.clientHeight >= el.scrollHeight - 8) pinned = true;
-			else if (top < lastTop - 1) pinned = false;
-			lastTop = top;
-		},
-		follow(el) {
-			if (pinned) el.scrollTop = el.scrollHeight;
-			lastTop = Math.max(0, el.scrollTop);
-		}
-	};
-}
-//#endregion
-//#region web/src/native.js
-function attentionAgents(recipients) {
-	return recipients.filter((r) => r.pane_alive && r.activity?.status === "needs_attention").map((r) => r.user_id).sort();
-}
-function attentionReporter(invoke) {
-	if (!invoke) return () => {};
-	let sent = null;
-	return (recipients) => {
-		const agents = attentionAgents(recipients);
-		const key = agents.join("\n");
-		if (key === sent) return;
-		sent = key;
-		Promise.resolve(invoke("attention", { agents })).catch(() => {
-			sent = null;
-		});
-	};
 }
 //#endregion
 //#region node_modules/mdurl/lib/decode.mjs
@@ -11329,6 +8924,2479 @@ function renderMarkdown(text) {
 	return out;
 }
 //#endregion
+//#region web/src/attachments.js
+var attachmentLabel = (name) => name.includes(".file.") ? name.slice(name.indexOf(".file.") + 6) : "Image";
+var isImage = (name) => /^[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(name);
+var MAX_FILES = 10;
+var MAX_BYTES = 10 * 1024 * 1024;
+var hasFiles = (e) => [...e.dataTransfer?.types || []].includes("Files");
+function useAttachments(files, setFiles, setStatus, scope) {
+	const [uploading, setUploading] = d(0);
+	const [dragging, setDragging] = d(false);
+	const session = A(null);
+	const filesRef = A(files);
+	filesRef.current = files;
+	h(() => {
+		const current = {
+			active: true,
+			pending: 0
+		};
+		session.current = current;
+		setUploading(0);
+		return () => {
+			current.active = false;
+		};
+	}, [scope]);
+	const addFiles = async (incoming) => {
+		const current = session.current;
+		if (!current?.active) return;
+		const batch = [...incoming || []];
+		if (filesRef.current.length + current.pending + batch.length > MAX_FILES) {
+			setStatus(`Up to ${MAX_FILES} attachments per task or message.`);
+			return;
+		}
+		current.pending += batch.length;
+		setUploading(current.pending);
+		for (const file of batch) {
+			if (!current.active) break;
+			try {
+				if (file.size > MAX_BYTES) throw Error("larger than 10 MB");
+				const response = await fetch("/attachments", {
+					method: "POST",
+					headers: {
+						"content-type": file.type || "application/octet-stream",
+						"x-attachment-filename": encodeURIComponent(file.name || "attachment")
+					},
+					body: file
+				});
+				const body = await response.json();
+				if (!response.ok || !body.name) throw Error(body.detail?.error || `upload failed (${response.status})`);
+				if (current.active) {
+					const next = [.../* @__PURE__ */ new Set([...filesRef.current, body.name])];
+					filesRef.current = next;
+					setFiles(next);
+				}
+			} catch (error) {
+				if (current.active) setStatus(`${file.name || "File"} not added: ${error.message}`);
+			} finally {
+				current.pending--;
+				if (current.active) setUploading(current.pending);
+			}
+		}
+	};
+	return {
+		uploading,
+		dragging,
+		addFiles,
+		remove: (name) => setFiles((prev) => prev.filter((x) => x !== name)),
+		onPaste: (e) => {
+			const pasted = [...e.clipboardData?.files || []];
+			if (pasted.length) {
+				e.preventDefault();
+				addFiles(pasted);
+			}
+		},
+		dropProps: {
+			onDragOver: (e) => {
+				if (hasFiles(e)) {
+					e.preventDefault();
+					setDragging(true);
+				}
+			},
+			onDragLeave: (e) => {
+				if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false);
+			},
+			onDrop: (e) => {
+				if (hasFiles(e)) {
+					e.preventDefault();
+					setDragging(false);
+					addFiles(e.dataTransfer.files);
+				}
+			}
+		}
+	};
+}
+function AttachmentLink({ name }) {
+	const [missing, setMissing] = d(false);
+	if (missing) return m$1`<span class="image-expired">Attachment unavailable</span>`;
+	return m$1`<a class=${isImage(name) ? "image-link" : "file-link"} href=${`/attachments/${name}`} target="_blank" rel="noopener" title=${isImage(name) ? "Open image" : `Download ${attachmentLabel(name)}`}>
+    ${isImage(name) ? m$1`<img src=${`/attachments/${name}`} alt="Attached image" loading="lazy" onError=${() => setMissing(true)} />` : m$1`<span aria-hidden="true">▤</span> ${attachmentLabel(name)} <span aria-hidden="true">↓</span>`}
+  </a>`;
+}
+function AttachmentList({ files = [] }) {
+	return files.length > 0 && m$1`<div class="attachment-list">${files.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}</div>`;
+}
+function AttachmentPicker({ files, controls, disabled = false }) {
+	const input = A(null);
+	return m$1`<div class="attachment-picker">
+    <div class="attachment-tools"><button type="button" class="mini" disabled=${disabled} onClick=${() => input.current?.click()}>+ attach files</button><span>Paste or drop files · 10 MB each · up to 10</span></div>
+    <input ref=${input} type="file" multiple hidden disabled=${disabled} onChange=${(e) => {
+		controls.addFiles(e.target.files);
+		e.target.value = "";
+	}} />
+    ${(files.length > 0 || controls.uploading > 0) && m$1`<div class="compose-images">${files.map((name) => m$1`<figure key=${name} class="compose-image">
+      <${AttachmentLink} name=${name} /><button type="button" class="remove" disabled=${disabled} onClick=${() => controls.remove(name)} aria-label=${`Remove ${attachmentLabel(name)}`}>×</button>
+    </figure>`)}${controls.uploading > 0 && m$1`<span role="status">Uploading ${controls.uploading}…</span>`}</div>`}
+  </div>`;
+}
+//#endregion
+//#region web/src/newlines.js
+function shellNewlines(text) {
+	if (!text || text.includes("\n") || !text.includes("\\n")) return text;
+	return text.split(/(`[^`]*`)/).map((part, i) => i % 2 ? part : part.replace(/(?<!\\)\\n/g, "\n")).join("");
+}
+//#endregion
+//#region web/src/reply-preview.js
+function ReplyPreview({ message, messages }) {
+	const id = message.reply_to;
+	const [original, setOriginal] = d(null);
+	const [error, setError] = d("");
+	const [busy, setBusy] = d(false);
+	const [show, setShow] = d(false);
+	if (!id) return null;
+	const preview = messages.find((m) => m.id === id) || original || message.reply_preview;
+	const open = async () => {
+		const target = document.querySelector(`[data-message-id="${message.id}"]`)?.closest(".thread, .agent-talk-thread")?.querySelector(`[data-message-id="${id}"]`);
+		if (target) {
+			target.scrollIntoView({
+				block: "center",
+				behavior: "instant"
+			});
+			target.focus({ preventScroll: true });
+			target.classList.remove("reply-highlight");
+			target.offsetWidth;
+			target.classList.add("reply-highlight");
+			return;
+		}
+		if (original) {
+			setShow((value) => !value);
+			return;
+		}
+		setBusy(true);
+		setError("");
+		try {
+			const response = await fetch(`/messages?id=${id}`);
+			if (!response.ok) throw Error("Original message is no longer available.");
+			const found = (await response.json()).messages?.find((m) => m.id === id);
+			if (!found) throw Error("Original message is no longer available.");
+			setOriginal(found);
+			setShow(true);
+		} catch (err) {
+			setError(err.message);
+		} finally {
+			setBusy(false);
+		}
+	};
+	return m$1`<div class="reply-reference">
+    <button type="button" class="reply-quote" onClick=${open} disabled=${busy}
+      aria-label=${`Show original message ${id}`} aria-expanded=${show}>
+      <strong>${preview?.sender || `Message #${id}`}</strong>
+      <span>${busy ? "Loading original…" : preview ? replySnippet(preview) : "Show original message"}</span>
+    </button>
+    ${show && original && m$1`<div class="reply-original" tabindex="0">
+      <strong>${original.sender} · message #${id}</strong>
+      <div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(original.content)) }} />
+      <${AttachmentList} files=${original.attachments} />
+    </div>`}
+    ${error && m$1`<span class="reply-error" role="alert">${error}</span>`}
+  </div>`;
+}
+//#endregion
+//#region web/src/machines.js
+var COLORS = [
+	"#80bfff",
+	"#c4a0f5",
+	"#91a4ee",
+	"#ed9bc4",
+	"#adc87f",
+	"#edba83",
+	"#65d5c0",
+	"#d2bd79"
+];
+var machineName = (name) => name || "Unknown machine";
+function machineColor(name) {
+	let hash = 2166136261;
+	for (const c of machineName(name)) hash = Math.imul(hash ^ c.codePointAt(0), 16777619);
+	return COLORS[(hash >>> 0) % COLORS.length];
+}
+function machineList(nodes = [], recipients = []) {
+	const all = new Map(nodes.map((n) => [machineName(n.name), {
+		...n,
+		name: machineName(n.name)
+	}]));
+	for (const r of recipients) {
+		const name = machineName(r.node);
+		if (!all.has(name)) all.set(name, {
+			name,
+			connected: false,
+			missing: true
+		});
+	}
+	return [...all.values()].map((n) => {
+		const agents = recipients.filter((r) => machineName(r.node) === n.name);
+		return {
+			...n,
+			total: agents.length,
+			live: agents.filter((r) => r.pane_alive).length
+		};
+	}).sort((a, b) => Number(!!b.local) - Number(!!a.local) || a.name.localeCompare(b.name));
+}
+//#endregion
+//#region web/src/shared.js
+var POLL_MS = 2e3;
+var PEEK_MS = 2e3;
+var JSONH = { "content-type": "application/json" };
+var FLAVOR_ICON = {
+	claude: "✳",
+	codex: "◇",
+	pi: "π",
+	hermes: "☿",
+	generic: "▪"
+};
+var HARNESSES = Object.freeze({
+	claude: {
+		key: "claude",
+		label: "Claude",
+		color: "#d8905f",
+		mark: "✳"
+	},
+	codex: {
+		key: "codex",
+		label: "Codex",
+		color: "#56b4e9",
+		mark: "◇"
+	},
+	pi: {
+		key: "pi",
+		label: "Pi",
+		color: "#3cb44b",
+		mark: "π"
+	},
+	hermes: {
+		key: "hermes",
+		label: "Hermes",
+		color: "#e5c14f",
+		mark: "☿"
+	},
+	generic: {
+		key: "generic",
+		label: "Generic",
+		color: "#9aa1a8",
+		mark: "▪"
+	}
+});
+function harnessStyle(flavor) {
+	return HARNESSES[String(flavor || "generic").toLowerCase()] || HARNESSES.generic;
+}
+function harnessChoices(recipients = []) {
+	const generic = recipients.some((r) => r.pane_alive && harnessStyle(r.flavor).key === "generic");
+	return Object.values(HARNESSES).filter((h) => h.key !== "generic" || generic);
+}
+function agentShown(r, machine, harness) {
+	return (machine === null || machineName(r.node) === machine) && (harness === null || harnessStyle(r.flavor).key === harness);
+}
+function HarnessFilter({ recipients, harness, setHarness }) {
+	return m$1`<span class="harness-filter" role="group" aria-label="Filter agents by harness">
+    ${harnessChoices(recipients).map((h) => m$1`<button key=${h.key} type="button" class="harness-swatch"
+      style=${`--harness:${h.color}`} aria-pressed=${harness === h.key} aria-label=${`Only ${h.label} agents`}
+      title=${harness === h.key ? `Showing only ${h.label} agents. Click to show all.` : `Show only ${h.label} agents`}
+      onClick=${() => setHarness(harness === h.key ? null : h.key)}>${h.mark}</button>`)}
+  </span>`;
+}
+var WORKING_HALO = {
+	color: "#9be879",
+	fill: "rgba(155,232,121,.14)"
+};
+var STATE = {
+	working: {
+		cls: "working",
+		word: "working",
+		color: "var(--state-working)"
+	},
+	needs_attention: {
+		cls: "attention",
+		word: "needs attention",
+		color: "var(--state-attention)"
+	},
+	idle: {
+		cls: "idle",
+		word: "idle",
+		color: "var(--state-idle)"
+	},
+	unknown: {
+		cls: "unknown",
+		word: "unknown",
+		color: "var(--state-unknown)"
+	},
+	stopped: {
+		cls: "stopped",
+		word: "stopped",
+		color: "var(--state-stopped)"
+	}
+};
+function agentStatus(r) {
+	if (!r.pane_alive) return "stopped";
+	const s = r.activity && r.activity.status;
+	if (s && s !== "unknown") return s;
+	return "unknown";
+}
+var ANIMAL_EMOJI = {
+	otter: "🦦",
+	badger: "🦡",
+	panda: "🐼",
+	raccoon: "🦝",
+	hedgehog: "🦔",
+	viper: "🐍",
+	gecko: "🦎",
+	newt: "🦎",
+	salamander: "🦎",
+	capybara: "🦫",
+	manatee: "🦭",
+	lemur: "🐒",
+	kestrel: "🦅",
+	magpie: "🐦‍⬛",
+	ibis: "🦩",
+	heron: "🪿",
+	puffin: "🐧",
+	narwhal: "🐳",
+	axolotl: "🐟",
+	quokka: "🐨",
+	wombat: "🐨",
+	dormouse: "🐁",
+	shrew: "🐁",
+	fennec: "🦊",
+	mongoose: "🦦",
+	stoat: "🦦",
+	marten: "🦦",
+	ferret: "🦦",
+	ocelot: "🐆",
+	pangolin: "🦎",
+	tapir: "🐗",
+	civet: "🐱"
+};
+function hue(name) {
+	let h = 0;
+	for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
+	return h;
+}
+function rel(ts, now) {
+	const d = Math.max(0, now - ts);
+	if (d < 50) return "just now";
+	if (d < 3600) return `${Math.round(d / 60)}m ago`;
+	if (d < 86400) return `${Math.round(d / 3600)}h ago`;
+	return `${Math.round(d / 86400)}d ago`;
+}
+var SUMMARY_SOURCE = {
+	owner: "noted by you",
+	agent: "said by the agent",
+	title: "from its pane title"
+};
+function pairKey(a, b) {
+	return [a, b].sort().join(" ");
+}
+var disp = (u) => u === "owner" ? m$1`<span class="owner-name">owner</span>` : u;
+var focusHash = (u) => `#/agent/${encodeURIComponent(u)}`;
+async function patchTask(id, patch) {
+	try {
+		const r = await fetch(`/tasks/${id}`, {
+			method: "PATCH",
+			headers: JSONH,
+			body: JSON.stringify(patch)
+		});
+		if (r.ok) return { ok: true };
+		return {
+			ok: false,
+			error: (await r.json().catch(() => null))?.detail?.error || `request failed (${r.status})`
+		};
+	} catch {
+		return {
+			ok: false,
+			error: "Update not confirmed. Refresh the board before retrying."
+		};
+	}
+}
+function Avatar({ name, size }) {
+	const base = name.replace(/-\d+$/, "");
+	const emoji = ANIMAL_EMOJI[base];
+	return m$1`<div class=${`hex ${size || ""}`} style=${`--hue: hsl(${hue(name)} 42% 58%)`}>
+    ${emoji || m$1`<span class="mono2">${base.slice(0, 2)}</span>`}
+  </div>`;
+}
+function MachineBadge({ node }) {
+	return m$1`<span class="machine-badge" style=${`--machine:${machineColor(node)}`} title=${`Machine: ${machineName(node)}`}><span class="machine-mark" aria-hidden="true"></span>${machineName(node)}</span>`;
+}
+function Bee({ node, flavor, size = "", working = false }) {
+	const harness = harnessStyle(flavor);
+	return m$1`<svg class=${`agent-bee ${size}`} style=${`--machine:${machineColor(node)}`} viewBox="0 0 56 42" role="img" aria-label=${`${machineName(node)} machine, ${harness.label} harness${working ? ", working" : ""}`}>
+    <title>${harness.label} harness: ${harness.mark} and stripes · ${machineName(node)}: body and border</title>
+    ${working && m$1`<g class="bee-working-halo" style=${`--working:${WORKING_HALO.color}`}>
+      <circle cx="27" cy="21" r="28" fill=${WORKING_HALO.fill} stroke=${WORKING_HALO.color} stroke-width="2.5" />
+    </g>`}
+    <ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(-25 23 10)" />
+    <ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(25 23 32)" />
+    <ellipse cx="26" cy="21" rx="19" ry="10" fill=${machineColor(node)} />
+    <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7" />
+    <path d="M19 12v18M29 11v20" stroke=${harness.color} stroke-width="4" />
+    <circle cx="44" cy="21" r="6" fill="#16120c" /><circle cx="46" cy="19" r="1.3" fill="#f0e6d2" />
+  </svg>`;
+}
+//#endregion
+//#region web/src/owner-note.js
+function OwnerNote({ agent, refresh }) {
+	const [editing, setEditing] = d(false);
+	const [text, setText] = d("");
+	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
+	const save = async (value) => {
+		setBusy(true);
+		setError("");
+		try {
+			const response = await fetch(`/agents/${encodeURIComponent(agent.user_id)}/owner-note`, {
+				method: "PUT",
+				headers: JSONH,
+				body: JSON.stringify({ text: value })
+			});
+			if (!response.ok) {
+				const body = await response.json();
+				throw new Error(body.detail?.error || "Could not save note.");
+			}
+			setEditing(false);
+			refresh?.();
+		} catch (err) {
+			setError(err.message);
+		} finally {
+			setBusy(false);
+		}
+	};
+	return m$1`<div class="owner-note" aria-label=${`Owner note for ${agent.user_id}`}>
+    ${editing ? m$1`<form onSubmit=${(e) => {
+		e.preventDefault();
+		save(text);
+	}}>
+      <label>Your note<textarea aria-label=${`Your note for ${agent.user_id}`} maxLength="1000" rows="2"
+        value=${text} disabled=${busy} onInput=${(e) => setText(e.target.value)} /></label>
+      <div class="owner-note-actions"><button type="submit" disabled=${busy}>Save note</button>
+        <button type="button" disabled=${busy} onClick=${() => {
+		setEditing(false);
+		setError("");
+	}}>Cancel</button>
+        ${agent.owner_note && m$1`<button type="button" disabled=${busy} onClick=${() => save("")}>Clear note</button>`}</div>
+    </form>` : m$1`<button type="button" class="owner-note-edit" aria-label=${`${agent.owner_note ? "Edit" : "Add"} owner note for ${agent.user_id}`}
+      onClick=${() => {
+		setText(agent.owner_note || "");
+		setError("");
+		setEditing(true);
+	}}>
+      ${agent.owner_note ? `📌 you: ${agent.owner_note}` : "+ your note"}</button>`}
+    ${error && m$1`<span role="alert">${error}</span>`}
+  </div>`;
+}
+//#endregion
+//#region web/src/quick-switch.js
+function switchOptions(state, mode, query) {
+	if (!state) return [];
+	const teams = state.teams || [];
+	const agents = state.recipients;
+	let options;
+	if (mode === "teams") options = teams.map((team) => {
+		const members = agents.filter((a) => a.team_id === team.id).sort((a, b) => Number(b.pane_alive) - Number(a.pane_alive) || Number(b.user_id === team.queen) - Number(a.user_id === team.queen) || a.user_id.localeCompare(b.user_id));
+		const target = members[0];
+		return {
+			id: `team-${team.id}`,
+			name: team.name,
+			target,
+			detail: target ? `${members.filter((a) => a.pane_alive).length} live · opens ${target.user_id}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
+			search: [team.name, ...members.map((a) => a.user_id)].join(" ")
+		};
+	});
+	else options = agents.map((a) => {
+		const team = teams.find((t) => t.id === a.team_id)?.name || "no team";
+		return {
+			id: `agent-${a.user_id}`,
+			name: a.user_id,
+			target: a,
+			detail: `${team} · ${a.node || "unknown machine"} · ${a.pane_alive ? (a.activity?.status || "online").replaceAll("_", " ") : "offline"}`,
+			search: [
+				a.user_id,
+				team,
+				a.node,
+				a.flavor,
+				a.model
+			].filter(Boolean).join(" ")
+		};
+	});
+	const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+	return options.filter((o) => words.every((w) => o.search.toLowerCase().includes(w))).sort((a, b) => Number(!a.target) - Number(!b.target) || Number(!a.target?.pane_alive) - Number(!b.target?.pane_alive) || a.name.localeCompare(b.name));
+}
+function QuickSwitcher({ state, navigate }) {
+	const [mode, setMode] = d(null);
+	const [query, setQuery] = d("");
+	const [selected, setSelected] = d(null);
+	const dialog = A(null), input = A(null), previous = A(null);
+	const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+	const shortcut = mac ? "⌘" : "Ctrl+";
+	const open = (next) => {
+		if (!state) return;
+		if (!dialog.current?.open) previous.current = document.activeElement;
+		setQuery("");
+		setSelected(null);
+		setMode(next);
+	};
+	const close = () => {
+		dialog.current?.close();
+		setMode(null);
+	};
+	_(() => {
+		const onKey = (e) => {
+			const platformModifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+			if (e.isComposing || e.altKey || !platformModifier || e.code !== "KeyK") return;
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			if (!e.repeat) open(e.shiftKey ? "teams" : "agents");
+		};
+		addEventListener("keydown", onKey, true);
+		return () => removeEventListener("keydown", onKey, true);
+	});
+	_(() => {
+		if (mode) {
+			if (!dialog.current.open) dialog.current.showModal();
+			input.current?.focus();
+		}
+	}, [mode]);
+	const options = switchOptions(state, mode, query);
+	const enabled = options.filter((o) => o.target);
+	const current = enabled.find((o) => o.id === selected) || enabled[0];
+	_(() => {
+		if (mode && current) document.getElementById(`switch-${current.id}`)?.scrollIntoView({ block: "nearest" });
+	}, [mode, current?.id]);
+	const choose = (option) => {
+		if (!option?.target) return;
+		close();
+		navigate(option.target.user_id, previous.current);
+	};
+	const onKey = (e) => {
+		e.stopPropagation();
+		if (e.isComposing) return;
+		if (e.key === "Escape") {
+			e.preventDefault();
+			close();
+		}
+		if (["ArrowDown", "ArrowUp"].includes(e.key)) {
+			e.preventDefault();
+			if (enabled.length) {
+				const index = enabled.findIndex((o) => o.id === current?.id);
+				setSelected(enabled[(index + (e.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length].id);
+			}
+		}
+		if (e.key === "Enter" && e.target === input.current) {
+			e.preventDefault();
+			choose(current);
+		}
+	};
+	return m$1`<div class="quick-switch-launchers">
+    <button type="button" class="mini" disabled=${!state} onClick=${() => open("teams")} title=${`Switch teams (${shortcut}Shift+K)`}>teams <kbd>${shortcut}⇧K</kbd></button>
+    <button type="button" class="mini" disabled=${!state} onClick=${() => open("agents")} title=${`Switch agents (${shortcut}K)`}>agents <kbd>${shortcut}K</kbd></button>
+    <dialog class="quick-switch" ref=${dialog} aria-labelledby="switch-title" onKeyDown=${onKey}
+      onCancel=${(e) => {
+		e.preventDefault();
+		close();
+	}}>
+      <div class="quick-switch-head"><h2 id="switch-title">${mode === "teams" ? "Switch team" : "Switch agent"}</h2>
+        <button type="button" class="mini" onClick=${close}>close</button></div>
+      <input ref=${input} type="search" aria-label=${mode === "teams" ? "Find team" : "Find agent"}
+        role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="switch-results"
+        aria-activedescendant=${current ? `switch-${current.id}` : void 0}
+        placeholder=${mode === "teams" ? "Search teams…" : "Search name, team, machine, or harness…"}
+        value=${query} onInput=${(e) => {
+		setQuery(e.target.value);
+		setSelected(null);
+	}} />
+      <div id="switch-results" role="listbox" aria-label="Matches" class="quick-switch-results">
+        ${options.map((o) => m$1`<div key=${o.id} id=${`switch-${o.id}`} role="option" aria-selected=${current?.id === o.id}
+          aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
+          onClick=${() => choose(o)}>
+          ${o.target && m$1`<${Bee} node=${o.target.node} flavor=${o.target.flavor} size="small" working=${o.target.activity?.status === "working"} />`}
+          <span><b>${o.name}</b><small>${o.detail}</small></span>
+        </div>`)}
+        ${!options.length && m$1`<p class="empty">No matches.</p>`}
+      </div>
+      <p class="quick-switch-help">↑ ↓ select · Enter open · Esc close</p>
+    </dialog>
+  </div>`;
+}
+//#endregion
+//#region web/src/agent-history.js
+function useAgentHistory(user) {
+	const [history, setHistory] = d({
+		messages: [],
+		loaded: false,
+		more: false,
+		busy: false,
+		error: ""
+	});
+	const older = A(() => {});
+	h(() => {
+		let active = true, polling = false, loadingOlder = false;
+		let newest = null, oldest = null;
+		const abort = new AbortController();
+		const read = async (query) => {
+			const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages?${query}`, { signal: abort.signal });
+			if (!response.ok) throw Error("History unavailable");
+			const page = await response.json();
+			if (!Array.isArray(page.messages) || typeof page.has_more !== "boolean") throw Error("Invalid history");
+			return page;
+		};
+		const merge = (page, initial = false, isOlder = false) => {
+			if (!active) return;
+			const ids = page.messages.map((m) => m.id);
+			if (ids.length) {
+				newest = Math.max(newest ?? 0, ...ids);
+				oldest = Math.min(oldest ?? Infinity, ...ids);
+			} else if (initial) newest = 0;
+			setHistory((prev) => ({
+				...prev,
+				loaded: true,
+				error: "",
+				more: initial || isOlder ? page.has_more : prev.more,
+				messages: [...new Map([...prev.messages, ...page.messages].map((m) => [m.id, m])).values()]
+			}));
+		};
+		const poll = async () => {
+			if (polling) return;
+			polling = true;
+			try {
+				const initial = newest === null;
+				let page = await read(initial ? "limit=300" : `after=${newest}&limit=300`);
+				merge(page, initial);
+				while (active && !initial && page.has_more) {
+					page = await read(`after=${newest}&limit=300`);
+					merge(page);
+				}
+			} catch {
+				if (active) setHistory((prev) => ({
+					...prev,
+					error: "Could not load conversation history. Retrying…"
+				}));
+			} finally {
+				polling = false;
+			}
+		};
+		older.current = async () => {
+			if (loadingOlder || oldest === null) return;
+			loadingOlder = true;
+			setHistory((prev) => ({
+				...prev,
+				busy: true
+			}));
+			try {
+				merge(await read(`before=${oldest}&limit=300`), false, true);
+			} catch {
+				if (active) setHistory((prev) => ({
+					...prev,
+					error: "Could not load older messages. Please try again."
+				}));
+			} finally {
+				loadingOlder = false;
+				if (active) setHistory((prev) => ({
+					...prev,
+					busy: false
+				}));
+			}
+		};
+		poll();
+		const timer = setInterval(poll, POLL_MS);
+		return () => {
+			active = false;
+			abort.abort();
+			clearInterval(timer);
+		};
+	}, [user]);
+	return {
+		...history,
+		loadOlder: () => older.current()
+	};
+}
+//#endregion
+//#region web/src/task-trash.js
+async function trashTask(task) {
+	if (!confirm(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files will remain.`)) return false;
+	const response = await fetch(`/tasks/${task.id}`, { method: "DELETE" });
+	const body = await response.json();
+	if (!response.ok) throw new Error(body.detail?.error || "Could not trash task.");
+	return true;
+}
+function TaskTrash({ task, refresh, onDeleted }) {
+	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
+	const remove = async () => {
+		setBusy(true);
+		setError("");
+		try {
+			if (!await trashTask(task)) return;
+			onDeleted?.();
+			refresh();
+		} catch (err) {
+			setError(`${err.message} Refresh to check the task before retrying.`);
+		} finally {
+			setBusy(false);
+		}
+	};
+	return m$1`<span class="task-trash"><button type="button" class="mini danger" disabled=${busy}
+    title=${`Permanently trash task #${task.id}`} onClick=${remove}>${busy ? "Trashing…" : "⌫ Trash"}</button>
+    ${error && m$1`<span role="alert" class="tnote-err">${error}</span>`}</span>`;
+}
+//#endregion
+//#region web/src/task-status.js
+function TaskStatusActions({ task, refresh }) {
+	const [editing, setEditing] = d(false);
+	const [note, setNote] = d(task.note || "");
+	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
+	const change = async (patch) => {
+		setBusy(true);
+		setError("");
+		try {
+			const result = await patchTask(task.id, patch);
+			if (!result.ok) {
+				setError(result.error);
+				return;
+			}
+			setEditing(false);
+			await refresh();
+		} catch {
+			setError("Could not update the task. Try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+	const complete = () => {
+		const verification = (editing ? note : task.note || "").trim();
+		if (!verification) {
+			setEditing(true);
+			return;
+		}
+		change({
+			status: "done",
+			note: verification
+		});
+	};
+	return m$1`<div class=${`task-status-actions ${editing ? "editing" : ""}`}>
+    ${task.status === "done" ? m$1`<button type="button" class="mini" disabled=${busy}
+          onClick=${() => change({ status: task.assignee || task.team_id ? "picked_up" : "open" })}>Reopen</button>` : m$1`${task.status === "open" && m$1`<button type="button" class="mini"
+          disabled=${busy || !(task.assignee || task.team_id)}
+          title=${task.assignee || task.team_id ? "Start work on this task" : "Assign this task first"}
+          onClick=${() => change({ status: "picked_up" })}>Start work</button>`}
+        <button type="button" class="mini" disabled=${busy || editing && !note.trim()}
+          onClick=${complete}>${busy ? "Updating…" : "Complete task"}</button>`}
+    ${editing && task.status !== "done" && m$1`<div class="task-verification">
+      <label>Verification note <span aria-hidden="true">*</span>
+        <textarea rows="3" value=${note} autofocus
+          placeholder="How to use or verify the result, and where to look."
+          onInput=${(e) => setNote(e.target.value)}></textarea>
+      </label>
+      <button type="button" class="mini" disabled=${busy}
+        onClick=${() => {
+		setEditing(false);
+		setError("");
+	}}>Cancel</button>
+    </div>`}
+    ${error && m$1`<span class="task-action-error" role="alert">${error}</span>`}
+  </div>`;
+}
+//#endregion
+//#region web/src/outcome.js
+function structured(body) {
+	return body !== null && typeof body === "object" && !Array.isArray(body);
+}
+function deliveryOutcome(httpOk, body) {
+	if (!structured(body)) return {
+		status: "uncertain",
+		reason: "the server's answer could not be read"
+	};
+	const b = body;
+	if (b.status === "delivered") return {
+		status: "delivered",
+		reason: null
+	};
+	if (b.status === "unknown") return {
+		status: "unknown",
+		reason: b.delivery_error || "result lost"
+	};
+	if (b.status === "failed") return {
+		status: "failed",
+		reason: b.delivery_error || "delivery failed"
+	};
+	const detail = structured(b.detail) ? b.detail : {};
+	if (detail.status === "unknown") return {
+		status: "unknown",
+		reason: detail.error || detail.detail || "result lost"
+	};
+	if (!httpOk && (detail.error || b.error)) return {
+		status: "failed",
+		reason: detail.error || b.error
+	};
+	return {
+		status: "uncertain",
+		reason: "the server's answer was not recognised"
+	};
+}
+function unansweredOutcome(err) {
+	return {
+		status: "uncertain",
+		reason: err && err.message || "no answer from the server"
+	};
+}
+function draftClientId(draft, retryOf, makeId) {
+	return retryOf && retryOf.text === draft.text && retryOf.context === draft.context && (retryOf.reply_to ?? null) === (draft.reply_to ?? null) && JSON.stringify(retryOf.images || []) === JSON.stringify(draft.images || []) ? retryOf.clientId : makeId();
+}
+function spawnTarget(nodes, selected, harnesses) {
+	const all = Array.isArray(nodes) ? nodes : [];
+	const dirsOf = (n) => n && Array.isArray(n.spawn_dirs) ? n.spawn_dirs : [];
+	const here = {
+		ok: true,
+		remote: false,
+		node: null,
+		harnesses,
+		dirs: dirsOf(all.find((n) => n.local) || null),
+		reason: null
+	};
+	if (!selected) return here;
+	const n = all.find((x) => x.name === selected);
+	const blocked = (reason) => ({
+		ok: false,
+		remote: true,
+		node: selected,
+		harnesses: [],
+		dirs: [],
+		reason
+	});
+	if (!n) return blocked(`${selected} is no longer enrolled`);
+	if (n.local) return here;
+	if (!n.connected) return blocked(`${selected} is not connected`);
+	const offered = (harnesses || []).filter((h) => (n.harnesses || []).includes(h.flavor));
+	if (offered.length === 0) return blocked(`${selected} reports no spawnable harness`);
+	return {
+		ok: true,
+		remote: true,
+		node: selected,
+		harnesses: offered,
+		dirs: dirsOf(n),
+		reason: null
+	};
+}
+function spawnOutcome(httpOk, body) {
+	if (!structured(body)) return {
+		status: "uncertain",
+		reason: "the server's answer could not be read"
+	};
+	const b = body;
+	if (b.launch === "ok" && b.user_id) return {
+		status: "ok",
+		reason: null,
+		user: b.user_id
+	};
+	if (b.launch === "unknown") return {
+		status: "unknown",
+		reason: b.launch_error || "the launch command did not report back",
+		user: b.user_id
+	};
+	const detail = structured(b.detail) ? b.detail : {};
+	if (detail.status === "unknown") return {
+		status: "unknown",
+		reason: detail.detail || detail.error || "no report"
+	};
+	if (!httpOk && (detail.status === "failed" || detail.error || detail.detail || b.error)) return {
+		status: "failed",
+		reason: detail.detail || detail.error || b.error || "spawn failed"
+	};
+	return {
+		status: "uncertain",
+		reason: "the server's answer was not recognised"
+	};
+}
+//#endregion
+//#region web/src/use-media.js
+var COMPACT_LAYOUT = "(max-width: 1000px), (max-width: 1200px) and (pointer: coarse)";
+function useMedia(query) {
+	const [matches, setMatches] = d(() => matchMedia(query).matches);
+	h(() => {
+		const media = matchMedia(query);
+		const update = () => setMatches(media.matches);
+		update();
+		media.addEventListener("change", update);
+		return () => media.removeEventListener("change", update);
+	}, [query]);
+	return matches;
+}
+//#endregion
+//#region web/src/hive.js
+var TASK_CELL_RADIUS = 18;
+var TASK_CELL_CLEARANCE = 22;
+var DANCE_MS = 7e3;
+function taskCellClearsTeams(point, boxes) {
+	return boxes.every((box) => point.x <= box.x - TASK_CELL_CLEARANCE || point.x >= box.x + box.w + TASK_CELL_CLEARANCE || point.y <= box.y - TASK_CELL_CLEARANCE || point.y >= box.y + box.h + TASK_CELL_CLEARANCE);
+}
+function placeTaskCell(ideal, boxes, occupied, width) {
+	const bounds = {
+		minX: TASK_CELL_CLEARANCE,
+		maxX: Math.max(TASK_CELL_CLEARANCE, width - TASK_CELL_CLEARANCE),
+		minY: TASK_CELL_CLEARANCE,
+		maxY: 260 - TASK_CELL_CLEARANCE
+	};
+	const candidate = (x, y) => ({
+		x: Math.max(bounds.minX, Math.min(bounds.maxX, x)),
+		y: Math.max(bounds.minY, Math.min(bounds.maxY, y))
+	});
+	const usable = (point) => taskCellClearsTeams(point, boxes) && occupied.every((other) => Math.hypot(point.x - other.x, point.y - other.y) >= 34);
+	const start = candidate(ideal.x, ideal.y);
+	if (usable(start)) return start;
+	const step = 17;
+	const limit = Math.hypot(width, 260);
+	for (let radius = step; radius <= limit; radius += step) {
+		const samples = Math.max(12, Math.ceil(Math.PI * 2 * radius / step));
+		for (let i = 0; i < samples; i++) {
+			const angle = -Math.PI / 2 + i * Math.PI * 2 / samples;
+			const point = candidate(ideal.x + Math.cos(angle) * radius, ideal.y + Math.sin(angle) * radius);
+			if (usable(point)) return point;
+		}
+	}
+	return start;
+}
+function CompactBees({ state, machine, harness = null, refresh }) {
+	const agents = (state.recipients || []).filter((r) => r.pane_alive && agentShown(r, machine, harness));
+	return m$1`<nav class="compact-hive" aria-label="Live agents">
+    <div class="compact-hive-heading"><span>${agents.length} live agents</span><span>Tap a bee to open</span></div>
+    <div class="bee-grid">${agents.map((r) => {
+		const status = agentStatus(r);
+		const st = STATE[status] || STATE.unknown;
+		const harness = harnessStyle(r.flavor);
+		return m$1`<div key=${r.user_id} class="bee-tile-wrap"><a class="bee-tile" href=${focusHash(r.user_id)} style=${`--machine:${machineColor(r.node)}`}>
+        <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
+        <span class="bee-name">${r.user_id}</span>
+        <span class="bee-machine">${machineName(r.node)}</span>
+        <span class="bee-state"><span class=${`status ${st.cls}`} aria-hidden="true"></span>${st.word} · ${harness.mark} ${harness.label}</span>
+      </a><${OwnerNote} agent=${r} refresh=${refresh} /></div>`;
+	})}</div>
+    ${!agents.length && m$1`<p class="compact-hive-empty">No live ${harness ? `${harnessStyle(harness).label} ` : ""}agents${machine ? ` on ${machine}` : ""}. Offline agents are listed under their team.</p>`}
+  </nav>`;
+}
+function HiveTaskDetail({ task, state, refresh, onClose }) {
+	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
+	const assign = async (e) => {
+		const value = e.target.value;
+		setBusy(true);
+		setError("");
+		try {
+			const result = await patchTask(task.id, value.startsWith("t:") ? { team_id: Number(value.slice(2)) } : {
+				assignee: value || null,
+				team_id: null
+			});
+			if (!result.ok) setError(result.error);
+			else refresh();
+		} catch {
+			setError("Could not assign task. Try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+	const agents = [.../* @__PURE__ */ new Set([...(state.recipients || []).map((r) => r.user_id), ...task.assignee ? [task.assignee] : []])];
+	return m$1`<section class="hive-task-detail" aria-label=${`Task #${task.id} details`}>
+    <header><h3>#${task.id} · ${task.title}</h3>
+      <button type="button" class="mini" onClick=${onClose}>Collapse</button></header>
+    <p>${task.status.replaceAll("_", " ")} · ${task.assignee || "unassigned"}${task.team_id ? ` · team ${(state.teams || []).find((t) => t.id === task.team_id)?.name || task.team_id}` : ""}</p>
+    ${task.description && m$1`<p class="task-description">${task.description}</p>`}
+    ${task.depends_on?.length > 0 && m$1`<p>Depends on ${task.depends_on.map((id) => `#${id}`).join(", ")}</p>`}
+    ${task.worktree && m$1`<p>Worktree: ${task.worktree_node || ""} ${task.worktree}</p>`}
+    <${AttachmentList} files=${task.attachments} />
+    ${task.note && m$1`<p class="task-description">${task.note}</p>`}
+    <label class="hive-task-assignment">Assign to
+      <select aria-label=${`Assign task #${task.id}`} value=${task.team_id ? `t:${task.team_id}` : task.assignee || ""} disabled=${busy || task.status === "done"} onChange=${assign}>
+        <option value="">unassigned</option>
+        <optgroup label="Teams">${(state.teams || []).map((t) => m$1`<option value=${`t:${t.id}`}>${t.name}</option>`)}</optgroup>
+        <optgroup label="Agents">${agents.map((a) => m$1`<option value=${a}>${a}</option>`)}</optgroup>
+      </select>
+    </label>
+    ${error && m$1`<p role="alert">${error}</p>`}
+    <${TaskStatusActions} task=${task} refresh=${refresh} />
+    <${TaskTrash} task=${task} refresh=${refresh} onDeleted=${onClose} />
+  </section>`;
+}
+function HiveView({ state, refresh, machine, harness = null, setHarness = () => {}, compactBody = null }) {
+	const compact = useMedia(COMPACT_LAYOUT);
+	const [selectedTask, setSelectedTask] = d(null);
+	const taskDetail = (state.tasks || []).find((t) => t.id === selectedTask);
+	const machineRef = A(machine);
+	machineRef.current = machine;
+	const harnessRef = A(harness);
+	harnessRef.current = harness;
+	const canvasRef = A(null);
+	const stateRef = A(state);
+	const beesRef = A(/* @__PURE__ */ new Map());
+	const streaksRef = A([]);
+	const pendingRef = A([]);
+	const lastSeenRef = A(null);
+	const hoverRef = A(null);
+	const taskHoverRef = A(null);
+	const taskCellsRef = A([]);
+	const taskStatusesRef = A(null);
+	const pendingShipmentsRef = A([]);
+	const shipmentsRef = A([]);
+	const dragTaskRef = A(null);
+	const dragBeeRef = A(null);
+	const dragPointRef = A(null);
+	const dropTargetRef = A(null);
+	const dropTeamRef = A(null);
+	const dragBoxRef = A(null);
+	const teamBoxesRef = A([]);
+	const drawRef = A(null);
+	const danceRef = A(null);
+	const [dropStatus, setDropStatus] = d("");
+	stateRef.current = state;
+	const legendHarnesses = harnessChoices(state.recipients);
+	const messages = state.messages || [];
+	const maxId = Math.max(0, ...messages.map((m) => m.id));
+	if (lastSeenRef.current === null) lastSeenRef.current = maxId;
+	else if (maxId > lastSeenRef.current) {
+		if (!compact) pendingRef.current.push(...messages.filter((m) => m.id > lastSeenRef.current).slice(-8));
+		lastSeenRef.current = maxId;
+	}
+	const taskSnapshot = new Map((state.tasks || []).map((t) => [t.id, t]));
+	if (taskStatusesRef.current === null) taskStatusesRef.current = taskSnapshot;
+	else {
+		for (const task of state.tasks || []) {
+			const before = taskStatusesRef.current.get(task.id);
+			if (!compact && before && before.status !== "done" && task.status === "done") pendingShipmentsRef.current.push(task);
+		}
+		taskStatusesRef.current = taskSnapshot;
+	}
+	h(() => {
+		if (compact) {
+			pendingRef.current = [];
+			pendingShipmentsRef.current = [];
+			return;
+		}
+		const canvas = canvasRef.current;
+		const ctx = canvas.getContext("2d");
+		const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+		let frame = 0;
+		let cssWidth = 0;
+		let lastDraw = 0;
+		const POS_KEY = "agent-swarm-hive-team-pos";
+		const teamPos = /* @__PURE__ */ new Map();
+		try {
+			for (const [k, v] of Object.entries(JSON.parse(localStorage.getItem(POS_KEY) || "{}"))) if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) teamPos.set(Number(k), {
+				x: v.x,
+				y: v.y
+			});
+		} catch {}
+		const savePos = () => {
+			const known = new Set((stateRef.current.teams || []).map((t) => t.id));
+			const obj = {};
+			for (const [id, p] of teamPos) if (known.has(id)) obj[id] = {
+				x: Math.round(p.x),
+				y: Math.round(p.y)
+			};
+			try {
+				localStorage.setItem(POS_KEY, JSON.stringify(obj));
+			} catch {}
+		};
+		const hex = (x, y, radius, fill, stroke) => {
+			ctx.beginPath();
+			for (let i = 0; i < 6; i++) {
+				const a = i * Math.PI / 3;
+				const px = x + Math.cos(a) * radius;
+				const py = y + Math.sin(a) * radius;
+				i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+			}
+			ctx.closePath();
+			ctx.fillStyle = fill;
+			ctx.fill();
+			ctx.strokeStyle = stroke;
+			ctx.lineWidth = 1;
+			ctx.stroke();
+		};
+		const token = (task, x, y) => {
+			hex(x, y, 8, "rgba(242,169,59,.15)", "#b97f27");
+			ctx.fillStyle = "#f2a93b";
+			ctx.font = "8px ui-monospace, monospace";
+			ctx.textAlign = "center";
+			ctx.textBaseline = "middle";
+			ctx.fillText(`#${task.id}`, x, y + .5);
+		};
+		const ensureSize = () => {
+			const width = Math.max(1, canvas.clientWidth);
+			const dpr = devicePixelRatio || 1;
+			if (width !== cssWidth || canvas.width !== Math.round(width * dpr)) {
+				cssWidth = width;
+				canvas.width = Math.round(width * dpr);
+				canvas.height = Math.round(260 * dpr);
+			}
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			return width;
+		};
+		const point = (a, b, c, u) => {
+			const v = 1 - u;
+			return {
+				x: v * v * a.x + 2 * v * u * c.x + u * u * b.x,
+				y: v * v * a.y + 2 * v * u * c.y + u * u * b.y
+			};
+		};
+		const draw = (now, still = false) => {
+			const width = ensureSize();
+			const data = stateRef.current;
+			const running = (data.recipients || []).filter((r) => r.pane_alive);
+			const live = new Set(running.map((r) => r.user_id));
+			const bees = beesRef.current;
+			for (const name of bees.keys()) if (!live.has(name)) bees.delete(name);
+			ctx.clearRect(0, 0, width, 260);
+			const center = {
+				x: width / 2,
+				y: 118
+			};
+			const ownerNode = {
+				x: width / 2,
+				y: 235
+			};
+			const done = (data.tasks || []).filter((t) => t.status === "done").length;
+			const doneX = width - 28;
+			hex(doneX - 7, 34, 11, "rgba(143,191,111,.07)", "#567546");
+			hex(doneX, 28, 14, "rgba(143,191,111,.15)", "#8fbf6f");
+			ctx.fillStyle = "#8fbf6f";
+			ctx.textAlign = "right";
+			ctx.textBaseline = "middle";
+			ctx.fillText(`shipped · ${done}`, doneX - 24, 28);
+			const teamsList = data.teams || [];
+			const teamById = new Map(teamsList.map((t) => [t.id, t]));
+			const teamColor = (name, alpha) => `hsl(${hue(name)} 45% 62% / ${alpha})`;
+			const grouped = [...running].sort((a, b) => (a.team_id && teamById.has(a.team_id) ? a.team_id : 1e9) - (b.team_id && teamById.has(b.team_id) ? b.team_id : 1e9));
+			const positioned = new Set([...teamPos.keys()].filter((id) => teamById.has(id)));
+			const posOf = (id) => {
+				const p = teamPos.get(id);
+				return {
+					x: Math.max(56, Math.min(width - 56, p.x)),
+					y: Math.max(58, Math.min(202, p.y))
+				};
+			};
+			const clusterCount = /* @__PURE__ */ new Map();
+			for (const r of grouped) if (r.team_id && positioned.has(r.team_id)) clusterCount.set(r.team_id, (clusterCount.get(r.team_id) || 0) + 1);
+			const looseList = grouped.filter((r) => !(r.team_id && positioned.has(r.team_id)));
+			const looseIndex = new Map(looseList.map((r, i) => [r.user_id, i]));
+			const clusterSeen = /* @__PURE__ */ new Map();
+			const homes = grouped.map((r) => {
+				if (r.team_id && positioned.has(r.team_id)) {
+					const pos = posOf(r.team_id);
+					const count = clusterCount.get(r.team_id);
+					const j = clusterSeen.get(r.team_id) || 0;
+					clusterSeen.set(r.team_id, j + 1);
+					const cols = Math.min(3, count);
+					const rows = Math.ceil(count / cols);
+					const row = Math.floor(j / cols);
+					const inRow = row === rows - 1 ? count - row * cols : cols;
+					return {
+						x: pos.x + (j % cols - (inRow - 1) / 2) * 58,
+						y: pos.y + (row - (rows - 1) / 2) * 46
+					};
+				}
+				const i = looseIndex.get(r.user_id);
+				const angle = Math.PI + i / Math.max(1, looseList.length) * Math.PI * 2;
+				return {
+					x: center.x + Math.cos(angle) * Math.min(width * .36, 330),
+					y: 132 + Math.sin(angle) * 67
+				};
+			});
+			teamBoxesRef.current = [];
+			{
+				const bounds = /* @__PURE__ */ new Map();
+				grouped.forEach((r, i) => {
+					if (!r.team_id || !teamById.has(r.team_id)) return;
+					const h = homes[i];
+					const b = bounds.get(r.team_id) || {
+						minX: h.x,
+						maxX: h.x,
+						minY: h.y,
+						maxY: h.y
+					};
+					b.minX = Math.min(b.minX, h.x);
+					b.maxX = Math.max(b.maxX, h.x);
+					b.minY = Math.min(b.minY, h.y);
+					b.maxY = Math.max(b.maxY, h.y);
+					bounds.set(r.team_id, b);
+				});
+				let emptyX = 12;
+				for (const t of teamsList) {
+					const b = bounds.get(t.id);
+					const pos = positioned.has(t.id) ? posOf(t.id) : null;
+					const box = b ? {
+						x: b.minX - 44,
+						y: b.minY - 40,
+						w: b.maxX - b.minX + 88,
+						h: b.maxY - b.minY + 90
+					} : pos ? {
+						x: pos.x - 47,
+						y: pos.y - 22,
+						w: 94,
+						h: 44
+					} : {
+						x: emptyX,
+						y: 28,
+						w: 94,
+						h: 44
+					};
+					if (!b && !pos) emptyX += 104;
+					box.x = Math.max(4, box.x);
+					box.y = Math.max(24, box.y);
+					box.w = Math.min(box.w, width - box.x - 4);
+					box.h = Math.min(box.h, 254 - box.y);
+					teamBoxesRef.current.push({
+						id: t.id,
+						name: t.name,
+						queen: t.queen,
+						...box
+					});
+				}
+				const draggingSomething = dragTaskRef.current !== null || dragBeeRef.current;
+				for (const box of teamBoxesRef.current) {
+					const over = draggingSomething && dropTeamRef.current === box.id;
+					const moving = dragBoxRef.current === box.id;
+					ctx.save();
+					ctx.strokeStyle = teamColor(box.name, over || moving ? .95 : .4);
+					ctx.lineWidth = over || moving ? 2 : 1;
+					ctx.setLineDash(over || moving ? [] : [5, 4]);
+					ctx.beginPath();
+					ctx.roundRect(box.x, box.y, box.w, box.h, 12);
+					ctx.stroke();
+					if (over || moving) {
+						ctx.fillStyle = teamColor(box.name, over ? .08 : .05);
+						ctx.beginPath();
+						ctx.roundRect(box.x, box.y, box.w, box.h, 12);
+						ctx.fill();
+					}
+					ctx.restore();
+					ctx.fillStyle = teamColor(box.name, .95);
+					ctx.font = "9px ui-monospace, monospace";
+					ctx.textAlign = "left";
+					ctx.textBaseline = "alphabetic";
+					ctx.fillText(box.queen ? `${box.name} · ♛ ${box.queen}` : box.name, box.x + 8, box.y + 11);
+				}
+			}
+			const waiting = (data.tasks || []).filter((t) => t.status !== "done" && (!t.assignee || !live.has(t.assignee)));
+			const carriedCount = (data.tasks || []).filter((t) => t.status !== "done" && t.assignee && live.has(t.assignee)).length;
+			const visible = waiting.slice(0, 15);
+			const cols = Math.min(5, Math.max(1, Math.ceil(Math.sqrt(visible.length || 1))));
+			const rows = Math.ceil(visible.length / cols);
+			const cellX = 38, cellY = 34;
+			taskCellsRef.current = [];
+			if (dragTaskRef.current === null && !dragBeeRef.current && dragBoxRef.current === null) {
+				ctx.fillStyle = "#a89878";
+				ctx.font = "10px ui-monospace, monospace";
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.fillText(`task comb · ${waiting.length} waiting · ${carriedCount} carried`, center.x, 17);
+			}
+			const doneIds = new Set((data.tasks || []).filter((t) => t.status === "done").map((t) => t.id));
+			const occupiedTaskCells = [];
+			visible.forEach((task, i) => {
+				const col = i % cols, row = Math.floor(i / cols);
+				const { x, y } = placeTaskCell({
+					x: center.x + (col - (cols - 1) / 2) * cellX,
+					y: center.y - (rows - 1) * cellY / 2 + row * cellY + (col % 2 ? cellY / 2 : 0)
+				}, teamBoxesRef.current, occupiedTaskCells, width);
+				occupiedTaskCells.push({
+					x,
+					y
+				});
+				const stranded = task.assignee && !live.has(task.assignee);
+				const team = task.team_id && teamById.get(task.team_id) || null;
+				const blocked = (task.depends_on || []).some((d) => !doneIds.has(d));
+				taskCellsRef.current.push({
+					x,
+					y,
+					task,
+					stranded,
+					team,
+					blocked
+				});
+			});
+			const cellById = new Map(taskCellsRef.current.map((c) => [c.task.id, c]));
+			ctx.save();
+			ctx.strokeStyle = "rgba(242,169,59,.3)";
+			ctx.lineWidth = 1;
+			for (const cell of taskCellsRef.current) for (const dep of cell.task.depends_on || []) {
+				const from = cellById.get(dep);
+				if (!from) continue;
+				ctx.beginPath();
+				ctx.moveTo(from.x, from.y);
+				ctx.lineTo(cell.x, cell.y);
+				ctx.stroke();
+			}
+			ctx.restore();
+			for (const cell of taskCellsRef.current) {
+				const { x, y, task, stranded, team, blocked } = cell;
+				const lifted = dragPointRef.current && dragTaskRef.current === task.id;
+				if (lifted) ctx.globalAlpha = .3;
+				ctx.save();
+				if (blocked) ctx.setLineDash([3, 3]);
+				hex(x, y, TASK_CELL_RADIUS, stranded ? "rgba(224,108,85,.10)" : team ? teamColor(team.name, .12) : "rgba(242,169,59,.12)", stranded ? "#e06c55" : team ? teamColor(team.name, .8) : "#b97f27");
+				ctx.restore();
+				ctx.fillStyle = stranded ? "#e06c55" : "#f2a93b";
+				ctx.font = "9px ui-monospace, monospace";
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.fillText(`#${task.id}`, x, y + .5);
+				if (lifted) ctx.globalAlpha = 1;
+			}
+			if (waiting.length > visible.length) {
+				ctx.fillStyle = "#a89878";
+				ctx.font = "9px ui-monospace, monospace";
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.fillText(`+${waiting.length - visible.length} more`, center.x, 202);
+			}
+			hex(ownerNode.x, ownerNode.y, 8, "rgba(242,169,59,.09)", "#b97f27");
+			ctx.fillStyle = "#f2a93b";
+			ctx.font = "9px ui-monospace, monospace";
+			ctx.textAlign = "center";
+			ctx.textBaseline = "alphabetic";
+			ctx.fillText("owner", ownerNode.x, 253);
+			const beeData = grouped.map((r, i) => {
+				const name = r.user_id;
+				const seed = hue(name);
+				const harness = harnessStyle(r.flavor);
+				const mine = (data.tasks || []).filter((t) => t.assignee === name && t.status !== "done").sort((a, b) => (a.status === "picked_up" ? -1 : 1) - (b.status === "picked_up" ? -1 : 1) || b.updated_at - a.updated_at);
+				const picked = mine.find((t) => t.status === "picked_up");
+				const assigned = !picked && mine.find((t) => t.status === "open");
+				const primary = picked || assigned;
+				const extras = mine.filter((t) => !primary || t.id !== primary.id);
+				const phase = seed / 57;
+				const working = agentStatus(r) === "working";
+				const busy = !!picked || working;
+				const speed = busy ? 2.5 : 1;
+				const clustered = r.team_id && positioned.has(r.team_id);
+				const amp = (busy ? 26 : 18) * (clustered ? .55 : 1);
+				const q = still ? 0 : now / 8e3 * Math.PI * 2 * speed + phase;
+				return {
+					r,
+					name,
+					seed,
+					harness,
+					x: homes[i].x + (still ? 0 : Math.sin(q) * amp),
+					y: homes[i].y + (still ? 0 : Math.sin(q * 1.7 + phase) * amp * .55),
+					dx: still ? 1 : Math.cos(q),
+					dy: still ? 0 : Math.cos(q * 1.7 + phase) * .94,
+					q,
+					picked,
+					assigned,
+					primary,
+					extras,
+					working,
+					busy
+				};
+			});
+			for (const bee of beeData) {
+				for (const box of teamBoxesRef.current) {
+					if (bee.r.team_id === box.id) continue;
+					const m = 14;
+					if (bee.x <= box.x - m || bee.x >= box.x + box.w + m || bee.y <= box.y - m || bee.y >= box.y + box.h + m) continue;
+					const out = [
+						{
+							d: bee.x - (box.x - m),
+							x: box.x - m,
+							y: bee.y
+						},
+						{
+							d: box.x + box.w + m - bee.x,
+							x: box.x + box.w + m,
+							y: bee.y
+						},
+						{
+							d: bee.y - (box.y - m),
+							x: bee.x,
+							y: box.y - m
+						},
+						{
+							d: box.y + box.h + m - bee.y,
+							x: bee.x,
+							y: box.y + box.h + m
+						}
+					].reduce((a, b) => a.d <= b.d ? a : b);
+					bee.x = out.x;
+					bee.y = out.y;
+				}
+				bee.x = Math.max(16, Math.min(width - 16, bee.x));
+				bee.y = Math.max(34, Math.min(bee.picked || bee.working ? 208 : 224, bee.y));
+			}
+			const dance = danceRef.current;
+			if (dance && !still) {
+				const u = (now - dance.start) / DANCE_MS;
+				if (u >= 1) danceRef.current = null;
+				else if (u >= 0) {
+					const ease = (v) => v * v * (3 - 2 * v);
+					const mix = ease(Math.min(1, u / .15, (1 - u) / .15));
+					const rx = Math.min(width * .38, 300);
+					const loop = (t) => {
+						const s = Math.sin(t), c = Math.cos(t), k = 1 + s * s;
+						return {
+							x: center.x + rx * c / k,
+							y: 128 + rx * .62 * s * c / k
+						};
+					};
+					ctx.save();
+					ctx.strokeStyle = `rgba(242,169,59,${.28 * mix})`;
+					ctx.setLineDash([2, 5]);
+					ctx.beginPath();
+					for (let k = 0; k <= 96; k++) {
+						const p = loop(k / 96 * Math.PI * 2);
+						k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+					}
+					ctx.stroke();
+					ctx.restore();
+					beeData.forEach((bee, i) => {
+						const t = u * Math.PI * 4 + i / (beeData.length + .5) * Math.PI * 2;
+						const a = loop(t), b = loop(t + .01);
+						const tx = b.x - a.x, ty = b.y - a.y;
+						const len = Math.hypot(tx, ty) || 1;
+						const middle = Math.exp(-(((a.x - center.x) / 60) ** 2));
+						const shimmy = Math.sin(now / 35) * 7 * middle;
+						const fx = a.x - ty / len * shimmy, fy = a.y + tx / len * shimmy;
+						bee.x += (fx - bee.x) * mix;
+						bee.y += (fy - bee.y) * mix;
+						if (mix > .5) {
+							bee.dx = tx;
+							bee.dy = ty;
+						}
+						bee.dancing = true;
+					});
+				}
+			}
+			for (const bee of beeData) {
+				const { r, name, harness, x, y, dx, dy, q, picked, assigned, primary, extras, working, busy, dancing } = bee;
+				const doing = r.summaries?.find((s) => s.source !== "owner");
+				bees.set(name, {
+					x,
+					y,
+					task: primary,
+					node: machineName(r.node),
+					harness: harness.key,
+					doing: [doing?.text, r.owner_note && `you: ${r.owner_note}`].filter(Boolean).join(" · ")
+				});
+				ctx.save();
+				if (!agentShown(r, machineRef.current, harnessRef.current)) ctx.globalAlpha = .18;
+				if (assigned) token(assigned, x + 22, y + Math.sin(q * .8) * 3);
+				const bearing = Math.atan2(dy, dx);
+				ctx.save();
+				ctx.translate(x, y);
+				ctx.rotate(bearing);
+				if (working) {
+					ctx.save();
+					ctx.fillStyle = WORKING_HALO.fill;
+					ctx.strokeStyle = WORKING_HALO.color;
+					ctx.lineWidth = 2.5;
+					ctx.shadowColor = WORKING_HALO.color;
+					ctx.shadowBlur = 12;
+					ctx.beginPath();
+					ctx.arc(0, 0, 24, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.stroke();
+					ctx.restore();
+				}
+				const flap = still ? 0 : Math.sin(now / 1e3 * (dancing ? 60 : busy ? 44 : 30)) * .35;
+				ctx.fillStyle = "rgba(240,230,210,.5)";
+				ctx.beginPath();
+				ctx.ellipse(-2, -7, 6, 3, -.45 - flap, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.beginPath();
+				ctx.ellipse(-2, 7, 6, 3, .45 + flap, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = machineColor(r.node);
+				ctx.beginPath();
+				ctx.ellipse(0, 0, 12, 6, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = "#16120c";
+				ctx.fillRect(-5, -6, 4.5, 12);
+				ctx.fillRect(1, -6, 4.5, 12);
+				ctx.fillStyle = harness.color;
+				ctx.fillRect(-4, -6, 2.5, 12);
+				ctx.fillRect(2, -6, 2.5, 12);
+				ctx.fillStyle = "#16120c";
+				ctx.beginPath();
+				ctx.arc(11, 0, 3.5, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.restore();
+				if (picked) token(picked, x, y + 16);
+				extras.slice(0, 4).forEach((task, j) => {
+					const a = -1.15 + j * .75;
+					token(task, x + Math.cos(a) * 25, y + Math.sin(a) * 22);
+				});
+				if (extras.length > 4) {
+					ctx.fillStyle = "#a89878";
+					ctx.font = "8px ui-monospace, monospace";
+					ctx.textAlign = "center";
+					ctx.textBaseline = "middle";
+					ctx.fillText(`+${extras.length - 4}`, x + 29, y + 12);
+				}
+				const labelY = y + (picked ? 35 : working ? 34 : 19);
+				ctx.font = "10px ui-monospace, monospace";
+				ctx.textBaseline = "alphabetic";
+				const markGap = 3;
+				const markW = ctx.measureText(harness.mark).width;
+				const shortName = name.length > 20 ? `${name.slice(0, 19)}…` : name;
+				const nameW = ctx.measureText(shortName).width;
+				const labelLeft = x - (markW + markGap + nameW) / 2;
+				ctx.textAlign = "left";
+				ctx.fillStyle = harness.color;
+				ctx.fillText(harness.mark, labelLeft, labelY);
+				ctx.fillStyle = "#a89878";
+				ctx.fillText(shortName, labelLeft + markW + markGap, labelY);
+				ctx.textAlign = "center";
+				ctx.font = "8px ui-monospace, monospace";
+				ctx.fillStyle = machineColor(r.node);
+				ctx.fillText(machineName(r.node), x, labelY + 11);
+				const attention = r.activity && r.activity.status === "needs_attention";
+				if (attention) {
+					ctx.fillStyle = "#f2a93b";
+					ctx.font = "bold 13px ui-monospace, monospace";
+					ctx.textBaseline = "alphabetic";
+					ctx.fillText("!", x, y - 14);
+				}
+				const myTeam = r.team_id && teamById.get(r.team_id) || null;
+				if (myTeam && myTeam.queen === name) {
+					ctx.fillStyle = "#f2a93b";
+					ctx.font = "11px ui-monospace, monospace";
+					ctx.textAlign = "center";
+					ctx.textBaseline = "alphabetic";
+					ctx.fillText("♛", x, y - (attention ? 26 : 14));
+				}
+				ctx.restore();
+			}
+			if (dragTaskRef.current !== null && dragPointRef.current) {
+				const dragged = (data.tasks || []).find((t) => t.id === dragTaskRef.current);
+				if (dragged) token(dragged, dragPointRef.current.x, dragPointRef.current.y);
+			}
+			const dragBee = dragBeeRef.current && bees.get(dragBeeRef.current);
+			if (dragBee && dragPointRef.current) {
+				const p = dragPointRef.current;
+				const draggedRecipient = grouped.find((r) => r.user_id === dragBeeRef.current);
+				ctx.save();
+				ctx.strokeStyle = "rgba(240,230,210,.3)";
+				ctx.setLineDash([3, 4]);
+				ctx.beginPath();
+				ctx.moveTo(dragBee.x, dragBee.y);
+				ctx.lineTo(p.x, p.y);
+				ctx.stroke();
+				ctx.restore();
+				ctx.save();
+				ctx.globalAlpha = .85;
+				ctx.fillStyle = machineColor(draggedRecipient?.node);
+				ctx.beginPath();
+				ctx.ellipse(p.x, p.y, 12, 6, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.fillStyle = harnessStyle(draggedRecipient?.flavor).color;
+				ctx.fillRect(p.x - 4, p.y - 6, 2.5, 12);
+				ctx.fillRect(p.x + 2, p.y - 6, 2.5, 12);
+				ctx.restore();
+			}
+			const dropLabel = (label, ax, ay) => {
+				ctx.font = "11px ui-monospace, monospace";
+				const labelW = ctx.measureText(label).width + 14;
+				const lx = Math.max(5, Math.min(width - labelW - 5, ax - labelW / 2));
+				const ly = Math.max(5, ay);
+				ctx.fillStyle = "#241c11";
+				ctx.beginPath();
+				ctx.roundRect(lx, ly, labelW, 21, 6);
+				ctx.fill();
+				ctx.strokeStyle = "#f2a93b";
+				ctx.stroke();
+				ctx.fillStyle = "#f0e6d2";
+				ctx.textAlign = "left";
+				ctx.textBaseline = "middle";
+				ctx.fillText(label, lx + 7, ly + 11);
+			};
+			const banner = (text) => {
+				ctx.fillStyle = "#f2a93b";
+				ctx.font = "11px ui-monospace, monospace";
+				ctx.textAlign = "center";
+				ctx.textBaseline = "alphabetic";
+				ctx.fillText(text, width / 2, 18);
+			};
+			const targetBox = dropTeamRef.current != null && teamBoxesRef.current.find((b) => b.id === dropTeamRef.current);
+			const dropTarget = dropTargetRef.current && bees.get(dropTargetRef.current);
+			if (dragTaskRef.current && dropTarget) {
+				ctx.save();
+				ctx.strokeStyle = "#f2a93b";
+				ctx.lineWidth = 2;
+				ctx.shadowColor = "rgba(242,169,59,.8)";
+				ctx.shadowBlur = 13;
+				ctx.beginPath();
+				ctx.arc(dropTarget.x, dropTarget.y, 24, 0, Math.PI * 2);
+				ctx.stroke();
+				ctx.restore();
+				dropLabel(`assign #${dragTaskRef.current} to ${dropTargetRef.current}`, dropTarget.x, Math.max(5, dropTarget.y - 43));
+			} else if (dragTaskRef.current && targetBox) dropLabel(`assign #${dragTaskRef.current} to team ${targetBox.name}`, targetBox.x + targetBox.w / 2, Math.max(5, targetBox.y - 26));
+			else if (dragTaskRef.current) banner(`drop task #${dragTaskRef.current} on a bee, team, or trash corner`);
+			else if (dragBeeRef.current && targetBox) dropLabel(`move ${dragBeeRef.current} to team ${targetBox.name}`, targetBox.x + targetBox.w / 2, Math.max(5, targetBox.y - 26));
+			else if (dragBeeRef.current) {
+				const r = grouped.find((x) => x.user_id === dragBeeRef.current);
+				const home = r && r.team_id && teamById.get(r.team_id);
+				banner(home ? `release to take ${dragBeeRef.current} out of team ${home.name}` : `drop ${dragBeeRef.current} on a team`);
+			} else if (dragBoxRef.current !== null) {
+				const moving = teamBoxesRef.current.find((b) => b.id === dragBoxRef.current);
+				if (moving) banner(`release to place team ${moving.name}`);
+			}
+			const endpoint = (name) => name === "owner" ? ownerNode : bees.get(name) || ownerNode;
+			if (!still && pendingRef.current.length) {
+				const born = now;
+				streaksRef.current.push(...pendingRef.current.splice(0, 8).map((m) => ({
+					born,
+					a: { ...endpoint(m.sender) },
+					b: { ...endpoint(m.recipient) },
+					id: m.id
+				})));
+			} else if (still) pendingRef.current.length = 0;
+			streaksRef.current = streaksRef.current.filter((s) => now - s.born < 900);
+			if (!still) for (const s of streaksRef.current) {
+				const u = Math.min(1, (now - s.born) / 900);
+				const c = {
+					x: (s.a.x + s.b.x) / 2,
+					y: (s.a.y + s.b.y) / 2 - 40
+				};
+				for (let i = 9; i >= 0; i--) {
+					const p = point(s.a, s.b, c, Math.max(0, u - i * .025));
+					ctx.fillStyle = `rgba(242,169,59,${(10 - i) / 13})`;
+					ctx.beginPath();
+					ctx.arc(p.x, p.y, i ? 1.2 : 2.5, 0, Math.PI * 2);
+					ctx.fill();
+				}
+			}
+			if (!still && pendingShipmentsRef.current.length) {
+				const born = now;
+				shipmentsRef.current.push(...pendingShipmentsRef.current.splice(0).map((task) => ({
+					born,
+					task,
+					a: { ...bees.get(task.assignee) || ownerNode },
+					b: {
+						x: doneX,
+						y: 28
+					}
+				})));
+			} else if (still) pendingShipmentsRef.current.length = 0;
+			shipmentsRef.current = shipmentsRef.current.filter((s) => now - s.born < 1100);
+			if (!still) for (const shipment of shipmentsRef.current) {
+				const u = Math.min(1, (now - shipment.born) / 1100);
+				const c = {
+					x: (shipment.a.x + shipment.b.x) / 2,
+					y: Math.min(shipment.a.y, shipment.b.y) - 45
+				};
+				const p = point(shipment.a, shipment.b, c, u);
+				ctx.save();
+				ctx.globalAlpha = Math.min(1, (1 - u) * 2.4);
+				token(shipment.task, p.x, p.y);
+				ctx.restore();
+			}
+			const hovered = hoverRef.current && bees.get(hoverRef.current);
+			if (hovered) {
+				const said = hovered.doing || hovered.task && hovered.task.title;
+				const title = said ? ` · ${said.length > 70 ? `${said.slice(0, 69)}…` : said}` : "";
+				const harnessLabel = harnessStyle(hovered.harness).label;
+				const label = `${hoverRef.current} · ${hovered.node} · ${harnessLabel}${title}`;
+				ctx.font = "10px ui-monospace, monospace";
+				const w = ctx.measureText(label).width + 12;
+				const tx = Math.max(4, Math.min(width - w - 4, hovered.x - w / 2));
+				const ty = Math.max(4, hovered.y - 31);
+				ctx.fillStyle = "#241c11";
+				ctx.beginPath();
+				ctx.roundRect(tx, ty, w, 19, 5);
+				ctx.fill();
+				ctx.strokeStyle = "#3a2d1a";
+				ctx.stroke();
+				ctx.fillStyle = "#f0e6d2";
+				ctx.textAlign = "left";
+				ctx.textBaseline = "middle";
+				ctx.fillText(label, tx + 6, ty + 10);
+			}
+			const taskCell = taskHoverRef.current;
+			if (!hovered && taskCell) {
+				const task = taskCell.task;
+				const stateLabel = taskCell.stranded ? `assigned to stopped ${task.assignee}` : taskCell.team ? `team ${taskCell.team.name}` : "waiting";
+				const blockedLabel = taskCell.blocked ? ` · blocked (after ${(task.depends_on || []).map((d) => `#${d}`).join(" ")})` : "";
+				const label = `#${task.id} · ${task.title} · ${stateLabel}${blockedLabel} · click to expand · drag to assign`;
+				ctx.font = "10px ui-monospace, monospace";
+				const w = Math.min(width - 16, ctx.measureText(label).width + 12);
+				const tx = Math.max(8, Math.min(width - w - 8, taskCell.x - w / 2));
+				const ty = Math.min(232, taskCell.y + 25);
+				ctx.fillStyle = "#241c11";
+				ctx.beginPath();
+				ctx.roundRect(tx, ty, w, 19, 5);
+				ctx.fill();
+				ctx.strokeStyle = taskCell.stranded ? "#e06c55" : "#b97f27";
+				ctx.stroke();
+				ctx.fillStyle = "#f0e6d2";
+				ctx.textAlign = "left";
+				ctx.textBaseline = "middle";
+				ctx.fillText(label, tx + 6, ty + 10, w - 12);
+			}
+		};
+		drawRef.current = draw;
+		const at = (e) => {
+			const r = canvas.getBoundingClientRect();
+			return {
+				x: e.clientX - r.left,
+				y: e.clientY - r.top
+			};
+		};
+		const hit = (e) => {
+			const p = at(e);
+			return [...beesRef.current].find(([, b]) => Math.hypot(p.x - b.x, p.y - b.y) < 24)?.[0] || null;
+		};
+		const hitTask = (e) => {
+			const p = at(e);
+			return taskCellsRef.current.find((cell) => Math.hypot(p.x - cell.x, p.y - cell.y) < 20) || null;
+		};
+		const hitTeam = (e) => {
+			const p = at(e);
+			return teamBoxesRef.current.find((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) || null;
+		};
+		const trashZone = canvas.parentElement.querySelector(".hive-trash-zone");
+		const hitTrash = (e) => {
+			const r = trashZone.getBoundingClientRect();
+			return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+		};
+		const highlightTrash = (e, task) => {
+			trashZone.classList.toggle("active", !!task);
+			trashZone.classList.toggle("over", !!task && hitTrash(e));
+		};
+		const removeTask = async (id) => {
+			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
+			if (!task) return;
+			try {
+				if (!await trashTask(task)) return;
+				setSelectedTask((selected) => selected === id ? null : selected);
+				setDropStatus(`Trashed task #${id}.`);
+				refresh();
+			} catch (err) {
+				setDropStatus(`${err.message} Refresh to check the task before retrying.`);
+			}
+		};
+		const taskId = (e) => {
+			const raw = e.dataTransfer?.getData("application/x-agent-swarm-task") || e.dataTransfer?.getData("text/plain");
+			return /^\d+$/.test(raw || "") ? Number(raw) : null;
+		};
+		const clearDrop = () => {
+			trashZone.classList.remove("active", "over");
+			dragTaskRef.current = null;
+			dragBeeRef.current = null;
+			dragPointRef.current = null;
+			dropTargetRef.current = null;
+			dropTeamRef.current = null;
+			dragBoxRef.current = null;
+			canvas.style.cursor = "default";
+			if (reduced) draw(performance.now(), true);
+		};
+		const teamCenter = (id) => {
+			const stored = teamPos.get(id);
+			if (stored) return stored;
+			const members = (stateRef.current.recipients || []).filter((r) => r.team_id === id && r.pane_alive).map((r) => beesRef.current.get(r.user_id)).filter(Boolean);
+			if (members.length) return {
+				x: members.reduce((s, b) => s + b.x, 0) / members.length,
+				y: members.reduce((s, b) => s + b.y, 0) / members.length
+			};
+			const box = teamBoxesRef.current.find((b) => b.id === id);
+			return box ? {
+				x: box.x + box.w / 2,
+				y: box.y + box.h / 2
+			} : null;
+		};
+		const assign = async (id, assignee) => {
+			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
+			if (!task || task.status === "done") {
+				setDropStatus(`Task #${id} cannot be assigned by drag.`);
+				return;
+			}
+			if (task.assignee === assignee) {
+				setDropStatus(`#${id} is already assigned to ${assignee}.`);
+				return;
+			}
+			try {
+				if (!(await fetch(`/tasks/${id}`, {
+					method: "PATCH",
+					headers: JSONH,
+					body: JSON.stringify({ assignee })
+				})).ok) throw new Error("assignment failed");
+				setDropStatus(`Assigned #${id} to ${assignee}.`);
+				refresh();
+			} catch {
+				setDropStatus(`Could not assign #${id}; task was not changed.`);
+			}
+		};
+		const assignTeam = async (id, box) => {
+			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
+			if (!task || task.status === "done") {
+				setDropStatus(`Task #${id} cannot be assigned by drag.`);
+				return;
+			}
+			if (task.team_id === box.id) {
+				setDropStatus(`#${id} is already assigned to team ${box.name}.`);
+				return;
+			}
+			try {
+				if (!(await fetch(`/tasks/${id}`, {
+					method: "PATCH",
+					headers: JSONH,
+					body: JSON.stringify({ team_id: box.id })
+				})).ok) throw new Error("assignment failed");
+				setDropStatus(`Assigned #${id} to team ${box.name}.`);
+				refresh();
+			} catch {
+				setDropStatus(`Could not assign #${id}; task was not changed.`);
+			}
+		};
+		const setBeeTeam = async (user, teamId, doneLabel) => {
+			try {
+				if (!(await fetch(`/agents/${encodeURIComponent(user)}/team`, {
+					method: "POST",
+					headers: JSONH,
+					body: JSON.stringify({ team_id: teamId })
+				})).ok) throw new Error("move failed");
+				setDropStatus(doneLabel);
+				refresh();
+			} catch {
+				setDropStatus(`Could not move ${user}.`);
+			}
+		};
+		let press = null;
+		let suppressClick = false;
+		const pointerDown = (e) => {
+			if (e.button !== 0) return;
+			const bee = hit(e);
+			if (bee) {
+				press = {
+					bee,
+					start: at(e),
+					moved: false
+				};
+				canvas.setPointerCapture(e.pointerId);
+				return;
+			}
+			const cell = hitTask(e);
+			if (cell) {
+				press = {
+					id: cell.task.id,
+					start: at(e),
+					moved: false
+				};
+				canvas.setPointerCapture(e.pointerId);
+				return;
+			}
+			const box = hitTeam(e);
+			if (!box) return;
+			const p = at(e);
+			const c = teamCenter(box.id) || {
+				x: box.x + box.w / 2,
+				y: box.y + box.h / 2
+			};
+			press = {
+				boxId: box.id,
+				start: p,
+				off: {
+					x: c.x - p.x,
+					y: c.y - p.y
+				},
+				moved: false
+			};
+			canvas.setPointerCapture(e.pointerId);
+		};
+		const pointerMove = (e) => {
+			if (!press) return;
+			const p = at(e);
+			if (!press.moved && Math.hypot(p.x - press.start.x, p.y - press.start.y) < 5) return;
+			press.moved = true;
+			hoverRef.current = null;
+			taskHoverRef.current = null;
+			if (press.boxId != null) {
+				dragBoxRef.current = press.boxId;
+				teamPos.set(press.boxId, {
+					x: p.x + press.off.x,
+					y: p.y + press.off.y
+				});
+				canvas.style.cursor = "grabbing";
+				if (reduced) draw(performance.now(), true);
+				return;
+			}
+			dragPointRef.current = p;
+			highlightTrash(e, press.id);
+			if (press.bee) {
+				dragBeeRef.current = press.bee;
+				const box = hitTeam(e);
+				dropTeamRef.current = box ? box.id : null;
+				canvas.style.cursor = "grabbing";
+			} else {
+				dragTaskRef.current = press.id;
+				dropTargetRef.current = hit(e);
+				const box = dropTargetRef.current ? null : hitTeam(e);
+				dropTeamRef.current = box ? box.id : null;
+				canvas.style.cursor = hitTrash(e) || dropTargetRef.current || dropTeamRef.current != null ? "copy" : "grabbing";
+			}
+			if (reduced) draw(performance.now(), true);
+		};
+		const pointerUp = async (e) => {
+			if (!press) return;
+			const { id, bee, boxId, moved } = press;
+			press = null;
+			if (!moved) return;
+			suppressClick = true;
+			if (boxId != null) {
+				savePos();
+				clearDrop();
+				return;
+			}
+			const trash = !bee && hitTrash(e);
+			const targetBee = hit(e);
+			const box = hitTeam(e);
+			clearDrop();
+			if (trash) {
+				await removeTask(id);
+				return;
+			}
+			if (bee) {
+				const r = (stateRef.current.recipients || []).find((x) => x.user_id === bee);
+				const teams = stateRef.current.teams || [];
+				const current = r && teams.find((t) => t.id === r.team_id);
+				if (box && (!current || current.id !== box.id)) await setBeeTeam(bee, box.id, `Moved ${bee} to team ${box.name}.`);
+				else if (!box && current) await setBeeTeam(bee, null, `Removed ${bee} from team ${current.name}.`);
+				return;
+			}
+			if (targetBee) await assign(id, targetBee);
+			else if (box) await assignTeam(id, box);
+		};
+		const pointerCancel = () => {
+			press = null;
+			clearDrop();
+		};
+		const move = (e) => {
+			if (press) return;
+			hoverRef.current = hit(e);
+			taskHoverRef.current = hoverRef.current ? null : hitTask(e);
+			const overBox = !hoverRef.current && !taskHoverRef.current && hitTeam(e);
+			canvas.style.cursor = hoverRef.current ? "pointer" : taskHoverRef.current || overBox ? "grab" : "default";
+			if (reduced) draw(performance.now(), true);
+		};
+		const leave = () => {
+			if (press) return;
+			hoverRef.current = null;
+			taskHoverRef.current = null;
+			if (dragTaskRef.current) clearDrop();
+			else {
+				canvas.style.cursor = "default";
+				if (reduced) draw(performance.now(), true);
+			}
+		};
+		const click = (e) => {
+			if (suppressClick) {
+				suppressClick = false;
+				return;
+			}
+			const name = hit(e);
+			if (name) {
+				location.hash = focusHash(name);
+				return;
+			}
+			const cell = hitTask(e);
+			if (cell) setSelectedTask((id) => id === cell.task.id ? null : cell.task.id);
+		};
+		const dragOver = (e) => {
+			const id = taskId(e);
+			if (id === null && !Array.from(e.dataTransfer?.types || []).includes("application/x-agent-swarm-task")) return;
+			e.preventDefault();
+			e.dataTransfer.dropEffect = "move";
+			dragTaskRef.current = id;
+			highlightTrash(e, true);
+			dropTargetRef.current = hit(e);
+			const box = dropTargetRef.current ? null : hitTeam(e);
+			dropTeamRef.current = box ? box.id : null;
+			canvas.style.cursor = hitTrash(e) || dropTargetRef.current || dropTeamRef.current != null ? "copy" : "not-allowed";
+			if (reduced) draw(performance.now(), true);
+		};
+		const dragLeave = (e) => {
+			if (e.target === canvas) clearDrop();
+		};
+		const drop = async (e) => {
+			const id = taskId(e);
+			const trash = hitTrash(e);
+			const assignee = hit(e);
+			const box = hitTeam(e);
+			e.preventDefault();
+			clearDrop();
+			if (id === null) return;
+			if (trash) await removeTask(id);
+			else if (assignee) await assign(id, assignee);
+			else if (box) await assignTeam(id, box);
+		};
+		window.__hive = {
+			bees: () => beesRef.current,
+			teamBoxes: () => teamBoxesRef.current,
+			taskCells: () => taskCellsRef.current,
+			dancing: () => danceRef.current !== null
+		};
+		canvas.addEventListener("mousemove", move);
+		canvas.addEventListener("mouseleave", leave);
+		canvas.addEventListener("click", click);
+		canvas.addEventListener("pointerdown", pointerDown);
+		canvas.addEventListener("pointermove", pointerMove);
+		canvas.addEventListener("pointerup", pointerUp);
+		canvas.addEventListener("pointercancel", pointerCancel);
+		canvas.addEventListener("dragover", dragOver);
+		canvas.addEventListener("dragleave", dragLeave);
+		canvas.addEventListener("drop", drop);
+		canvas.addEventListener("dragend", clearDrop);
+		window.addEventListener("dragend", clearDrop);
+		const resize = new ResizeObserver(() => {
+			if (reduced) draw(performance.now(), true);
+		});
+		resize.observe(canvas);
+		if (reduced) draw(performance.now(), true);
+		else {
+			const tick = (now) => {
+				if (!document.hidden && now - lastDraw >= 32) {
+					draw(now);
+					lastDraw = now;
+				}
+				frame = requestAnimationFrame(tick);
+			};
+			frame = requestAnimationFrame(tick);
+		}
+		return () => {
+			resize.disconnect();
+			cancelAnimationFrame(frame);
+			drawRef.current = null;
+			delete window.__hive;
+			canvas.removeEventListener("mousemove", move);
+			canvas.removeEventListener("mouseleave", leave);
+			canvas.removeEventListener("click", click);
+			canvas.removeEventListener("pointerdown", pointerDown);
+			canvas.removeEventListener("pointermove", pointerMove);
+			canvas.removeEventListener("pointerup", pointerUp);
+			canvas.removeEventListener("pointercancel", pointerCancel);
+			canvas.removeEventListener("dragover", dragOver);
+			canvas.removeEventListener("dragleave", dragLeave);
+			canvas.removeEventListener("drop", drop);
+			canvas.removeEventListener("dragend", clearDrop);
+			window.removeEventListener("dragend", clearDrop);
+		};
+	}, [compact]);
+	h(() => {
+		if (matchMedia("(prefers-reduced-motion: reduce)").matches && drawRef.current) drawRef.current(performance.now(), true);
+	}, [
+		state,
+		machine,
+		harness
+	]);
+	return m$1`<div class="hive-panel">${compact ? compactBody || m$1`<${CompactBees} state=${state} machine=${machine} harness=${harness} refresh=${refresh} />` : m$1`<div class="hive-scroll"><canvas ref=${canvasRef} tabindex="0"
+    aria-label="Live activity. Bee body color and the machine name below each bee identify its machine, matching the machine selector. Stripe color and the symbol beside the agent name identify its harness. Drag a comb cell or a task card onto a bee or a team outline to assign the task, or onto the trash corner to permanently delete it after confirmation; drag a bee into or out of a team outline to change its team; drag a team outline by its empty space to move the whole team somewhere else. Bees outside a team are kept out of team outlines. The task assignee select and the sidebar team boxes are the keyboard and touch alternatives."></canvas><div class="hive-trash-zone" aria-hidden="true"><strong>⌫ Trash task</strong><span>Drag a task here</span></div></div>`}
+    <div class="harness-legend" aria-label="Bee harness legend">
+      <span class="legend-title">Body = machine · stripes + symbol = harness</span>
+      <span class="working-halo-key" style=${`--working:${WORKING_HALO.color}`}><span aria-hidden="true"></span>Green halo = working</span>
+      ${legendHarnesses.map((h) => compact ? m$1`<span class="harness-key" key=${h.key}>
+            <span class="harness-swatch" style=${`--harness:${h.color}`}>${h.mark}</span>${h.label}</span>` : m$1`<button type="button" class="harness-key" key=${h.key} aria-pressed=${harness === h.key}
+            title=${harness === h.key ? "Click to show all harnesses" : `Highlight only ${h.label} agents`}
+            onClick=${() => setHarness(harness === h.key ? null : h.key)}>
+            <span class="harness-swatch" style=${`--harness:${h.color}`}>${h.mark}</span>${h.label}</button>`)}
+      ${!compact && !matchMedia("(prefers-reduced-motion: reduce)").matches && m$1`<button type="button" class="hive-dance"
+        title="Every bee flies a figure eight for a few seconds"
+        onClick=${() => {
+		if (!danceRef.current) danceRef.current = { start: performance.now() };
+	}}>🐝 waggle dance</button>`}
+    </div>
+    <div class="hive-task-picker"><label>Expand task <select value=${selectedTask ?? ""}
+      onChange=${(e) => setSelectedTask(e.target.value ? Number(e.target.value) : null)}>
+      <option value="">${compact ? "Choose a task…" : "Click a honeycomb or choose a task…"}</option>
+      ${(state.tasks || []).filter((t) => t.status !== "done" || t.id === selectedTask).map((t) => m$1`<option value=${t.id}>#${t.id} · ${t.title}</option>`)}
+    </select></label></div>
+    ${taskDetail && m$1`<${HiveTaskDetail} key=${taskDetail.id} task=${taskDetail} state=${state} refresh=${refresh} onClose=${() => setSelectedTask(null)} />`}
+    <span class="hive-drop-status" role="status" aria-live="polite">${dropStatus}</span></div>`;
+}
+//#endregion
+//#region web/src/tabs.js
+function forwardShortcuts(frame) {
+	let win;
+	try {
+		win = frame.contentWindow;
+		win.document;
+	} catch {
+		return;
+	}
+	win.addEventListener("keydown", (e) => {
+		if (!(e.altKey || e.ctrlKey || e.metaKey)) return;
+		const copy = new KeyboardEvent("keydown", {
+			key: e.key,
+			code: e.code,
+			altKey: e.altKey,
+			ctrlKey: e.ctrlKey,
+			metaKey: e.metaKey,
+			shiftKey: e.shiftKey,
+			repeat: e.repeat,
+			cancelable: true
+		});
+		if (!window.dispatchEvent(copy)) e.preventDefault();
+	});
+}
+function TabView({ name, tabs }) {
+	if (!tabs.includes(name)) return m$1`<div class="empty">No tab named <b>${name}</b>. Tabs come from the hub's
+      <code>AGENT_SWARM_TABS</code> setting, e.g. <code>usage=http://127.0.0.1:8531</code>.</div>`;
+	const src = `/tabs/${encodeURIComponent(name)}/`;
+	return m$1`<section class="tab-view">
+    <div class="tab-bar"><h2>${name}</h2><a class="mini" href=${src} target="_blank" rel="noopener">open alone ↗</a></div>
+    <iframe key=${name} class="tab-frame" src=${src} title=${name} onLoad=${(e) => forwardShortcuts(e.currentTarget)}></iframe>
+  </section>`;
+}
+//#endregion
+//#region web/src/views.js
+var TAB_ROUTE = "#/tab/";
+var tabHash = (name) => `${TAB_ROUTE}${encodeURIComponent(name)}`;
+function stepView(hash, views, by) {
+	return views[(Math.max(0, views.findIndex((v) => v !== "#/" && (hash === v || hash.startsWith(`${v}?`)))) + by + views.length) % views.length];
+}
+//#endregion
+//#region web/src/agent-chips.js
+function agentChips(agentCount, recipients, selected) {
+	const live = new Set(recipients.filter((r) => r.pane_alive).map((r) => r.user_id));
+	const counts = new Map([...agentCount].filter(([a]) => live.has(a) || a === selected));
+	if (selected && !counts.has(selected)) counts.set(selected, 0);
+	return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+//#endregion
+//#region web/src/history.js
+var HISTORY_ROUTE = "#/tasks";
+var STATUSES = [
+	["", "all"],
+	["open", "open"],
+	["picked_up", "picked up"],
+	["done", "done"]
+];
+function historyHash({ q = "", status = "", agent = "", sort = "newest" } = {}) {
+	const p = new URLSearchParams();
+	if (q) p.set("q", q);
+	if (status) p.set("status", status);
+	if (agent) p.set("agent", agent);
+	if (sort === "oldest") p.set("sort", "oldest");
+	const s = p.toString();
+	return s ? `${HISTORY_ROUTE}?${s}` : HISTORY_ROUTE;
+}
+function parseHash(hash) {
+	const i = hash.indexOf("?");
+	const p = new URLSearchParams(i < 0 ? "" : hash.slice(i + 1));
+	return {
+		q: p.get("q") || "",
+		status: p.get("status") || "",
+		agent: p.get("agent") || "",
+		sort: p.get("sort") === "oldest" ? "oldest" : "newest"
+	};
+}
+function taskRecords(tasks, teams) {
+	const teamName = new Map((teams || []).map((t) => [t.id, t.name]));
+	return tasks.map((t) => ({
+		key: `task:${t.id}`,
+		kind: "task",
+		id: t.id,
+		status: t.status,
+		ts: t.created_at,
+		agents: t.assignee ? [t.assignee] : [],
+		fields: {
+			title: t.title || "",
+			description: t.description || "",
+			note: t.note || "",
+			assignee: t.assignee || "",
+			worktree: t.worktree || "",
+			team: teamName.get(t.team_id) || ""
+		},
+		src: t
+	}));
+}
+function statusRecords(recipients) {
+	return (recipients || []).flatMap((r) => (r.summaries || []).map((s, i) => ({
+		key: `status:${r.user_id}:${s.ts}:${i}`,
+		kind: "status",
+		ts: s.ts,
+		agents: [r.user_id],
+		fields: {
+			status: s.text,
+			agent: r.user_id
+		},
+		src: {
+			...s,
+			user_id: r.user_id,
+			current: i === 0
+		}
+	})));
+}
+var tokenize = (q) => q.toLowerCase().split(/\s+/).filter(Boolean);
+function matches(rec, tokens) {
+	return tokens.every((tok) => {
+		const idTok = /^#(\d+)$/.exec(tok);
+		if (idTok) return rec.id === Number(idTok[1]);
+		if (/^\d+$/.test(tok) && rec.id === Number(tok)) return true;
+		return Object.values(rec.fields).some((v) => v.toLowerCase().includes(tok));
+	});
+}
+var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function markRe(tokens) {
+	const words = tokens.filter((t) => !/^#\d+$/.test(t));
+	return words.length ? new RegExp(`(${words.map(escapeRe).join("|")})`, "gi") : null;
+}
+function hl(text, re) {
+	if (!re || !text) return text;
+	return text.split(re).map((part, i) => i % 2 ? m$1`<mark>${part}</mark>` : part);
+}
+var CLIP = 220;
+function excerpt(text, re) {
+	if (text.length <= CLIP) return text;
+	let start = 0;
+	if (re) {
+		re.lastIndex = 0;
+		const m = re.exec(text);
+		re.lastIndex = 0;
+		if (m && m.index > CLIP - 60) start = Math.max(0, m.index - 70);
+	}
+	const end = Math.min(text.length, start + CLIP);
+	return `${start > 0 ? "…" : ""}${text.slice(start, end).trimEnd()}${end < text.length ? "…" : ""}`;
+}
+var fmtDate = (ts) => (/* @__PURE__ */ new Date(ts * 1e3)).toLocaleString([], {
+	month: "short",
+	day: "numeric",
+	hour: "2-digit",
+	minute: "2-digit"
+});
+function Clipped({ label, text, re }) {
+	const [open, setOpen] = d(false);
+	if (!text) return null;
+	const long = text.length > CLIP;
+	return m$1`<div class="h-field">
+    ${label && m$1`<span class="h-label">${label}</span>`}
+    <span class="h-text">${hl(open || !long ? text : excerpt(text, re), re)}</span>
+    ${long && m$1` <button type="button" class="h-more" onClick=${() => setOpen(!open)}>${open ? "less" : "more"}</button>`}
+  </div>`;
+}
+function TaskEdit({ task, refresh, done }) {
+	const [title, setTitle] = d(task.title);
+	const [description, setDescription] = d(task.description || "");
+	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
+	const save = async (e) => {
+		e.preventDefault();
+		setBusy(true);
+		setError("");
+		const result = await patchTask(task.id, {
+			title,
+			description
+		});
+		setBusy(false);
+		if (!result.ok) {
+			setError(result.error);
+			return;
+		}
+		done();
+		await refresh();
+	};
+	return m$1`<form class="h-edit" onSubmit=${save}>
+    <label>Title <input value=${title} required autofocus onInput=${(e) => setTitle(e.target.value)} /></label>
+    <label>Description <textarea rows="5" value=${description}
+      onInput=${(e) => setDescription(e.target.value)}></textarea></label>
+    <div class="h-edit-actions">
+      <button type="submit" class="mini" disabled=${busy || !title.trim()}>${busy ? "Saving…" : "Save"}</button>
+      <button type="button" class="mini" disabled=${busy} onClick=${done}>Cancel</button>
+      ${error && m$1`<span class="task-action-error" role="alert">${error}</span>`}
+    </div>
+  </form>`;
+}
+function TaskTile({ rec, re, now, filterAgent, refresh }) {
+	const t = rec.src;
+	const f = rec.fields;
+	const [editing, setEditing] = d(false);
+	if (editing) return m$1`<article class=${`htile ${t.status}`}>
+      <div class="h-title"><span class="h-id">#${t.id}</span> editing</div>
+      <${TaskEdit} task=${t} refresh=${refresh} done=${() => setEditing(false)} />
+    </article>`;
+	return m$1`<article class=${`htile ${t.status}`}>
+    <div class="h-who">
+      ${t.assignee ? m$1`<${Avatar} name=${t.assignee} size="tiny" />
+          <a class="agent-link h-agent" href=${focusHash(t.assignee)}
+            title=${`Open ${t.assignee} and message it`}>${hl(t.assignee, re)}</a>
+          <button type="button" class="h-only" onClick=${() => filterAgent(t.assignee)}
+            title=${`Show only ${t.assignee}'s tasks`} aria-label=${`Show only ${t.assignee}'s tasks`}>⌕</button>` : m$1`<span class="h-noagent">unassigned</span>`}
+      <span class=${`pill ${t.status}`}>${t.status.replace("_", " ")}</span>
+    </div>
+    <div class="h-title"><span class="h-id">#${t.id}</span> ${hl(f.title, re)}</div>
+    <${Clipped} text=${f.description} re=${re} />
+    <${AttachmentList} files=${t.attachments} />
+    <${Clipped} label="how to verify" text=${f.note} re=${re} />
+    <div class="h-meta">
+      <span title=${fmtDate(t.created_at)}>created ${fmtDate(t.created_at)}</span>
+      ${t.status === "done" ? m$1`<span title=${`last updated ${fmtDate(t.updated_at)}`}>closed ${fmtDate(t.updated_at)} · ${rel(t.updated_at, now)}</span>` : m$1`<span>updated ${rel(t.updated_at, now)}</span>`}
+      ${f.team && m$1`<span>team ${hl(f.team, re)}</span>`}
+      ${f.worktree && m$1`<span class="h-wt" title=${f.worktree}>${hl(f.worktree, re)}</span>`}
+    </div>
+    <div class="h-actions">
+      <button type="button" class="mini" onClick=${() => setEditing(true)}
+        aria-label=${`Edit task #${t.id}`}>Edit</button>
+      <${TaskStatusActions} task=${t} refresh=${refresh} />
+      <${TaskTrash} task=${t} refresh=${refresh} />
+    </div>
+  </article>`;
+}
+function StatusTile({ rec, re, now, filterAgent }) {
+	const s = rec.src;
+	return m$1`<article class="htile status-line">
+    <div class="h-who">
+      <${Avatar} name=${s.user_id} size="tiny" />
+      <a class="agent-link h-agent" href=${focusHash(s.user_id)}
+        title=${`Open ${s.user_id} and message it`}>${hl(s.user_id, re)}</a>
+      <button type="button" class="h-only" onClick=${() => filterAgent(s.user_id)}
+        title=${`Show only ${s.user_id}`} aria-label=${`Show only ${s.user_id}`}>⌕</button>
+      <span class="pill statusline">${s.current ? "status now" : "status"}</span>
+    </div>
+    <div class="h-title">${hl(s.text, re)}</div>
+    <div class="h-meta">
+      <span title=${fmtDate(s.ts)}>${fmtDate(s.ts)} · ${rel(s.ts, now)}</span>
+      <span>${SUMMARY_SOURCE[s.source] || s.source}</span>
+    </div>
+  </article>`;
+}
+var TILE = {
+	task: TaskTile,
+	status: StatusTile
+};
+function HistoryView({ state, refresh }) {
+	const [s, setS] = d(() => parseHash(location.hash));
+	const inputRef = A(null);
+	h(() => {
+		const onHash = () => {
+			if (location.hash.startsWith("#/tasks")) setS(parseHash(location.hash));
+		};
+		const onKey = (e) => {
+			if (e.key === "/" && ![
+				"INPUT",
+				"SELECT",
+				"TEXTAREA"
+			].includes(document.activeElement.tagName)) {
+				e.preventDefault();
+				inputRef.current?.focus();
+			}
+		};
+		addEventListener("hashchange", onHash);
+		addEventListener("keydown", onKey);
+		return () => {
+			removeEventListener("hashchange", onHash);
+			removeEventListener("keydown", onKey);
+		};
+	}, []);
+	const update = (patch) => {
+		const next = {
+			...s,
+			...patch
+		};
+		setS(next);
+		history.replaceState(null, "", historyHash(next));
+	};
+	const filterAgent = (a) => update({ agent: s.agent === a ? "" : a });
+	const tasks = T(() => taskRecords(state.tasks, state.teams), [state.tasks, state.teams]);
+	const lines = T(() => statusRecords(state.recipients), [state.recipients]);
+	const tokens = tokenize(s.q);
+	const re = markRe(tokens);
+	const withLines = (tokens.length || s.agent) && !s.status;
+	const records = withLines ? tasks.concat(lines) : tasks;
+	const textHits = tokens.length ? records.filter((r) => matches(r, tokens)) : records;
+	const inStatus = (r) => !s.status || r.status === s.status;
+	const hasAgent = (r) => !s.agent || r.agents.includes(s.agent);
+	const statusCount = {};
+	for (const r of textHits) {
+		if (!hasAgent(r)) continue;
+		statusCount[""] = (statusCount[""] || 0) + 1;
+		if (r.status) statusCount[r.status] = (statusCount[r.status] || 0) + 1;
+	}
+	const agentCount = /* @__PURE__ */ new Map();
+	for (const r of textHits) {
+		if (!inStatus(r)) continue;
+		for (const a of r.agents) agentCount.set(a, (agentCount.get(a) || 0) + 1);
+	}
+	const agents = agentChips(agentCount, state.recipients, s.agent);
+	const shown = textHits.filter((r) => inStatus(r) && hasAgent(r)).sort((a, b) => s.sort === "oldest" ? a.ts - b.ts : b.ts - a.ts);
+	return m$1`<div class="history">
+    <h2>task history <span class="count">· ${shown.length} of ${tasks.length} tasks${withLines ? ` + ${lines.length} status lines` : ""}</span></h2>
+    <div class="h-controls">
+      <input ref=${inputRef} type="text" class="h-search" value=${s.q} autofocus
+        placeholder="search tasks, notes, status lines, agent, worktree, #id…  ( / to focus )"
+        aria-label="Search all tasks"
+        onInput=${(e) => update({ q: e.target.value })}
+        onKeyDown=${(e) => {
+		if (e.key === "Escape" && s.q) {
+			e.stopPropagation();
+			update({ q: "" });
+		}
+	}} />
+      <div class="h-chips" role="group" aria-label="Filter by status">
+        ${STATUSES.map(([v, label]) => m$1`<button type="button" key=${v}
+          class=${`h-chip ${s.status === v ? "on" : ""}`} aria-pressed=${s.status === v}
+          onClick=${() => update({ status: v })}>${label} <span class="n">${statusCount[v] || 0}</span></button>`)}
+      </div>
+      <button type="button" class="mini h-sort" onClick=${() => update({ sort: s.sort === "oldest" ? "newest" : "oldest" })}
+        title="Flip the order (by creation time)">${s.sort === "oldest" ? "oldest first ↑" : "newest first ↓"}</button>
+    </div>
+    <div class="h-agents">
+      <span class="h-label">${tokens.length ? "who worked on this" : "by agent"}</span>
+      ${agents.length === 0 ? m$1`<span class="h-noagent">nobody</span>` : agents.map(([a, n]) => m$1`<button type="button" key=${a}
+            class=${`h-agentchip ${s.agent === a ? "on" : ""}`} aria-pressed=${s.agent === a}
+            style=${`--hue: hsl(${hue(a)} 42% 58%)`}
+            title=${s.agent === a ? "Clear the agent filter" : `Show only ${a}'s tasks`}
+            onClick=${() => filterAgent(a)}>${a} <span class="n">${n}</span></button>`)}
+      ${(s.q || s.status || s.agent) && m$1`<button type="button" class="mini" onClick=${() => update({
+		q: "",
+		status: "",
+		agent: ""
+	})}>clear filters</button>`}
+    </div>
+    ${shown.length === 0 ? m$1`<div class="empty">No tasks match${s.q ? m$1` "<b>${s.q}</b>"` : ""}.</div>` : m$1`<div class="h-grid">
+          ${shown.map((r) => {
+		return m$1`<${TILE[r.kind]} key=${r.key} rec=${r} re=${re} now=${state.now} filterAgent=${filterAgent} refresh=${refresh} />`;
+	})}
+        </div>`}
+  </div>`;
+}
+//#endregion
+//#region web/src/scroll-follow.js
+function createBottomFollower() {
+	let pinned = true;
+	let lastTop = 0;
+	return {
+		onScroll(el) {
+			const top = Math.max(0, el.scrollTop);
+			if (top + el.clientHeight >= el.scrollHeight - 8) pinned = true;
+			else if (top < lastTop - 1) pinned = false;
+			lastTop = top;
+		},
+		follow(el) {
+			if (pinned) el.scrollTop = el.scrollHeight;
+			lastTop = Math.max(0, el.scrollTop);
+		}
+	};
+}
+//#endregion
+//#region web/src/native.js
+function attentionAgents(recipients) {
+	return recipients.filter((r) => r.pane_alive && r.activity?.status === "needs_attention").map((r) => r.user_id).sort();
+}
+function attentionReporter(invoke) {
+	if (!invoke) return () => {};
+	let sent = null;
+	return (recipients) => {
+		const agents = attentionAgents(recipients);
+		const key = agents.join("\n");
+		if (key === sent) return;
+		sent = key;
+		Promise.resolve(invoke("attention", { agents })).catch(() => {
+			sent = null;
+		});
+	};
+}
+//#endregion
 //#region web/src/ansi.js
 var BASIC = [
 	"#2b2419",
@@ -11469,12 +11537,6 @@ function stepTeammate(members, user, by) {
 	const ids = members.map((m) => m.user_id);
 	if (ids.length < 2) return null;
 	return ids[(Math.max(0, ids.indexOf(user)) + by + ids.length) % ids.length];
-}
-//#endregion
-//#region web/src/newlines.js
-function shellNewlines(text) {
-	if (!text || text.includes("\n") || !text.includes("\\n")) return text;
-	return text.split(/(`[^`]*`)/).map((part, i) => i % 2 ? part : part.replace(/(?<!\\)\\n/g, "\n")).join("");
 }
 //#endregion
 //#region web/src/chats.js
@@ -11905,7 +11967,8 @@ function Resend({ m, refresh }) {
 					recipient: m.recipient,
 					content: m.content,
 					context: m.context,
-					attachments: m.attachments || []
+					attachments: m.attachments || [],
+					reply_to: m.reply_to ?? null
 				})
 			});
 			let body = null;
@@ -12469,15 +12532,6 @@ var RESEND_DELAYS_MS = [
 	3e3,
 	6e3
 ];
-function withReply(content, replyTo) {
-	if (!replyTo) return content;
-	const ref = `(reply to message ${replyTo.id}; \`buzz messages --id ${replyTo.id}\` shows it)`;
-	return content ? `${content}\n\n${ref}` : ref;
-}
-function replySnippet(m) {
-	const text = (m.content || "").replace(/\s+/g, " ").trim();
-	return text.length > 90 ? `${text.slice(0, 90)}…` : text || "(files)";
-}
 function MessageComposer({ recipient, refresh, autoFocus = false, focused = false, replyTo = null, clearReply = () => {} }) {
 	const narrow = useMedia(COMPACT_LAYOUT);
 	const compact = focused && narrow;
@@ -12488,6 +12542,10 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 	const [status, setStatus] = d("");
 	const [sending, setSending] = d(false);
 	const [retryOf, setRetryOf] = d(null);
+	const cancelReply = () => {
+		clearReply();
+		setRetryOf(null);
+	};
 	const composerRef = A(null);
 	const draftKey = `agent-swarm:draft:${recipient}:thread`;
 	const attachments = useAttachments(images, setImages, setStatus, draftKey);
@@ -12563,12 +12621,15 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 	const send = async (e) => {
 		e.preventDefault();
 		if (!canSend) return;
-		const content = withReply(text.trim(), replyTo);
+		const reply = replyTo || retryOf?.replyTo;
+		const content = text.trim();
+		const replyId = reply?.id || null;
 		clearReply();
 		const clientId = draftClientId({
 			text,
 			context,
-			images
+			images,
+			reply_to: replyId
 		}, retryOf, newClientId);
 		const draft = {
 			text,
@@ -12578,7 +12639,9 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 				clientId,
 				text,
 				context,
-				images
+				images,
+				reply_to: replyId,
+				replyTo: reply
 			}
 		};
 		const pending = {
@@ -12589,6 +12652,11 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 			sender: "owner",
 			recipient,
 			content,
+			reply_to: replyId,
+			reply_preview: reply ? {
+				sender: reply.sender,
+				content: replySnippet(reply)
+			} : null,
 			context: context.trim() || null,
 			attachments: images,
 			ts: Date.now() / 1e3
@@ -12623,7 +12691,8 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 						content,
 						context: pending.context,
 						attachments: images,
-						client_id: clientId
+						client_id: clientId,
+						reply_to: replyId
 					})
 				});
 				let body = null;
@@ -12675,9 +12744,9 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
   </button>`;
 	const optionsId = `compose-options-${encodeURIComponent(recipient)}`;
 	return m$1`<form class=${`composer ${compact ? "compact-composer" : ""} ${optionsOpen ? "options-open" : ""} ${dragging ? "dragging" : ""}`} onSubmit=${send} ...${sending ? {} : attachments.dropProps}>
-    ${replyTo && m$1`<div class="compose-reply">
-      <span>Replying to <b>${replyTo.sender}</b>: ${replySnippet(replyTo)}</span>
-      <button type="button" class="mini" aria-label="Cancel reply" onClick=${clearReply}>×</button>
+    ${(replyTo || retryOf?.replyTo) && m$1`<div class="compose-reply">
+      <span>Replying to <b>${(replyTo || retryOf?.replyTo).sender}</b>: ${replySnippet(replyTo || retryOf?.replyTo)}</span>
+      <button type="button" class="mini" aria-label="Cancel reply" onClick=${cancelReply}>×</button>
     </div>`}
     <div class="compose-row">
       ${compact ? m$1`<button type="button" class="compose-options-toggle" aria-label="Message options"
@@ -12688,9 +12757,9 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
         onPaste=${sending ? void 0 : attachments.onPaste}
         onKeyDown=${(e) => {
 		if (e.key === "Enter" && !e.shiftKey && !(e.metaKey || e.ctrlKey)) send(e);
-		else if (e.key === "Escape" && replyTo) {
+		else if (e.key === "Escape" && (replyTo || retryOf?.replyTo)) {
 			e.stopPropagation();
-			clearReply();
+			cancelReply();
 		}
 	}}
         placeholder=${compact ? "Message…" : `Message ${recipient}… (paste or drop files)`} aria-label=${`Message ${recipient} as owner`} />
@@ -12938,7 +13007,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
       ${msgs.map((m) => m$1`
-        <div key=${m.id} onContextMenu=${(e) => openMenu(e, m)} class=${[
+        <div key=${m.id} data-message-id=${m.id} tabindex="-1" onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")} onContextMenu=${(e) => openMenu(e, m)} class=${[
 		"msg",
 		sentByViewer(m.sender, a, b, page) ? "right" : "",
 		freshIds.has(m.id) ? "fresh" : "",
@@ -12946,7 +13015,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		m.sender === "owner" ? "from-owner" : "",
 		m.pending ? "pending" : ""
 	].join(" ")}>
-          <div class="bubble">${m.content && m$1`<div class="md"
+          <div class="bubble"><${ReplyPreview} message=${m} messages=${msgs} />${m.content && m$1`<div class="md"
             dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}${m.attachments?.length > 0 && m$1`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
@@ -13172,8 +13241,9 @@ function TalkThread({ t, words }) {
       <span class="chat-who">${t.broadcast ? m$1`${t.people[0]} <span class="agent-talk-arrow">→</span> ${t.to.join(", ")}` : m$1`${t.people[0]} <span class="agent-talk-arrow">↔</span> ${t.people[1]}`}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
       <span class="chat-line"><b>${last.m.sender}:</b> ${marked(snippet(last.m.content, words, 200), words)}</span>
     </summary>
-    ${open && m$1`<div class="agent-talk-msgs">${t.items.map((i) => m$1`<div key=${i.ids[0]} class="agent-talk-msg">
+    ${open && m$1`<div class="agent-talk-msgs">${t.items.map((i) => m$1`<div key=${i.ids[0]} class="agent-talk-msg" data-message-id=${i.m.id} tabindex="-1" onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")}>
       <div class="agent-talk-hdr"><b>${i.m.sender}</b> → ${i.to.join(", ")} · ${clock(i.m.ts)}${i.m.context ? ` · ${i.m.context}` : ""}</div>
+      <${ReplyPreview} message=${i.m} messages=${t.items.map((item) => item.m)} />
       <div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(i.m.content)) }} />
     </div>`)}</div>`}
   </details>`;

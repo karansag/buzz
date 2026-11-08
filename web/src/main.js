@@ -1,3 +1,5 @@
+import { replySnippet } from "./replies.js";
+import { ReplyPreview } from "./reply-preview.js";
 import { OwnerNote } from "./owner-note.js";
 import { QuickSwitcher } from "./quick-switch.js";
 import { useAgentHistory } from "./agent-history.js";
@@ -377,7 +379,7 @@ function Resend({ m, refresh }) {
     try {
       const r = await fetch("/owner/send", {
         method: "POST", headers: JSONH,
-        body: JSON.stringify({ recipient: m.recipient, content: m.content, context: m.context, attachments: m.attachments || [] }),
+        body: JSON.stringify({ recipient: m.recipient, content: m.content, context: m.context, attachments: m.attachments || [], reply_to: m.reply_to ?? null }),
       });
       let body = null;
       try { body = await r.json(); } catch { body = null; }
@@ -919,18 +921,6 @@ function newClientId() {
 // the message by its client id, so a re-send never delivers it twice.
 const RESEND_DELAYS_MS = [1000, 3000, 6000];
 
-// What a reply adds to the message: the id, and how the agent can read it.
-export function withReply(content, replyTo) {
-  if (!replyTo) return content;
-  const ref = `(reply to message ${replyTo.id}; \`buzz messages --id ${replyTo.id}\` shows it)`;
-  return content ? `${content}\n\n${ref}` : ref;
-}
-
-function replySnippet(m) {
-  const text = (m.content || "").replace(/\s+/g, " ").trim();
-  return text.length > 90 ? `${text.slice(0, 90)}…` : text || "(files)";
-}
-
 function MessageComposer({ recipient, refresh, autoFocus = false, focused = false, replyTo = null, clearReply = () => {} }) {
   const narrow = useMedia(COMPACT_LAYOUT);
   const compact = focused && narrow;
@@ -942,6 +932,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
   const [sending, setSending] = useState(false);
   // The unconfirmed send this draft came back from: {clientId, text, context, images}.
   const [retryOf, setRetryOf] = useState(null);
+  const cancelReply = () => { clearReply(); setRetryOf(null); };
   const composerRef = useRef(null);
   const draftKey = `agent-swarm:draft:${recipient}:thread`;
   const attachments = useAttachments(images, setImages, setStatus, draftKey);
@@ -1008,15 +999,17 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
   const send = async (e) => {
     e.preventDefault();
     if (!canSend) return;
-    const content = withReply(text.trim(), replyTo);
+    const reply = replyTo || retryOf?.replyTo;
+    const content = text.trim();
+    const replyId = reply?.id || null;
     clearReply();
     // Clear the composer and show the message in the thread right away; the
     // server confirms delivery afterwards, and a failure restores the draft.
-    const clientId = draftClientId({ text, context, images }, retryOf, newClientId);
-    const draft = { text, context, images, retryOf: { clientId, text, context, images } };
+    const clientId = draftClientId({ text, context, images, reply_to: replyId }, retryOf, newClientId);
+    const draft = { text, context, images, retryOf: { clientId, text, context, images, reply_to: replyId, replyTo: reply } };
     const pending = {
       id: `pending-${++pendingSeq}`, pending: true, delivered: true, status: "delivered",
-      sender: "owner", recipient, content, context: context.trim() || null,
+      sender: "owner", recipient, content, reply_to: replyId, reply_preview: reply ? {sender:reply.sender,content:replySnippet(reply)} : null, context: context.trim() || null,
       attachments: images, ts: Date.now() / 1000,
     };
     setSending(true);
@@ -1044,7 +1037,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
       try {
         const r = await fetch("/owner/send", {
           method: "POST", headers: JSONH,
-          body: JSON.stringify({ recipient, content, context: pending.context, attachments: images, client_id: clientId }),
+          body: JSON.stringify({ recipient, content, context: pending.context, attachments: images, client_id: clientId, reply_to: replyId }),
         });
         let body = null;
         try { body = await r.json(); } catch { body = null; }
@@ -1092,9 +1085,9 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
   </button>`;
   const optionsId = `compose-options-${encodeURIComponent(recipient)}`;
   return html`<form class=${`composer ${compact ? "compact-composer" : ""} ${optionsOpen ? "options-open" : ""} ${dragging ? "dragging" : ""}`} onSubmit=${send} ...${sending ? {} : attachments.dropProps}>
-    ${replyTo && html`<div class="compose-reply">
-      <span>Replying to <b>${replyTo.sender}</b>: ${replySnippet(replyTo)}</span>
-      <button type="button" class="mini" aria-label="Cancel reply" onClick=${clearReply}>×</button>
+    ${(replyTo || retryOf?.replyTo) && html`<div class="compose-reply">
+      <span>Replying to <b>${(replyTo || retryOf?.replyTo).sender}</b>: ${replySnippet(replyTo || retryOf?.replyTo)}</span>
+      <button type="button" class="mini" aria-label="Cancel reply" onClick=${cancelReply}>×</button>
     </div>`}
     <div class="compose-row">
       ${compact ? html`<button type="button" class="compose-options-toggle" aria-label="Message options"
@@ -1106,7 +1099,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
         onPaste=${sending ? undefined : attachments.onPaste}
         onKeyDown=${e => {
           if (e.key === "Enter" && !e.shiftKey && !(e.metaKey || e.ctrlKey)) send(e);
-          else if (e.key === "Escape" && replyTo) { e.stopPropagation(); clearReply(); }
+          else if (e.key === "Escape" && (replyTo || retryOf?.replyTo)) { e.stopPropagation(); cancelReply(); }
         }}
         placeholder=${compact ? "Message…" : `Message ${recipient}… (paste or drop files)`} aria-label=${`Message ${recipient} as owner`} />
       ${compact && submit}
@@ -1352,7 +1345,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
       ${msgs.map(m => html`
-        <div key=${m.id} onContextMenu=${e => openMenu(e, m)} class=${[
+        <div key=${m.id} data-message-id=${m.id} tabindex="-1" onAnimationEnd=${e => e.currentTarget.classList.remove("reply-highlight")} onContextMenu=${e => openMenu(e, m)} class=${[
             "msg",
             sentByViewer(m.sender, a, b, page) ? "right" : "",
             freshIds.has(m.id) ? "fresh" : "",
@@ -1360,7 +1353,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             m.sender === "owner" ? "from-owner" : "",
             m.pending ? "pending" : "",
           ].join(" ")}>
-          <div class="bubble">${m.content && html`<div class="md"
+          <div class="bubble"><${ReplyPreview} message=${m} messages=${msgs} />${m.content && html`<div class="md"
             dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}${m.attachments?.length > 0 && html`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map(name => html`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
@@ -1599,8 +1592,9 @@ function TalkThread({ t, words }) {
       <span class="chat-who">${title}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
       <span class="chat-line"><b>${last.m.sender}:</b> ${marked(snippet(last.m.content, words, 200), words)}</span>
     </summary>
-    ${open && html`<div class="agent-talk-msgs">${t.items.map(i => html`<div key=${i.ids[0]} class="agent-talk-msg">
+    ${open && html`<div class="agent-talk-msgs">${t.items.map(i => html`<div key=${i.ids[0]} class="agent-talk-msg" data-message-id=${i.m.id} tabindex="-1" onAnimationEnd=${e => e.currentTarget.classList.remove("reply-highlight")}>
       <div class="agent-talk-hdr"><b>${i.m.sender}</b> → ${i.to.join(", ")} · ${clock(i.m.ts)}${i.m.context ? ` · ${i.m.context}` : ""}</div>
+      <${ReplyPreview} message=${i.m} messages=${t.items.map(item => item.m)} />
       <div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(i.m.content)) }} />
     </div>`)}</div>`}
   </details>`;

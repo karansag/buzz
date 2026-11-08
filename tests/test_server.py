@@ -1761,3 +1761,35 @@ def test_owner_note_persists_and_is_visible_to_agent(client):
         c.post('/status', json={'tmux_pane':'0:0.0','text':f'progress {i}'})
     assert agent()['owner_note'] == 'persistent assignment'
     assert len(agent()['summaries']) == 20
+
+
+def test_reply_links_preview_and_delivery_note(client):
+    c = client
+    c.post('/register', json={'tmux_pane':'0:0.0','requested_user':'jax'})
+    c.post('/register', json={'tmux_pane':'0:1.0','requested_user':'fox'})
+    original = c.post('/send', json={'tmux_pane':'0:0.0','recipient':'owner','content':'original text '*20}).json()['message_id']
+    response = c.post('/owner/send', json={'recipient':'jax','content':'my answer','reply_to':original,'client_id':'reply-1'})
+    assert response.status_code == 200
+    reply = c.get('/messages', params={'id':response.json()['message_id']}).json()['messages'][0]
+    assert reply['reply_to'] == original
+    assert reply['content'] == 'my answer'
+    assert reply['reply_preview'] == {'id':original,'sender':'jax','content':('original text '*20).strip()[:100]}
+    assert f'(in reply to message {original} from jax: "original text ' in c._calls[-1][1]
+    assert f'buzz messages --id {original} shows all of it)' in c._calls[-1][1]
+    assert c._calls[-1][1].endswith('my answer')
+    for path in ['/api/state','/api/agents/jax/messages?limit=1']:
+        messages = c.get(path).json()['messages']
+        found = next(m for m in messages if m['id'] == reply['id'])
+        assert found['reply_preview']['sender'] == 'jax'
+        assert found['reply_to'] == original
+    count = len(c._calls)
+    again = c.post('/owner/send', json={'recipient':'jax','content':'my answer','reply_to':original,'client_id':'reply-1'})
+    assert again.json()['message_id'] == reply['id']
+    assert len(c._calls) == count
+    for path, payload in [('/owner/send',{'recipient':'jax'}),('/send',{'tmux_pane':'0:0.0','recipient':'owner'})]:
+        assert c.post(path, json={**payload,'content':'bad reply','reply_to':999999}).status_code == 422
+    agent_reply = c.post('/send', json={'tmux_pane':'0:1.0','recipient':'jax','content':'agent answer','reply_to':original})
+    assert agent_reply.status_code == 200
+    assert '(in reply to message' in c._calls[-1][1]
+    owner_reply = c.post('/send', json={'tmux_pane':'0:0.0','recipient':'owner','content':'answer for human','reply_to':reply['id']})
+    assert c.get('/messages',params={'id':owner_reply.json()['message_id']}).json()['messages'][0]['reply_to'] == reply['id']

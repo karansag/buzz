@@ -267,6 +267,7 @@ class SendReq(BaseModel):
     )
     recipient: str = Field(min_length=1)
     content: str = Field(min_length=1)
+    reply_to: int | None = Field(default=None, gt=0)
     context: str | None = None
 
 
@@ -275,6 +276,7 @@ class OwnerSendReq(BaseModel):
 
     recipient: str = Field(min_length=1)
     content: str = ""
+    reply_to: int | None = Field(default=None, gt=0)
     context: str | None = None
     attachments: list[str] = Field(
         default_factory=list,
@@ -530,7 +532,8 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         f"so the response reaches their inbox.\n"
         f"\n"
         f"To reply or initiate, POST to /send (or use the `buzz send` "
-        f"CLI). Currently registered peers:\n"
+        f"CLI). Use `--reply-to <message-id>` on `buzz send` to link a reply.\n"
+        f"Currently registered peers:\n"
         f"{peer_lines}\n"
         f"\n"
         f"{offline_note}"
@@ -1406,6 +1409,14 @@ def create_app(
             _refresh_watch(row["node"])
         return {"ok": True, "user_id": user_id}
 
+    def _reply_original(reply_to: int | None) -> dict | None:
+        if reply_to is None:
+            return None
+        original = db.get_message(conn, reply_to)
+        if original is None:
+            raise HTTPException(status_code=422, detail={"error": f"no message {reply_to}"})
+        return original
+
     def _deliver_as(
         sender: str,
         recipient_id: str,
@@ -1413,6 +1424,7 @@ def create_app(
         context: str | None,
         files: list[str] | None = None,
         client_id: str | None = None,
+        reply_original: dict | None = None,
     ):
         """Deliver a message in `sender`'s name to an agent's pane.
 
@@ -1430,7 +1442,7 @@ def create_app(
                 content,
                 status="failed",
                 delivery_error="recipient not registered",
-                attachments=files,
+                attachments=files, reply_to=reply_original["id"] if reply_original else None,
             )
             raise HTTPException(
                 status_code=404,
@@ -1441,7 +1453,7 @@ def create_app(
                 },
             )
         node = _reach(sender, recipient, context, content, files)
-        mid, status, err = _dispatch(node, sender, recipient, context, content, files, client_id)
+        mid, status, err = _dispatch(node, sender, recipient, context, content, files, client_id, reply_original)
         return {
             "ok": status == "delivered", "status": status,
             "message_id": mid, "delivery_error": err,
@@ -1465,6 +1477,7 @@ def create_app(
         content: str,
         files: list[str] | None = None,
         client_id: str | None = None,
+        reply_original: dict | None = None,
     ) -> tuple[int, str, str | None]:
         """Record a message, then paste it into the recipient's pane.
 
@@ -1474,11 +1487,17 @@ def create_app(
         retried here: the agent may already have it. Nor is a client id seen
         before: that request's outcome is returned without a second paste.
         """
+        reply_note = ""
+        if reply_original:
+            snippet = " ".join(reply_original["content"].split()) or "(files)"
+            snippet = snippet[:60] + ("…" if len(snippet) > 60 else "")
+            reply_note = (f'(in reply to message {reply_original["id"]} from {reply_original["sender"]}: "{snippet}"; '
+                          f'buzz messages --id {reply_original["id"]} shows all of it)\n\n')
         files = files or []
         try:
             mid = db.record_message(
                 conn, sender, recipient["user_id"], context, content,
-                status="pending", attachments=files, client_id=client_id,
+                status="pending", attachments=files, client_id=client_id, reply_to=reply_original["id"] if reply_original else None,
             )
         except db.DuplicateMessage as dup:
             return _replayed(dup.existing)
@@ -1493,7 +1512,7 @@ def create_app(
                    "pane first; a pasted message would answer it, and Claude's default there is No, exit.")
             db.set_message_status(conn, mid, "failed", err)
             return mid, "failed", err
-        body = tmux.format_message(sender, context, content, owner_reply_reminder=reminder)
+        body = tmux.format_message(sender, context, reply_note + content, owner_reply_reminder=reminder)
         try:
             result = node.deliver(
                 str(mid),
@@ -1529,11 +1548,12 @@ def create_app(
     def send(req: SendReq, request: Request):
         node = _claimed_node(request, req.node)
         sender = _caller(node, req.tmux_pane, req.agent_id, req.pane_verified, req.pane_in_tree, req.harness)
+        original = _reply_original(req.reply_to)
         if req.recipient == OWNER:
             # Messages to the human are recorded for the dashboard, not
             # injected into a pane.
             mid = db.record_message(
-                conn, sender, OWNER, req.context, req.content, status="delivered"
+                conn, sender, OWNER, req.context, req.content, status="delivered", reply_to=req.reply_to
             )
             return {"ok": True, "status": "delivered", "message_id": mid,
                     "delivered_to_pane": None, "delivery_error": None}
@@ -1546,7 +1566,7 @@ def create_app(
                 req.context,
                 req.content,
                 status="failed",
-                delivery_error="recipient not registered",
+                delivery_error="recipient not registered", reply_to=req.reply_to,
             )
             raise HTTPException(
                 status_code=404,
@@ -1557,7 +1577,7 @@ def create_app(
                 },
             )
         node = _reach(sender, recipient, req.context, req.content)
-        mid, status, err = _dispatch(node, sender, recipient, req.context, req.content)
+        mid, status, err = _dispatch(node, sender, recipient, req.context, req.content, reply_original=original)
         return {
             "ok": status == "delivered",
             "status": status,
@@ -1625,7 +1645,7 @@ def create_app(
             mid, status, err = _replayed(earlier)
             return {"ok": status == "delivered", "status": status,
                     "message_id": mid, "delivery_error": err}
-        return _deliver_as(OWNER, req.recipient, content, req.context, req.attachments, req.client_id)
+        return _deliver_as(OWNER, req.recipient, content, req.context, req.attachments, req.client_id, _reply_original(req.reply_to))
 
     @app.post("/attachments")
     async def attachments_upload(request: Request, _: None = Depends(_require_owner)):

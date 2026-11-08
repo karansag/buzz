@@ -1382,7 +1382,7 @@ test('reply to one agent message by button or right-click', async () => {
   const { page, errors } = await setup(1500, 900, false);
   const sent = [];
   await page.route('**/owner/send', async route => {
-    sent.push(route.request().postDataJSON().content);
+    sent.push(route.request().postDataJSON());
     await route.fulfill({ json: { ok: true, status: 'delivered', message_id: 50 + sent.length } });
   });
   try {
@@ -1397,9 +1397,10 @@ test('reply to one agent message by button or right-click', async () => {
     await box.fill('looks good');
     await box.press('Enter');
     await page.waitForFunction(() => !document.querySelector('.compose-reply'));
-    assert.equal(sent[0], 'looks good\n\n(reply to message 2; `buzz messages --id 2` shows it)');
+    assert.equal(sent[0].content, 'looks good');
+    assert.equal(sent[0].reply_to, 2);
 
-    await page.locator('.msg', { hasText: 'Testing phone and tablet navigation.' }).click({ button: 'right' });
+    await page.locator('[data-message-id="2"]').click({ button: 'right' });
     await page.getByRole('menuitem', { name: '↩ Reply' }).click();
     await page.locator('.compose-reply').waitFor();
     await box.press('Escape');
@@ -1601,4 +1602,54 @@ test('chat history is tall by default: about two thirds of the window, at least 
       assert.deepEqual(errors, []);
     } finally { await page.close(); }
   }
+});
+
+for (const width of [320,390,1440]) {
+  test(`reply quote jumps to a loaded message without horizontal overflow: ${width}`, async () => {
+    const {page,state,errors} = await setup(width,844,width<1000);
+    const original = state.messages[1];
+    for (let i=3;i<50;i++) state.messages.push({id:i,sender:'stoat',recipient:'owner',content:`filler message ${i}`,ts:state.now+i,status:'delivered',attachments:[]});
+    state.messages.push({id:50,sender:'owner',recipient:'stoat',content:'a linked answer',reply_to:2,reply_preview:{sender:'stoat',content:original.content},ts:state.now+50,status:'delivered',attachments:[]});
+    state.messages.push({id:51,sender:'owner',recipient:'stoat',content:'backfilled answer',reply_to:2,reply_preview:{sender:'stoat',content:original.content},ts:state.now+51,status:'delivered',attachments:[]});
+    try {
+      await page.goto(base+'#/agent/stoat');
+      const quote = page.locator('[data-message-id="50"] .reply-quote');
+      await quote.waitFor();
+      if (width === 390 && process.env.TASK354_SCREENSHOT) await page.locator(".thread").screenshot({path:process.env.TASK354_SCREENSHOT});
+      assert.match(await quote.innerText(),/stoat\nTesting phone/);
+      const originalNode = page.locator('[data-message-id="2"]');
+      const history = page.locator('.thread .msgs');
+      assert.ok(await history.evaluate(e => e.scrollTop)>100);
+      await quote.click();
+      await page.waitForFunction(() => document.querySelector('[data-message-id="2"]').classList.contains('reply-highlight'));
+      const [target,box] = await Promise.all([originalNode.boundingBox(),history.boundingBox()]);
+      assert.ok(target.y>=box.y && target.y < box.y+box.height);
+      assert.doesNotMatch(await page.locator('[data-message-id="51"] .bubble').innerText(), /reply to message/);
+      assert.match(await page.locator('[data-message-id="51"] .reply-quote').innerText(),/stoat/);
+      if (width < 1100) await fit(page);
+      assert.deepEqual(errors,[]);
+    } finally { await page.close(); }
+  });
+}
+
+test('reply quote opens an unloaded original in place and handles unavailable history', async () => {
+  const {page,state,errors} = await setup(390,844);
+  state.messages = [{id:900,sender:'owner',recipient:'stoat',content:'answer with off-page original',reply_to:5,reply_preview:{sender:'stoat',content:'original off-page snippet'},ts:state.now,status:'delivered',attachments:[]}];
+  let missing = true;
+  await page.route('**/messages?id=5', r => missing
+    ? r.fulfill({status:404,json:{detail:{error:'no message'}}})
+    : r.fulfill({json:{messages:[{id:5,sender:'stoat',recipient:'owner',content:'The entire original message '+('longword'.repeat(30)),attachments:[]}]}}));
+  try {
+    await page.goto(base+'#/agent/stoat');
+    const quote = page.getByRole('button',{name:'Show original message 5'});
+    await quote.click();
+    await page.getByRole('alert').filter({hasText:'no longer available'}).waitFor();
+    missing = false;
+    await quote.click();
+    await page.locator('.reply-original').filter({hasText:'The entire original message'}).waitFor();
+    await fit(page);
+    await quote.click();
+    assert.equal(await page.locator('.reply-original').count(),0);
+    assert.deepEqual(errors,[]);
+  } finally { await page.close(); }
 });

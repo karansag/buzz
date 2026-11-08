@@ -261,6 +261,13 @@ On a phone, the same views sit at the top of the overview.
 
 Press **Cmd/Ctrl+K** to search all agents, or **Cmd/Ctrl+Shift+K** to search teams. Use arrow keys and Enter to choose, or Escape to close. Team selection opens its live queen or first live member (an offline member if none are live). The header also has clickable teams/agents search buttons.
 
+Reply to an individual message with its ↩ button or right-click → Reply.
+Replies show a compact quote of the earlier message. Click it to jump to and
+highlight the original; an original outside the loaded thread opens in place.
+Agents can thread their replies with `buzz send --to owner --reply-to 123 --message "..."`.
+The recipient sees an “in reply to message…” description above the reply text;
+that description is not part of the stored message body.
+
 On an agent page, **Cmd+Shift+L** on Mac or **Ctrl+Shift+L** elsewhere toggles conversation focus, including while typing. Escape exits focus. Plain F is left to browser extensions such as Vimium.
 
 On an agent page, **Cmd+Shift+Y** on Mac or **Ctrl+Shift+Y** elsewhere opens or closes the terminal pane. Chat and terminal drafts are preserved. The shortcut is shown in the terminal heading.
@@ -644,7 +651,7 @@ buzz autoregister [--verbose]       # what the startup hooks run
 buzz unregister [--user <handle>]     # keeps messages and tasks
 buzz whoami
 buzz recipients
-buzz send --to <handle|owner> --message "..." [--context <tag>] [--pane <id>]
+buzz send --to <handle|owner> --message "..." [--context <tag>] [--reply-to <message-id>] [--pane <id>]
 buzz messages [--user <handle>] [--limit 20]
 buzz status "working on ..." [--pane <id>]
 buzz tasks [--status open|picked_up|done]

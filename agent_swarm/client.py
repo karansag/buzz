@@ -461,6 +461,8 @@ def cmd_send(args: argparse.Namespace) -> int:
     if not _identify_or_explain(who):
         return 2
     payload = {**_identity_payload(who), "recipient": args.to, "content": args.message}
+    if getattr(args, "reply_to", None) is not None:
+        payload["reply_to"] = args.reply_to
     if args.context:
         payload["context"] = args.context
     r = httpx.post(f"{base_url()}/send", json=payload, headers=_headers(), timeout=10)
@@ -1018,6 +1020,7 @@ def main(argv: list[str] | None = None) -> int:
     snd.add_argument("--to", required=True)
     snd.add_argument("--message", required=True)
     snd.add_argument("--context")
+    snd.add_argument("--reply-to", type=int, help="id of the message this responds to")
     snd.add_argument("--pane", help="the agent's tmux pane, when this process isn't in it")
     snd.set_defaults(func=cmd_send)
 

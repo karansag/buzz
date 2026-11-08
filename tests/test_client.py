@@ -768,3 +768,13 @@ def test_register_flag_beats_detection_and_claude_sends_no_guessed_model(monkeyp
     assert calls["post"][0]["flavor"] == "claude" and "model" not in calls["post"][0]
     assert client.main(["register", "--flavor", "hermes"]) == 0
     assert calls["post"][1]["flavor"] == "hermes"
+
+
+def test_send_passes_reply_reference(monkeypatch):
+    monkeypatch.setattr(client, 'caller', lambda pane=None: {'pane':'%1'})
+    monkeypatch.setattr(client, '_identify_or_explain', lambda who: True)
+    monkeypatch.setattr(client, '_identity_payload', lambda who: {'tmux_pane':'%1'})
+    calls = _fake_server(monkeypatch, {})
+    assert client.main(['send','--to','owner','--message','answer','--reply-to','42']) == 0
+    assert calls['post'][0]['reply_to'] == 42
+    assert calls['post'][0]['content'] == 'answer'

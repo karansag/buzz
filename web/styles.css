@@ -1014,3 +1014,16 @@ dialog.quick-switch { margin: auto; width: min(680px, calc(100vw - 24px)); max-h
 @media (pointer:coarse), (max-width:1100px) {
   .owner-note button { min-height:44px; min-width:44px; }
 }
+
+.reply-reference { min-width:0; max-width:100%; margin-bottom:8px; }
+.reply-quote { display:flex; flex-direction:column; gap:3px; width:100%; min-width:0; max-width:100%;
+  border:0; border-left:3px solid #8ca8bd; border-radius:4px; padding:7px 10px;
+  background:#8ca8bd14; color:#b8cbd9; text-align:left; cursor:pointer; font:inherit; font-size:.85em; }
+.reply-quote strong, .reply-quote span { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.reply-quote:hover, .reply-quote:focus-visible { background:#8ca8bd28; outline-color:#8ca8bd; }
+.reply-original { margin-top:8px; border-left:3px solid #8ca8bd; padding:8px 10px; overflow-wrap:anywhere; }
+.reply-error { display:block; font-size:12px; color:var(--cream-dim); }
+.msg.reply-highlight .bubble { animation:reply-flash 2s ease-out; }
+@keyframes reply-flash { from { outline:3px solid #9cc8f0; background-color:#436379; } to { outline:3px solid transparent; } }
+@media (prefers-reduced-motion:reduce) { .msg.reply-highlight .bubble { animation-duration:1ms; outline:2px solid #9cc8f0; } }
+.agent-talk-msg.reply-highlight { animation:reply-flash 2s ease-out; }
