@@ -227,6 +227,7 @@ function SpawnControl({ refresh, nodes }) {
   const [node, setNode] = useState("");
   const [flavor, setFlavor] = useState("claude");
   const [model, setModel] = useState(DEFAULT_MODEL);
+  const [dir, setDir] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -245,6 +246,9 @@ function SpawnControl({ refresh, nodes }) {
   const target = spawnTarget(nodes, node, harnesses);
   const offered = target.harnesses || [];
   const models = (offered.find(h => h.flavor === flavor) || {}).models || [];
+  // A pick that the newly chosen machine does not list falls back to its first.
+  const dirs = target.dirs || [];
+  const cwd = dirs.includes(dir) ? dir : (dirs[0] || "");
   const pickFlavor = (f) => { setFlavor(f); setModel(DEFAULT_MODEL); };
   const pickNode = (n) => {
     setNode(n);
@@ -262,6 +266,7 @@ function SpawnControl({ refresh, nodes }) {
     setErr("");
     const body = { flavor, model: model === DEFAULT_MODEL ? null : model };
     if (target.remote) body.node = target.node;
+    if (cwd) body.cwd = cwd;
     try {
       const r = await fetch("/agents/spawn", {
         method: "POST", headers: JSONH, body: JSON.stringify(body),
@@ -295,6 +300,9 @@ function SpawnControl({ refresh, nodes }) {
       <option value=${DEFAULT_MODEL}>default model</option>
       ${models.map(m => html`<option key=${m} value=${m}>${m}</option>`)}
     </select>
+    ${dirs.length > 0 && html`<select title="start folder" aria-label="start folder" value=${cwd} onChange=${e => setDir(e.target.value)}>
+      ${dirs.map(d => html`<option key=${d} value=${d}>${d}</option>`)}
+    </select>`}
     <button class="act" type="submit" disabled=${busy || !target.ok}>${busy ? "spawning…" : "spawn agent"}</button>
     ${err && html`<span style="color:var(--alert); font-size:11px">${err}</span>`}
   </form>`;

@@ -130,6 +130,10 @@ Buzz never answers a trust prompt. When one is on screen:
 Answer the prompt in the pane, or with the dashboard terminal's arrow and
 Enter keys.
 
+To stop the repeat question, start agents in a folder of their own
+(`AGENT_SWARM_SPAWN_DIRS`, see the README's start folders). Claude asks once
+for that folder, and restores and restarts after that start without a prompt.
+
 ## Limits
 
 - Only registered agents with a session id are resumed. A harness that never

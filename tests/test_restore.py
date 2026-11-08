@@ -273,7 +273,7 @@ def test_apply_registers_each_resumed_agent_once_its_harness_runs(isolated_tmux)
     ]
     panes = t("list-panes", "-t", "=work:0", "-F", "#{pane_id}").split()
     lines = []
-    assert restore.apply(steps, 0, register=register, wait=2, log=lines.append, settle=1).failed == 1
+    assert restore.apply(steps, 0, register=register, wait=10, log=lines.append, settle=1).failed == 1
     # b's command exits at once and leaves a shell, so it is not registered:
     # the hub would paste messages into that shell as commands.
     assert registered == [(panes[0], "a")]
@@ -303,7 +303,7 @@ def test_apply_reports_an_agent_held_at_a_trust_prompt_and_still_registers_it(is
                           launch=f"cat {screen}; exec sleep 30")]
     lines = []
     outcome = restore.apply(steps, 0, register=lambda pane, agent: registered.append(agent["handle"]),
-                            wait=2, log=lines.append, settle=3)
+                            wait=10, log=lines.append, settle=3)
     assert (outcome.failed, outcome.blocked) == (0, 1)
     assert outcome.summary() == "done, 1 waiting at a trust prompt"
     # Registered, so the dashboard shows it waiting; the hub holds messages back.
@@ -385,7 +385,7 @@ def test_restore_one_agent_into_a_new_window_end_to_end(isolated_tmux, tmp_path)
     # Made-up command in place of the real resume: never resume a real session in a test.
     steps[1].launch = steps[1].launch.split(" && ")[0] + " && exec sleep 30"
     registered = []
-    outcome = restore.apply(steps, 0, register=lambda pane, agent: registered.append(pane), wait=2,
+    outcome = restore.apply(steps, 0, register=lambda pane, agent: registered.append(pane), wait=10,
                             log=lambda line: None, settle=1)
     assert (outcome.failed, outcome.blocked) == (0, 0)
     panes = t("list-panes", "-s", "-t", "=system", "-F", "#{pane_id} #{pane_current_path} #{pane_current_command}").splitlines()

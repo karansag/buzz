@@ -45,23 +45,22 @@ export function draftClientId(draft, retryOf, makeId) {
 // Where a spawn would go, given the machines the hub knows right now and
 // what the user picked. A pick that has since gone away, or is no longer
 // connected, is kept and shown as unusable rather than quietly replaced by
-// the hub; an empty pick means the hub itself.
+// the hub; an empty pick means the hub itself. `dirs` are the folders that
+// machine lets a new agent start in (AGENT_SWARM_SPAWN_DIRS), first = default.
 export function spawnTarget(nodes, selected, harnesses) {
   const all = Array.isArray(nodes) ? nodes : [];
+  const dirsOf = n => (n && Array.isArray(n.spawn_dirs) ? n.spawn_dirs : []);
   const local = all.find(n => n.local) || null;
-  if (!selected) {
-    return { ok: true, remote: false, node: null, harnesses, reason: null };
-  }
+  const here = { ok: true, remote: false, node: null, harnesses, dirs: dirsOf(local), reason: null };
+  if (!selected) return here;
   const n = all.find(x => x.name === selected);
-  if (!n) return { ok: false, remote: true, node: selected, harnesses: [], reason: `${selected} is no longer enrolled` };
-  if (n.local) return { ok: true, remote: false, node: null, harnesses, reason: null };
-  if (!n.connected) return { ok: false, remote: true, node: selected, harnesses: [], reason: `${selected} is not connected` };
+  const blocked = reason => ({ ok: false, remote: true, node: selected, harnesses: [], dirs: [], reason });
+  if (!n) return blocked(`${selected} is no longer enrolled`);
+  if (n.local) return here;
+  if (!n.connected) return blocked(`${selected} is not connected`);
   const offered = (harnesses || []).filter(h => (n.harnesses || []).includes(h.flavor));
-  if (offered.length === 0) {
-    return { ok: false, remote: true, node: selected, harnesses: [], reason: `${selected} reports no spawnable harness` };
-  }
-  void local;
-  return { ok: true, remote: true, node: selected, harnesses: offered, reason: null };
+  if (offered.length === 0) return blocked(`${selected} reports no spawnable harness`);
+  return { ok: true, remote: true, node: selected, harnesses: offered, dirs: dirsOf(n), reason: null };
 }
 
 // What a /agents/spawn answer means. The window may exist without the

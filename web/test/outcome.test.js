@@ -91,3 +91,12 @@ test("an explicit unknown is honoured whatever the HTTP status", () => {
   assert.equal(deliveryOutcome(false, { detail: {} }).status, "uncertain");
   assert.equal(spawnOutcome(false, { detail: { error: "owner only" } }).status, "failed");
 });
+
+test("a spawn target lists the start folders of the machine it goes to", () => {
+  const hub = { ...HUB, spawn_dirs: ["~/agents", "~/oa/marin"] };
+  const mac = { name: "mac", connected: true, harnesses: ["claude"], spawn_dirs: ["~/agents", "~/marin"] };
+  assert.deepEqual(spawnTarget([hub, mac], "", HARNESSES).dirs, ["~/agents", "~/oa/marin"]);
+  assert.deepEqual(spawnTarget([hub, mac], "mac", HARNESSES).dirs, ["~/agents", "~/marin"]);
+  assert.deepEqual(spawnTarget([HUB], "", HARNESSES).dirs, []);
+  assert.deepEqual(spawnTarget([hub, { ...mac, connected: false }], "mac", HARNESSES).dirs, []);
+});

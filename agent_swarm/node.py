@@ -323,7 +323,7 @@ class Executor:
             )
             return protocol.result(op_id, r.status, r.error)
         if kind == "spawn":
-            s = self.local.spawn(op_id, a.get("command"))
+            s = self.local.spawn(op_id, a.get("command"), a.get("cwd"))
             return protocol.result(
                 op_id, s.status, s.error, pane=s.pane, label=s.label, tmux_server=s.tmux_server
             )
@@ -411,7 +411,8 @@ class Daemon:
 
     def hello(self) -> dict:
         return protocol.hello(
-            self.settings.node, package_version(), self.executor.local.server_id(), harnesses_here()
+            self.settings.node, package_version(), self.executor.local.server_id(), harnesses_here(),
+            self.executor.local.spawn_dirs,
         )
 
     def _set_watch(self, panes: list[dict]) -> None:

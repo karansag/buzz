@@ -42,7 +42,7 @@ class FakeLocal(nodes.LocalNode):
         self.calls.append(("deliver", op_id, pane, tmux_server, text, kw))
         return self.results.get("deliver", nodes.Result("ok"))
 
-    def spawn(self, op_id, command):
+    def spawn(self, op_id, command, cwd=None):
         self.calls.append(("spawn", op_id, command))
         return self.results.get("spawn", nodes.Spawned("ok", "%7"))
 
@@ -305,6 +305,7 @@ def test_daemon_session_says_hello_observes_and_answers_commands(tmp_path, monke
     ex = node.Executor(local, node.OpStore(tmp_path / "ops.sqlite"))
     monkeypatch.setattr(node, "harnesses_here", lambda: ["claude"])
     monkeypatch.setattr(node, "package_version", lambda: "0.1.0-test")
+    monkeypatch.setenv("AGENT_SWARM_SPAWN_DIRS", "~/agents, ~/marin")
     settings = config.Settings("http://hub:8765", "tok", "laptop")
     daemon = node.Daemon(settings, ex, interval=100)
     assert daemon.ws_url == "ws://hub:8765/nodes/ws"
@@ -332,6 +333,7 @@ def test_daemon_session_says_hello_observes_and_answers_commands(tmp_path, monke
     types = [f["type"] for f in ws.sent]
     assert types[0] == "hello"
     assert ws.sent[0]["node"] == "laptop" and ws.sent[0]["harnesses"] == ["claude"]
+    assert ws.sent[0]["spawn_dirs"] == ["~/agents", "~/marin"]
     assert ws.sent[0]["tmux_server"] == "srv-1" and ws.sent[0]["protocol"] == protocol.PROTOCOL
     observe = next(f for f in ws.sent if f["type"] == "observe")
     assert observe["tmux_server"] == "srv-1" and set(observe["table"]) == {"%1", "%2"}
@@ -492,3 +494,18 @@ def test_attachment_fetch_gives_up_when_its_budget_runs_out(tmp_path, monkeypatc
     with pytest.raises(ValueError, match="budget"):
         cache.path_for("0" * 64 + ".png", budget=3.0)
     assert clock["now"] <= 5.0
+
+
+def test_a_spawn_command_starts_in_the_folder_it_names(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_SWARM_SPAWN_DIRS", "~/agents")
+    seen = []
+    monkeypatch.setattr(
+        tmux, "spawn_window",
+        lambda session=None, command=None, cwd=None: (seen.append(cwd), (tmux.Created("%5", "a:1.0", "srv-1"), None))[1],
+    )
+    ex = node.Executor(nodes.LocalNode("laptop"), node.OpStore(tmp_path / "ops.sqlite"))
+    ok = ex.run(protocol.command("s1", "spawn", 30, command="claude", cwd="~/agents"), time.monotonic())
+    assert ok["status"] == "ok" and seen == ["~/agents"]
+    # A folder this machine did not list is refused here too, whatever the hub sent.
+    no = ex.run(protocol.command("s2", "spawn", 30, command="claude", cwd="/etc"), time.monotonic())
+    assert no["status"] == "failed" and "not a start folder" in no["error"] and seen == ["~/agents"]

@@ -85,14 +85,14 @@ def test_local_node_spawn_and_kill_return_results(monkeypatch):
     monkeypatch.setattr(tmux, "server_id", lambda: "srv-1")
     monkeypatch.setattr(
         tmux, "spawn_window",
-        lambda session=None, command=None: (tmux.Created("%9", "agents:2.0", "srv-1"), None),
+        lambda session=None, command=None, cwd=None: (tmux.Created("%9", "agents:2.0", "srv-1"), None),
     )
     monkeypatch.setattr(tmux, "kill_pane", lambda pane: (False, "no such pane"))
     node = nodes.LocalNode("here")
     spawned = node.spawn("op", "claude")
     assert spawned.ok and spawned.pane == "%9"
     assert spawned.label == "agents:2.0" and spawned.tmux_server == "srv-1"
-    monkeypatch.setattr(tmux, "spawn_window", lambda session=None, command=None: (None, "boom"))
+    monkeypatch.setattr(tmux, "spawn_window", lambda session=None, command=None, cwd=None: (None, "boom"))
     assert node.spawn("op", "claude") == nodes.Spawned("failed", None, "boom")
     assert node.kill("op", "%9", "srv-1") == nodes.Result("failed", "no such pane")
 
@@ -153,7 +153,7 @@ def test_local_node_send_key(monkeypatch):
 def test_local_node_carries_uncertain_spawn_and_kill(monkeypatch):
     monkeypatch.setattr(tmux, "server_id", lambda: "srv-1")
 
-    def spawn_window(session=None, command=None):
+    def spawn_window(session=None, command=None, cwd=None):
         raise tmux.Uncertain("launch command did not report back", tmux.Created("%4", "agents:4.0", "srv-1"))
 
     monkeypatch.setattr(tmux, "spawn_window", spawn_window)
@@ -189,7 +189,7 @@ def test_a_spawned_pane_keeps_the_server_that_created_it_across_a_restart(monkey
     # new server is an unrelated pane. Nothing must look it up again.
     monkeypatch.setattr(
         tmux, "spawn_window",
-        lambda session=None, command=None: (tmux.Created("%1", "agents:1.0", "srv-1"), None),
+        lambda session=None, command=None, cwd=None: (tmux.Created("%1", "agents:1.0", "srv-1"), None),
     )
     monkeypatch.setattr(tmux, "server_id", lambda: "srv-2")
     looked = []

@@ -1524,3 +1524,41 @@ for (const platform of ['MacIntel','Linux x86_64']) {
     } finally { await page.close(); }
   });
 }
+
+
+test('the spawn form offers each machine its own start folders and sends the pick', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  state.nodes[0].spawn_dirs = ['~/agents', '~/oa/marin'];
+  state.nodes[1].spawn_dirs = ['~/agents', '~/marin'];
+  await page.route('**/api/spawn-options', r => r.fulfill({ json: { harnesses: [
+    { flavor: 'claude', models: [] }, { flavor: 'codex', models: [] }] } }));
+  const sent = [];
+  await page.route('**/agents/spawn', r => { sent.push(r.request().postDataJSON());
+    r.fulfill({ json: { ok: true, user_id: 'newbie', tmux_pane: '%9', launch: 'ok' } }); });
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const form = page.locator('#agent-sidebar form.spawn');
+    const folder = form.locator('select[title="start folder"]');
+    await folder.waitFor();
+    assert.deepEqual(await folder.locator('option').allTextContents(), ['~/agents', '~/oa/marin']);
+    await folder.selectOption('~/oa/marin');
+    await form.locator('button[type=submit]').click();
+    for (let i = 0; i < 20 && sent.length < 1; i++) await page.waitForTimeout(50);
+    await form.locator('select[title="machine"]').selectOption('karans-mbp');
+    // ~/oa/marin is not a Mac folder, so the pick falls back to the Mac's first.
+    assert.deepEqual(await folder.locator('option').allTextContents(), ['~/agents', '~/marin']);
+    assert.equal(await folder.inputValue(), '~/agents');
+    await form.locator('button[type=submit]').click();
+    await form.locator('button[type=submit]', { hasText: 'spawn agent' }).waitFor();
+    for (let i = 0; i < 20 && sent.length < 2; i++) await page.waitForTimeout(50);
+    assert.equal(sent[0].cwd, '~/oa/marin');
+    assert.equal(sent[0].node, undefined);
+    assert.deepEqual([sent[1].node, sent[1].cwd], ['karans-mbp', '~/agents']);
+    // A machine that lists none shows no folder choice and sends none.
+    state.nodes[1].spawn_dirs = [];
+    await page.reload();
+    await form.locator('select[title="machine"]').selectOption('karans-mbp');
+    assert.equal(await folder.count(), 0);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});

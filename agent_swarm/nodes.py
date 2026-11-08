@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
 
-from . import protocol, tmux
+from . import config, protocol, tmux
 
 log = logging.getLogger("agent_swarm.nodes")
 
@@ -127,6 +127,7 @@ class Node(Protocol):
     """
 
     name: str
+    spawn_dirs: list[str]  # folders a new agent may start in (AGENT_SWARM_SPAWN_DIRS)
 
     def snapshot(self) -> PaneSnapshot: ...
     def server_id(self) -> str | None: ...
@@ -150,7 +151,7 @@ class Node(Protocol):
         flavor: str | None = None,
         retry_submit: bool = True,
     ) -> Result: ...
-    def spawn(self, op_id: str, command: str | None) -> Spawned: ...
+    def spawn(self, op_id: str, command: str | None, cwd: str | None = None) -> Spawned: ...
     def kill(self, op_id: str, pane: str, tmux_server: str | None) -> Result: ...
     def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str) -> Result: ...
     def tag_pane(self, op_id: str, pane: str, tmux_server: str | None, handle: str) -> Result: ...
@@ -270,12 +271,20 @@ class LocalNode:
             return Result("unknown", str(e))
         return Result("ok" if ok else "failed", err)
 
-    def spawn(self, op_id: str, command: str | None) -> Spawned:
+    @property
+    def spawn_dirs(self) -> list[str]:
+        return config.spawn_dirs()
+
+    def spawn(self, op_id: str, command: str | None, cwd: str | None = None) -> Spawned:
+        # Only a folder this machine's owner listed: the hub is not trusted
+        # to pick an arbitrary folder for an agent to start (and be trusted) in.
+        if cwd is not None and cwd not in self.spawn_dirs:
+            return Spawned("failed", None, f"{cwd} is not a start folder on this machine")
         # The pane's identity comes from the command that created it, never
         # from a later look: a restart in between would pair the id with an
         # unrelated pane on the new server.
         try:
-            created, err = tmux.spawn_window(command=command)
+            created, err = tmux.spawn_window(command=command, cwd=cwd)
         except tmux.Uncertain as e:
             created, err, status = e.created, str(e), "unknown"
         else:
@@ -385,6 +394,7 @@ class RemoteNode:
         self.tmux_server: str | None = None
         self.version: str | None = None
         self.harnesses: list[str] = []
+        self.spawn_dirs: list[str] = []
 
     # ---- driven by the socket reader, on the loop -------------------------
 
@@ -392,6 +402,7 @@ class RemoteNode:
         self.tmux_server = frame.get("tmux_server")
         self.version = frame.get("version")
         self.harnesses = list(frame.get("harnesses") or [])
+        self.spawn_dirs = list(frame.get("spawn_dirs") or [])
 
     def observed(self, frame: dict) -> None:
         self._last = frame
@@ -566,8 +577,8 @@ class RemoteNode:
         )
         return Result(r.get("status", "unknown"), r.get("error"))
 
-    def spawn(self, op_id: str, command: str | None) -> Spawned:
-        r = self._call("spawn", COMMAND_TTL, op_id=op_id, command=command)
+    def spawn(self, op_id: str, command: str | None, cwd: str | None = None) -> Spawned:
+        r = self._call("spawn", COMMAND_TTL, op_id=op_id, command=command, cwd=cwd)
         data = r.get("data") or {}
         return Spawned(
             r.get("status", "unknown"), data.get("pane"), r.get("error"),

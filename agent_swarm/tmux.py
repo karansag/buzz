@@ -515,18 +515,21 @@ def spawn_launch_command(flavor: str, model: str | None = None) -> str | None:
 
 
 def spawn_window(
-    session: str = AGENTS_SESSION, command: str | None = None
+    session: str = AGENTS_SESSION, command: str | None = None, cwd: str | None = None
 ) -> tuple[Created | None, str | None]:
     """Create a detached tmux window (and session if needed) and optionally
     launch a command in it. Returns (Created, None) or (None, error) when
     tmux answered; raises Uncertain when it did not report back.
 
-    The window starts in the home directory. Without -c, tmux uses the
-    session's directory, which for a session the node created is the
-    node's own: `/` under launchd.
+    The window starts in `cwd` (`~` expanded), or else the home directory.
+    It is always passed with -c: without it, tmux uses the session's
+    directory, which for a session the node created is the node's own: `/`
+    under launchd.
     """
     fmt = "#{pane_id}\t#S:#I.#P\t#{pid}:#{start_time}"
-    home = str(Path.home())
+    home = os.path.expanduser(cwd) if cwd else str(Path.home())
+    if not os.path.isdir(home):
+        return None, f"start folder {cwd} does not exist"
     try:
         has = subprocess.run(
             ["tmux", "has-session", "-t", session],

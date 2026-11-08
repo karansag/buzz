@@ -366,3 +366,21 @@ def test_timed_out_calls_do_not_leak_and_late_results_are_dropped():
         await asyncio.sleep(0.01)
 
     asyncio.run(run())
+
+
+def test_a_node_reports_its_start_folders_and_a_spawn_names_one(hub):
+    app, owner, token = hub
+    hello = protocol.hello("macbook", "0.1.0", "mac-srv", ["claude"], ["~/agents", "~/marin"])
+    with connect(owner, token, hello=hello) as ws:
+        ws.receive_json()
+        listed = next(n for n in owner.get("/api/state").json()["nodes"] if n["name"] == "macbook")
+        assert listed["spawn_dirs"] == ["~/agents", "~/marin"]
+        r = owner.post("/agents/spawn", json={"flavor": "claude", "node": "macbook", "cwd": "~/oa/marin"})
+        assert r.status_code == 422  # the hub's own folders are not the Mac's
+        t, out = in_thread(lambda: owner.post(
+            "/agents/spawn", json={"flavor": "claude", "node": "macbook", "cwd": "~/marin"}))
+        frame = answer(ws, "spawn", status="ok", pane="%4", label="agents:1.0", tmux_server="mac-srv")
+        assert frame["args"]["cwd"] == "~/marin"
+        t.join(5)
+        # The window is tagged and renamed afterwards; answer those too if asked.
+        assert out.get("error") is None

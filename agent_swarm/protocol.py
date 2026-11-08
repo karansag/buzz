@@ -41,7 +41,10 @@ def result(op_id: str, status: str, error: str | None = None, **data) -> dict:
     return {"type": "result", "op_id": op_id, "status": status, "error": error, "data": data}
 
 
-def hello(node: str, version: str, tmux_server: str | None, harnesses: list[str]) -> dict:
+def hello(
+    node: str, version: str, tmux_server: str | None, harnesses: list[str],
+    spawn_dirs: list[str] = (),
+) -> dict:
     return {
         "type": "hello",
         "protocol": PROTOCOL,
@@ -49,6 +52,7 @@ def hello(node: str, version: str, tmux_server: str | None, harnesses: list[str]
         "version": version,
         "tmux_server": tmux_server,
         "harnesses": harnesses,
+        "spawn_dirs": list(spawn_dirs),
     }
 
 

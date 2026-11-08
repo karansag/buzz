@@ -58,6 +58,22 @@ def harness_command(flavor: str) -> str | None:
     return None
 
 
+def spawn_dirs() -> list[str]:
+    """Folders a new agent on this machine may start in, as written (`~` kept).
+
+    From AGENT_SWARM_SPAWN_DIRS, comma-separated; the first is the default.
+    Unset means the home folder. Starting agents in a folder of their own,
+    not in home, matters for Claude: it remembers that you trusted a folder,
+    but trust given to the home folder lasts one session only, so every
+    restart there asks again.
+    """
+    dirs: list[str] = []
+    for d in os.environ.get("AGENT_SWARM_SPAWN_DIRS", "").split(","):
+        if (d := d.strip()) and d not in dirs:
+            dirs.append(d)
+    return dirs
+
+
 def hostname() -> str:
     return socket.gethostname().split(".")[0]
 

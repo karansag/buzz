@@ -356,6 +356,11 @@ class SpawnReq(BaseModel):
         default=None,
         description="Machine to spawn on. Omitted means the server's own.",
     )
+    cwd: str | None = Field(
+        default=None,
+        description="Folder to start in: one of the machine's AGENT_SWARM_SPAWN_DIRS. "
+        "Omitted means the first of them, or the home folder when none are set.",
+    )
 
 
 class TeamCreateReq(BaseModel):
@@ -1840,7 +1845,14 @@ def create_app(
         spec = tmux.HARNESS_SPAWN.get(req.flavor)
         model = req.model if (spec and req.model in spec.models) else None
         node = _node_or_422(req.node)
-        spawned = node.spawn(nodes.new_op_id(), command)
+        dirs = node.spawn_dirs
+        if req.cwd is not None and req.cwd not in dirs:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": f"{req.cwd} is not a start folder on {node.name}", "spawn_dirs": dirs},
+            )
+        cwd = req.cwd or (dirs[0] if dirs else None)
+        spawned = node.spawn(nodes.new_op_id(), command, cwd)
         if spawned.pane is None:
             # Unknown with no pane: nothing to register, and a retry could
             # leave a second window behind, so the caller decides.
@@ -1879,7 +1891,7 @@ def create_app(
             # harness launched in it did not report back.
             "launch": "ok" if spawned.ok else spawned.status,
             "launch_error": spawned.error,
-            "flavor": req.flavor, "model": model, "command": command,
+            "flavor": req.flavor, "model": model, "command": command, "cwd": cwd,
         }
 
     @app.post("/agents/{user_id}/stop")
@@ -2291,11 +2303,15 @@ def create_app(
         msgs.reverse()  # oldest first for thread rendering
         enrolled = db.list_nodes(conn)
         for n in enrolled:
-            n["connected"] = n["name"] in fleet.names()
+            live = fleet.get(n["name"])
+            n["connected"] = live is not None
+            n["spawn_dirs"] = live.spawn_dirs if live is not None else []
+        local = {"name": fleet.local.name, "local": True, "connected": True,
+                 "spawn_dirs": fleet.local.spawn_dirs}
         return {
             "now": time.time(),
             "recipients": recipients,
-            "nodes": [{"name": fleet.local.name, "local": True, "connected": True}, *enrolled],
+            "nodes": [local, *enrolled],
             "messages": msgs,
             "tasks": db.list_tasks(conn),
             "teams": db.list_teams(conn),

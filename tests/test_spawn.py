@@ -236,3 +236,25 @@ def test_spawn_window_starts_in_the_home_directory(monkeypatch):
     created = [c for c in calls if c[1] in ("new-session", "new-window")]
     assert [c[1] for c in created] == ["new-session", "new-window"]
     assert all(c[c.index("-c") + 1] == home for c in created)
+
+
+def test_spawn_window_starts_in_a_named_folder_and_refuses_a_missing_one(monkeypatch, tmp_path):
+    import subprocess
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / "agents").mkdir()
+    calls = []
+    outcomes = iter([
+        subprocess.CompletedProcess([], 0, "", ""),  # has-session: the session exists
+        subprocess.CompletedProcess([], 0, "%9\tagents:3.0\t4242:1700000000\n", ""),
+    ])
+    def run(cmd, **kw):
+        calls.append(cmd)
+        return next(outcomes)
+    monkeypatch.setattr(tmux.subprocess, "run", run)
+    tmux.spawn_window(cwd="~/agents")
+    window = next(c for c in calls if c[1] == "new-window")
+    assert window[window.index("-c") + 1] == str(tmp_path / "agents")
+    calls.clear()
+    assert tmux.spawn_window(cwd="~/gone") == (None, "start folder ~/gone does not exist")
+    assert calls == []

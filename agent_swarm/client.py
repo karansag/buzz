@@ -781,6 +781,8 @@ def cmd_spawn(args: argparse.Namespace) -> int:
         payload["model"] = args.model
     if args.node:
         payload["node"] = args.node
+    if args.cwd:
+        payload["cwd"] = args.cwd
     r = httpx.post(f"{base_url()}/agents/spawn", json=payload, headers=_headers(), timeout=30)
     print(r.text)
     return 0 if r.is_success else 1
@@ -1110,6 +1112,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--flavor", default="claude", choices=["claude", "codex", "pi", "hermes"])
     sp.add_argument("--model", help="one of the harness's known models (see the dashboard's spawn menu)")
     sp.add_argument("--node", help="machine to spawn on (default: the hub)")
+    sp.add_argument("--cwd", help="start folder, one of that machine's AGENT_SWARM_SPAWN_DIRS "
+                    "written the same way, e.g. ~/agents (default: the first of them)")
     sp.set_defaults(func=cmd_spawn)
 
     stp = sub.add_parser("stop", help="kill an agent's tmux pane")

@@ -115,6 +115,21 @@ You can also start agents from the dashboard: the spawn control in the
 bottom of the sidebar's teams view opens a new tmux window running the harness you
 pick.
 
+**Start folders.** A new agent starts in the home folder unless the machine
+lists folders for it in `AGENT_SWARM_SPAWN_DIRS`, comma-separated, `~`
+allowed. The first is the default, and the spawn control shows a folder
+menu for that machine. Each machine sets its own: the hub in its service
+environment, a node in its daemon's.
+
+```bash
+AGENT_SWARM_SPAWN_DIRS="~/agents,~/oa/marin"
+```
+
+Only listed folders can be picked, and the node checks again before it
+starts the window. Prefer a folder over home for Claude: it remembers that
+you trusted a folder, but never the home folder, so an agent in `~` asks
+again after every restart (see [Trust prompts](docs/reboot-restore.md#trust-prompts)).
+
 ## Startup registration
 
 Agents can register themselves when they start, with no prompt:
@@ -563,6 +578,7 @@ AGENT_SWARM_SUPERVISOR_INTERVAL=300
 AGENT_SWARM_SUBMIT_VERIFY_DELAY=1.5
 AGENT_SWARM_AUTOREGISTER=1               # 0: startup hooks never register
 AGENT_SWARM_TABS=                        # extra dashboard tabs: name=url,name=url
+AGENT_SWARM_SPAWN_DIRS=                  # start folders for new agents: ~/agents,~/work (also on nodes)
 ```
 
 The CLI and node daemon read the hub URL, node name, and token from
@@ -636,7 +652,7 @@ buzz task-create <title> [--description <text>] [--assignee <handle>] [--depends
 buzz task-update <id> [--status <s>] [--assignee <h>] [--worktree <path>] [--depends-on 3,5] [--note <text>]
 buzz digest [--minutes N | --after-message ID] [--json]
 buzz supervisor [<handle> --objective <text> | --clear]
-buzz spawn [--flavor claude|codex|pi|hermes] [--model <m>] [--node <machine>]
+buzz spawn [--flavor claude|codex|pi|hermes] [--model <m>] [--node <machine>] [--cwd <folder>]
 buzz stop <handle>
 buzz prune [--include-shells]   # forget agents whose pane is gone
 buzz snapshot             # save tmux layout + each pane's agent session
@@ -683,7 +699,7 @@ token may call it; "owner" means a node token is refused (see
 | PATCH, DELETE | `/teams/{id}` | owner | rename, crown a queen, set an objective; remove |
 | POST | `/agents/{handle}/team` | owner | `{team_id}`, or null for no team |
 | GET | `/api/spawn-options` | owner | harnesses and known models per machine |
-| POST | `/agents/spawn` | owner | `{flavor, model?, node?}` |
+| POST | `/agents/spawn` | owner | `{flavor, model?, node?, cwd?}` |
 | POST | `/agents/{handle}/stop` | owner | kill its pane |
 | POST | `/agents/{handle}/terminal` | owner | type text or a key into its pane |
 | POST | `/agents/{handle}/model` | owner | set the model label the dashboard shows (it does not switch models) |

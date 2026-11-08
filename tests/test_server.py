@@ -78,9 +78,11 @@ def client(tmp_path, monkeypatch):
     )
 
     spawns = []
+    spawn_cwds = []
 
-    def fake_spawn_window(session=tmux.AGENTS_SESSION, command=None):
+    def fake_spawn_window(session=tmux.AGENTS_SESSION, command=None, cwd=None):
         spawns.append((session, command))
+        spawn_cwds.append(cwd)
         pane = f"agents:{len(spawns)}.0"
         return tmux.Created(pane, pane, "srv-1"), None
 
@@ -97,6 +99,7 @@ def client(tmp_path, monkeypatch):
     c._calls = calls
     c._retries = retries
     c._spawns = spawns
+    c._spawn_cwds = spawn_cwds
     c._kills = kills
     c._window_names = window_names
     c._pane_tags = pane_tags
@@ -745,6 +748,24 @@ def test_spawn_creates_window_and_registers_agent(client):
     assert spawned["submit_key"] == "C-m"
     assert client._window_names[-1] == ("agents:1.0", body["user_id"])
     assert client._pane_tags[-1] == ("agents:1.0", body["user_id"])
+
+
+def test_spawn_starts_in_the_machines_start_folders(client, monkeypatch):
+    # Unset: the home folder, as before, and the dashboard offers no choice.
+    assert client.post("/agents/spawn", json={"flavor": "claude"}).json()["cwd"] is None
+    assert client._spawn_cwds[-1] is None
+    assert client.get("/api/state").json()["nodes"][0]["spawn_dirs"] == []
+
+    monkeypatch.setenv("AGENT_SWARM_SPAWN_DIRS", "~/agents,~/oa/marin")
+    assert client.get("/api/state").json()["nodes"][0]["spawn_dirs"] == ["~/agents", "~/oa/marin"]
+    # The first is the default; another listed one can be picked.
+    assert client.post("/agents/spawn", json={"flavor": "claude"}).json()["cwd"] == "~/agents"
+    assert client.post("/agents/spawn", json={"flavor": "claude", "cwd": "~/oa/marin"}).json()["cwd"] == "~/oa/marin"
+    assert client._spawn_cwds[-2:] == ["~/agents", "~/oa/marin"]
+    # Any other folder is refused before a window is made.
+    r = client.post("/agents/spawn", json={"flavor": "claude", "cwd": "/"})
+    assert r.status_code == 422 and "not a start folder" in r.json()["detail"]["error"]
+    assert len(client._spawn_cwds) == 3
 
 
 def test_spawn_pi_launches_pi_binary(client):
@@ -1550,7 +1571,7 @@ def test_importing_the_server_module_builds_no_app():
 def test_spawn_and_stop_report_unknown_outcomes_distinctly(client, monkeypatch):
     import subprocess
 
-    def timed_out_launch(session=tmux.AGENTS_SESSION, command=None):
+    def timed_out_launch(session=tmux.AGENTS_SESSION, command=None, cwd=None):
         raise tmux.Uncertain(
             "launch command did not report back: timed out",
             tmux.Created("agents:9.0", "agents:9.0", "srv-1"),
@@ -1562,7 +1583,7 @@ def test_spawn_and_stop_report_unknown_outcomes_distinctly(client, monkeypatch):
     assert r.json()["launch"] == "unknown" and r.json()["tmux_pane"] == "agents:9.0"
     user = r.json()["user_id"]
 
-    def no_window(session=tmux.AGENTS_SESSION, command=None):
+    def no_window(session=tmux.AGENTS_SESSION, command=None, cwd=None):
         raise tmux.Uncertain("window creation did not report back: timed out")
 
     monkeypatch.setattr(tmux, "spawn_window", no_window)

@@ -66,7 +66,7 @@ def fake(tmp_path, monkeypatch):
         t.delivered.append((pane, text))
         return True, None
 
-    def spawn_window(session=tmux.AGENTS_SESSION, command=None):
+    def spawn_window(session=tmux.AGENTS_SESSION, command=None, cwd=None):
         used = {int(p["label"].split(":")[1].split(".")[0]) for p in t.panes.values()
                 if p["label"].startswith(f"{session}:")}
         index = next(i for i in range(100) if i not in used)  # tmux reuses the lowest free
