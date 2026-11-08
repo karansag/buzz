@@ -456,6 +456,19 @@
   .thread-head > .bar .swap { color: var(--honey); font-family: var(--mono); font-size: 12px; }
   .thread-head > .bar .n { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--cream-dim); letter-spacing: .1em; }
   .msgs { padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; align-content: start; height: 340px; min-height: 120px; max-height: 85vh; overflow: auto; resize: none; }
+  /* Floats at the bottom of the history while the reader is scrolled up. The
+     dock is always there and takes no room (its row's gap is cancelled), so
+     showing the button never changes the history's height or scroll. */
+  .msgs .jump-dock { position: sticky; bottom: 0; height: 0; margin-top: -9px; z-index: 2; display: flex; justify-content: center; }
+  .msgs .jump-bottom {
+    position: absolute; bottom: 6px; white-space: nowrap;
+    font: 11.5px var(--mono); color: var(--cream); padding: 6px 12px; border-radius: 999px; cursor: pointer;
+    background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(0,0,0,.45);
+    opacity: .92;
+  }
+  .msgs .jump-bottom:hover, .msgs .jump-bottom:focus-visible { opacity: 1; border-color: var(--cream-dim); }
+  .msgs .jump-bottom .jump-new { color: var(--moss); }
+  @media (pointer: coarse) { .msgs .jump-bottom { min-height: 44px; } }
   .history-resizer {
     width: 100%; height: 18px; display: flex; align-items: center; justify-content: center;
     border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);

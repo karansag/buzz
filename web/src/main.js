@@ -1140,6 +1140,10 @@ function sentByViewer(sender, a, b, page) {
   return sender !== a;
 }
 
+// How far above the newest message the reader must be before the jump
+// button shows: a little drift is not "scrolled up".
+const JUMP_SHOW_PX = 160;
+
 function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null }) {
   const boxRef = useRef(null);
   const follower = useRef(null);
@@ -1148,6 +1152,9 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   const previousHistory = useRef(null);
   const [historyHeight, setHistoryHeight] = useState(null);
   const recipient = a === "owner" ? b : b === "owner" ? a : null;
+  // Scrolled up from the newest message: the id that was newest then, so the
+  // jump button can count what arrived since. Null while at the bottom.
+  const [awayFrom, setAwayFrom] = useState(null);
   // Replying to one message: a ↩ button on each agent message, or right-click
   // (Shift + right-click keeps the browser's own menu).
   const [replyTo, setReplyTo] = useState(null);
@@ -1215,6 +1222,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     const stick = () => {
       follower.current.follow(el);
       previousHistory.current = { first: msgs[0]?.id, height: el.scrollHeight, top: el.scrollTop };
+      noteAway(el);
     };
     const ro = new ResizeObserver(stick);
     ro.observe(el);
@@ -1269,8 +1277,21 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     addEventListener("keydown", onKey, true);
     return () => removeEventListener("keydown", onKey, true);
   }, [focused, recipient]);
+  const noteAway = (el) => {
+    const away = el.scrollHeight - el.scrollTop - el.clientHeight > JUMP_SHOW_PX;
+    const newest = msgs.findLast(m => typeof m.id === "number")?.id ?? 0;
+    setAwayFrom(prev => (away ? prev ?? newest : null));
+  };
+  const jumpToBottom = () => {
+    const el = boxRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
+  const newSinceAway = awayFrom === null ? 0
+    : msgs.filter(m => typeof m.id === "number" && m.id > awayFrom && m.sender !== "owner").length;
   const onScroll = (e) => {
     if (!expanded) return;
+    noteAway(e.currentTarget);
     savedScroll.current = e.currentTarget.scrollTop;
     if (previousHistory.current) previousHistory.current.top = e.currentTarget.scrollTop;
     follower.current.onScroll(e.currentTarget);
@@ -1346,6 +1367,8 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
           <div class="tag">${disp(m.sender)}${m.context && html` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && html` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && html` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>${m.sender === "owner" && html` <${Resend} m=${m} refresh=${refresh} />`}`}${canReply(m) && html` <button type="button" class="msg-reply"
             title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}</div>
         </div>`)}
+      ${recipient && html`<div class="jump-dock">${awayFrom !== null && html`<button type="button" class="jump-bottom" onClick=${jumpToBottom}
+        title="Scroll to the newest message">↓ Jump to bottom${newSinceAway > 0 ? html` <span class="jump-new">· ${newSinceAway} new</span>` : ""}</button>`}</div>`}
     </div>
     ${menu && html`<div class="msg-menu" role="menu" style=${{ left: `${menu.x}px`, top: `${menu.y}px` }}
         onClick=${e => e.stopPropagation()}>

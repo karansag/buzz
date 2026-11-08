@@ -1562,3 +1562,30 @@ test('the spawn form offers each machine its own start folders and sends the pic
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
+
+test('an owner chat scrolled up offers a jump to the newest message, counting new ones', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  for (let i = 0; i < 40; i++) {
+    state.messages.push({ id: 200 + i, sender: i % 2 ? 'stoat' : 'owner', recipient: i % 2 ? 'owner' : 'stoat',
+      content: `filler ${i}`, ts: state.now, status: 'delivered', attachments: [] });
+  }
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const box = page.locator('.thread .msgs', { hasText: 'filler 39' }).first();
+    await box.getByText('filler 39').waitFor();
+    const jump = box.locator('.jump-bottom');
+    assert.equal(await jump.count(), 0);  // at the bottom: nothing to jump to
+    await box.evaluate(e => { e.scrollTop = 0; e.dispatchEvent(new Event('scroll')); });
+    await jump.waitFor();
+    assert.equal((await jump.innerText()).trim(), '↓ Jump to bottom');
+    // New agent messages while away are counted on the button; the view stays put.
+    state.messages.push({ id: 300, sender: 'stoat', recipient: 'owner', content: 'fresh news', ts: state.now,
+      status: 'delivered', attachments: [] });
+    await jump.getByText('· 1 new').waitFor({ timeout: 15000 });
+    assert.ok(await box.evaluate(e => e.scrollTop < 50));
+    await jump.click();
+    await jump.waitFor({ state: 'detached' });
+    assert.ok(await box.evaluate(e => e.scrollHeight - e.scrollTop - e.clientHeight < 10));
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
