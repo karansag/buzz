@@ -89,6 +89,47 @@ tmux attach
 `buzz restore --from ~/.agent-swarm/snapshots/<time>.json` restores an
 older snapshot.
 
+### One stopped agent
+
+```bash
+buzz restore smew           # dry run: where it goes and the resume command
+buzz restore smew --apply   # do it
+```
+
+The name is a full handle (`smew-claude-opus-karanslinux`) or its first
+part (`smew`) when no other handle starts with `smew-`. The agent's own
+session id is resumed, so it keeps its conversation and handle.
+
+- If its pane is still in this tmux and back at a bare shell (the harness
+  exited), it is resumed there, in the folder the newest snapshot recorded.
+- If its pane is gone, it gets a new window in the session the newest
+  snapshot had it in, in that folder. With no snapshot of it there is no
+  folder to resume in, and restore says so.
+- It refuses an agent whose session is already running, an agent on
+  another node, and a pane running anything other than a shell.
+
+### Trust prompts
+
+A harness can stop at startup to ask whether to trust its folder. Claude
+Code never saves the answer for the **home folder**: "Yes, I trust this
+folder" in `~` lasts one session, so an agent working in `~` asks again
+every time it restarts. Other folders keep their answer in
+`~/.claude.json`. Codex saves its answer for every folder
+(`~/.codex/config.toml`).
+
+Buzz never answers a trust prompt. When one is on screen:
+
+- restore and restart print `BLOCKED <handle>: waiting at Claude's
+  workspace trust prompt for <folder>` and exit non-zero; the agent is
+  registered, so the dashboard lists it;
+- the dashboard shows it as needing attention with that reason;
+- the hub refuses to deliver messages to it (`not delivered: ... is
+  waiting at ...`). Claude's prompt has "No, exit" selected, so the
+  Enter that submits a pasted message would end the agent.
+
+Answer the prompt in the pane, or with the dashboard terminal's arrow and
+Enter keys.
+
 ## Limits
 
 - Only registered agents with a session id are resumed. A harness that never
@@ -125,6 +166,10 @@ its handle.
 
 - Agents the hub sees working or waiting on you are skipped; `--force`
   restarts them anyway, losing the turn in progress.
+- An agent whose pane is already back at a bare shell is skipped; `buzz
+  restore <handle>` resumes it there.
+- Each restarted agent is watched for a few seconds: one held at a trust
+  prompt is reported as `BLOCKED` (see Trust prompts above).
 - Anything else in the pane dies with it: background shells, watchers,
   servers. Agents that keep long-running jobs in their pane should hand
   them to a scheduler (Iris, systemd) or be restarted by hand.

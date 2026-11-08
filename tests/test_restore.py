@@ -187,7 +187,7 @@ def test_apply_stops_a_failed_window_but_continues_other_windows(monkeypatch):
         restore.Step("launch", target="=a:0.0", launch="should not run", window="=a:0"),
         restore.Step("other", argv=["select-layout"], window="=b:0"),
     ]
-    assert restore.apply(steps, 0) == 1
+    assert restore.apply(steps, 0).failed == 1
     assert calls == [["tmux", "new-session"], ["tmux", "select-layout"]]
 
 
@@ -199,14 +199,14 @@ def test_apply_checks_shell_again_and_uses_immutable_pane_id(monkeypatch):
         return SimpleNamespace(stdout="%42\tbash\n")
 
     monkeypatch.setattr(restore.subprocess, "run", run)
-    assert restore.apply([restore.Step("launch", target="=a:0.0", launch="echo ok")], 0) == 0
+    assert restore.apply([restore.Step("launch", target="=a:0.0", launch="echo ok")], 0).failed == 0
     assert calls[-2:] == [
         ["tmux", "send-keys", "-t", "%42", "-l", "echo ok"],
         ["tmux", "send-keys", "-t", "%42", "C-m"],
     ]
     calls.clear()
     monkeypatch.setattr(restore.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="%42\tvim\n"))
-    assert restore.apply([restore.Step("launch", target="=a:0.0", launch="echo ok")], 0) == 1
+    assert restore.apply([restore.Step("launch", target="=a:0.0", launch="echo ok")], 0).failed == 1
 
 
 @pytest.fixture
@@ -247,7 +247,7 @@ def test_restore_nine_panes_with_saved_numbering_and_directories(isolated_tmux, 
     t("kill-session", "-t", "=saved")
     t("set-window-option", "-g", "pane-base-index", str(1 - pane_base))
     t("set-option", "-g", "base-index", "0")
-    assert restore.apply(restore.plan(snap, restore.read_layout()), 0) == 0
+    assert restore.apply(restore.plan(snap, restore.read_layout()), 0).failed == 0
     after = [r for r in restore.read_layout() if r["session"] == "saved"]
     assert len(after) == 9
     assert [(r["window"], r["pane"], r["cwd"]) for r in after] == [
@@ -273,8 +273,122 @@ def test_apply_registers_each_resumed_agent_once_its_harness_runs(isolated_tmux)
     ]
     panes = t("list-panes", "-t", "=work:0", "-F", "#{pane_id}").split()
     lines = []
-    assert restore.apply(steps, 0, register=register, wait=2, log=lines.append) == 1
+    assert restore.apply(steps, 0, register=register, wait=2, log=lines.append, settle=1).failed == 1
     # b's command exits at once and leaves a shell, so it is not registered:
     # the hub would paste messages into that shell as commands.
     assert registered == [(panes[0], "a")]
-    assert any(line.startswith(f"FAILED register b at {panes[1]}") for line in lines)
+    assert any(line.startswith(f"FAILED b at {panes[1]}") for line in lines)
+
+
+# What Claude Code 2.1 draws when it starts in a folder it has no saved trust
+# for, such as the home folder (whose trust it never saves).
+CLAUDE_TRUST_SCREEN = """\
+ Accessing workspace:
+ /home/karan
+ Quick safety check: Is this a project you created or one you trust?
+ Claude Code'll be able to read, edit, and execute files here.
+ ❯ No, exit
+   Yes, I trust this folder
+ Enter to confirm · Esc to cancel
+"""
+
+
+def test_apply_reports_an_agent_held_at_a_trust_prompt_and_still_registers_it(isolated_tmux, tmp_path):
+    t = isolated_tmux
+    t("new-session", "-d", "-s", "work")
+    screen = tmp_path / "screen.txt"
+    screen.write_text(CLAUDE_TRUST_SCREEN)
+    registered = []
+    steps = [restore.Step("resume a", target="=work:0.0", agent={"handle": "a"},
+                          launch=f"cat {screen}; exec sleep 30")]
+    lines = []
+    outcome = restore.apply(steps, 0, register=lambda pane, agent: registered.append(agent["handle"]),
+                            wait=2, log=lines.append, settle=3)
+    assert (outcome.failed, outcome.blocked) == (0, 1)
+    assert outcome.summary() == "done, 1 waiting at a trust prompt"
+    # Registered, so the dashboard shows it waiting; the hub holds messages back.
+    assert registered == ["a"]
+    blocked = next(line for line in lines if line.startswith("BLOCKED a"))
+    assert "Claude's workspace trust prompt for /home/karan" in blocked
+
+
+def hub_row(handle="smew-claude-opus-karanslinux", **kw):
+    return {"user_id": handle, "node": "here", "flavor": "claude", "agent_id": "sid-1",
+            "model": None, "tmux_pane": "%5", "tmux_server": "srv", **kw}
+
+
+def test_find_agent_takes_a_full_handle_or_an_unambiguous_first_part():
+    rows = [hub_row(), hub_row("smewlet"), hub_row("otter-codex-a"), hub_row("otter-codex-b"), hub_row("otter")]
+    assert restore.find_agent(rows, "smew")[0]["user_id"] == "smew-claude-opus-karanslinux"
+    assert restore.find_agent(rows, "smew-claude-opus-karanslinux")[0]["user_id"] == "smew-claude-opus-karanslinux"
+    assert restore.find_agent(rows, "otter")[0]["user_id"] == "otter"  # exact beats a prefix
+    assert restore.find_agent(rows, "otter-codex") == (None, "otter-codex could mean otter-codex-a, otter-codex-b; give the full handle")
+    assert restore.find_agent(rows, "smewl") == (None, "no agent named smewl")
+
+
+def write_snapshot(directory, cwd="/work/dir", agent_id="sid-1"):
+    directory.mkdir(exist_ok=True)
+    snap = {"version": 1, "node": "here", "tmux_server": "old", "taken_at": "t", "sessions": [
+        {"name": "system", "windows": [{"index": 0, "name": "agents", "layout": "x", "panes": [
+            {"index": 0, "cwd": cwd, "command": "claude",
+             "agent": {"handle": "smew", "flavor": "claude", "agent_id": agent_id, "model": None}}]}]}]}
+    (directory / "20261101T000000000000.json").write_text(json.dumps(snap))
+
+
+def live_pane(pane_id="%5", command="bash", cwd="/elsewhere", session="system"):
+    return {"session": session, "window": 0, "window_name": "agents", "layout": "x", "pane": 0,
+            "pane_id": pane_id, "cwd": cwd, "command": command}
+
+
+def test_plan_one_resumes_into_its_own_pane_once_it_is_back_at_a_shell(tmp_path):
+    write_snapshot(tmp_path)
+    steps, why = restore.plan_one(hub_row(), [live_pane()], "here", "srv", set(), tmp_path)
+    assert why is None and len(steps) == 1
+    # The folder the session ran in (from the snapshot), not where the shell is now.
+    assert steps[0].target == "%5"
+    assert steps[0].launch.startswith("cd /work/dir && claude --resume sid-1")
+    assert steps[0].agent["handle"] == "smew-claude-opus-karanslinux"
+
+
+def test_plan_one_refuses_what_it_must_not_touch(tmp_path):
+    write_snapshot(tmp_path)
+    plan = lambda r, live=(), running=frozenset(): restore.plan_one(r, list(live), "here", "srv", set(running), tmp_path)
+    assert plan(hub_row(), [live_pane(command="vim")]) == ([], "its pane %5 is running vim; restore leaves it alone")
+    assert plan(hub_row(), running={"sid-1"})[1].startswith("smew-claude-opus-karanslinux is already running")
+    assert plan(hub_row(node="mac"))[1] == "smew-claude-opus-karanslinux runs on mac; run restore there"
+    assert plan(hub_row(agent_id=None))[1] == "smew-claude-opus-karanslinux has no saved session to resume"
+    assert plan(hub_row(flavor="generic"))[1] == "no resume command for generic"
+    steps, why = restore.plan_one(hub_row(), [], "here", "srv", set(), tmp_path / "none")
+    assert steps == [] and "no snapshot" in why
+
+
+def test_plan_one_puts_an_agent_whose_pane_is_gone_in_a_new_window_where_it_ran(tmp_path):
+    write_snapshot(tmp_path)
+    # Its pane id is from an earlier tmux server, so a live %5 is someone else's.
+    steps, why = restore.plan_one(hub_row(tmux_server="old"), [live_pane(command="vim")], "here", "srv", set(), tmp_path)
+    assert why is None
+    assert steps[0].argv[:5] == ["new-window", "-d", "-P", "-F", "#{pane_id}"]
+    assert steps[0].argv[-2:] == ["-c", "/work/dir"]
+    assert steps[1].target is None and steps[1].launch.startswith("cd /work/dir && claude --resume sid-1")
+    steps, _ = restore.plan_one(hub_row(tmux_server="old"), [], "here", "srv", set(), tmp_path)
+    assert steps[0].argv[:7] == ["new-session", "-d", "-P", "-F", "#{pane_id}", "-s", "system"]
+
+
+def test_restore_one_agent_into_a_new_window_end_to_end(isolated_tmux, tmp_path):
+    t = isolated_tmux
+    t("new-session", "-d", "-s", "system")
+    folder = tmp_path / "project"
+    folder.mkdir()
+    write_snapshot(tmp_path / "snaps", cwd=str(folder))
+    steps, why = restore.plan_one(hub_row(tmux_server="old"), restore.read_layout(), "here", "srv", set(), tmp_path / "snaps")
+    assert why is None
+    # Made-up command in place of the real resume: never resume a real session in a test.
+    steps[1].launch = steps[1].launch.split(" && ")[0] + " && exec sleep 30"
+    registered = []
+    outcome = restore.apply(steps, 0, register=lambda pane, agent: registered.append(pane), wait=2,
+                            log=lambda line: None, settle=1)
+    assert (outcome.failed, outcome.blocked) == (0, 0)
+    panes = t("list-panes", "-s", "-t", "=system", "-F", "#{pane_id} #{pane_current_path} #{pane_current_command}").splitlines()
+    assert len(panes) == 2
+    new = panes[1].split()
+    assert registered == [new[0]] and new[1:] == [str(folder), "sleep"]

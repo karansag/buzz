@@ -205,3 +205,47 @@ def test_codex_question_form_needs_attention_and_shows_the_question():
 
 def test_prose_about_questions_is_not_a_question_form():
     assert detail("codex", "I answered question 3 and moved on.") is None
+
+
+CLAUDE_TRUST = """\
+ Accessing workspace:
+
+ /home/karan
+
+ Quick safety check: Is this a project you created or one you trust?
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel
+"""
+
+CODEX_TRUST = """\
+  Trust this folder?
+  Codex can read, edit, and run files here, subject to your permission settings.
+› 1. Trust and continue
+  2. Open restricted
+"""
+
+
+def test_trust_prompts_are_recognized_with_their_folder():
+    assert activity.trust_prompt(CLAUDE_TRUST) == "Claude's workspace trust prompt for /home/karan"
+    assert activity.trust_prompt(CODEX_TRUST) == "Codex's workspace trust prompt"
+    old_codex = "Do you trust the contents of this directory?\n› 1. Yes, continue\n  2. No, quit\n"
+    assert activity.trust_prompt(old_codex) == "Codex's workspace trust prompt"
+
+
+def test_quoting_a_trust_prompt_is_not_one():
+    # An agent's own prose can mention the words; only the title with its answer counts.
+    assert activity.trust_prompt("● It stopped at Accessing workspace: and I said Yes, I trust this folder.") is None
+    assert activity.trust_prompt("Accessing workspace:\n/home/karan\n") is None
+    assert activity.trust_prompt("") is None
+
+
+def test_a_trust_prompt_shows_as_needing_attention_with_a_clear_reason():
+    registry = {}
+    obs = [activity.Observation("smew", "claude", True, CLAUDE_TRUST)]
+    for now in (0.0, 2.0, 4.0, 6.0):
+        activity.step(registry, obs, now, interval=2.0, grace=0.0)
+    assert registry["smew"]["status"] == "needs_attention"
+    assert registry["smew"]["detail"] == (
+        "waiting at Claude's workspace trust prompt for /home/karan: answer it in the pane")

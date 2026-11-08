@@ -43,7 +43,7 @@ def test_all_restarts_idle_resumable_agents_on_this_machine_and_says_why_not():
         "otter": "cd /repo && claude --resume s-otter --permission-mode auto",
         "tapir": "cd /w && codex resume t-tapir -c check_for_update_on_startup=false --yolo --no-daemon",
         "busy": "it is working (--force restarts it anyway)",
-        "gone": "no harness is running in its pane",
+        "gone": "no harness is running in its pane; `buzz restore gone` resumes it there",
         "anon": "no session id, so it could not be resumed",
     }
 

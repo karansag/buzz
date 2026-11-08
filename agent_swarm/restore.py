@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from . import config, tmux
+from . import activity, config, tmux
 
 SNAPSHOT_DIR = Path("~/.agent-swarm/snapshots").expanduser()
 KEEP = 100
@@ -192,6 +192,8 @@ class Step:
     # A failed creation/split must prevent launches into an incomplete window.
     window: str | None = None
     # For a launch: the agent it resumes, registered to its new pane afterwards.
+    # A launch with no target goes into the pane the previous step created
+    # (a creation step whose argv prints the pane id with -P).
     agent: dict | None = None
 
 
@@ -336,18 +338,63 @@ def _wait_for_harness(pane: str, timeout: float) -> bool:
         time.sleep(0.5)
 
 
-def apply(steps: list[Step], stagger: float, register=None, wait: float = 30.0, log=print) -> int:
-    """Run the plan; returns how many steps failed. Launches are `stagger` seconds apart.
+# How long a resumed harness is watched for a startup prompt or an early exit.
+SETTLE = 10.0
+
+
+def startup(pane: str, launched_at: float, wait: float, settle: float = SETTLE) -> tuple[str, str | None]:
+    """How a harness launched into `pane` came up: ("ok", None), ("blocked", why)
+    while it waits at a workspace trust prompt, or ("failed", why).
+
+    Watched until `settle` seconds after the launch: a trust prompt shows a
+    moment after the process starts, and declining it ends the harness.
+    """
+    if not _wait_for_harness(pane, wait):
+        return "failed", f"its harness did not start within {wait:.0f}s"
+    while True:
+        screen = tmux._tmux_out("capture-pane", "-p", "-J", "-t", pane)
+        command = tmux._tmux_out("display-message", "-p", "-t", pane, "#{pane_current_command}")
+        if screen is None or command is None:
+            return "failed", "its pane is gone"
+        if trust := activity.trust_prompt(screen):
+            return "blocked", (f"waiting at {trust}. Answer it in that pane or the dashboard's "
+                               "terminal view; the hub holds messages back until then")
+        if command.strip() in tmux.SHELL_COMMANDS:
+            return "failed", "its harness started and exited; see the pane"
+        if time.monotonic() - launched_at >= settle:
+            return "ok", None
+        time.sleep(0.5)
+
+
+@dataclass
+class Outcome:
+    failed: int = 0
+    blocked: int = 0  # resumed, but waiting at a trust prompt
+
+    def summary(self) -> str:
+        parts = [f"{self.failed} failed"] if self.failed else []
+        if self.blocked:
+            parts.append(f"{self.blocked} waiting at a trust prompt")
+        return "done" + (", " + ", ".join(parts) if parts else "")
+
+
+def apply(steps: list[Step], stagger: float, register=None, wait: float = 30.0, log=print,
+          settle: float = SETTLE) -> Outcome:
+    """Run the plan. Launches are `stagger` seconds apart.
 
     After the launches, each resumed agent is registered to its new pane with
     `register(pane_id, agent)` (returns an error or None), once its harness is
     running. Hooks alone are not enough: Codex runs its hook at the session's
     first turn, and an unregistered agent never gets one, since the hub
-    refuses messages to a pane from the earlier tmux server.
+    refuses messages to a pane from the earlier tmux server. An agent held at
+    a workspace trust prompt is still registered, so the dashboard shows it
+    waiting; the hub does not deliver into that prompt.
     """
     failed = 0
-    launched: list[tuple[str, Step]] = []
+    blocked_agents = 0
+    launched: list[tuple[str, Step, float]] = []
     blocked = set()
+    created = None
     for step in steps:
         if step.window in blocked:
             log(f"skip {step.describe}: an earlier step in this window failed")
@@ -358,8 +405,10 @@ def apply(steps: list[Step], stagger: float, register=None, wait: float = 30.0, 
         if step.launch is not None and launched and stagger > 0:
             time.sleep(stagger)
         try:
-            target = step.target
+            target = step.target or created
             if step.launch is not None:
+                if target is None:
+                    raise ValueError("no pane to launch into")
                 # Resolve to an immutable pane id immediately before typing;
                 # positional targets can move during a staggered restore.
                 current = subprocess.run(
@@ -371,13 +420,15 @@ def apply(steps: list[Step], stagger: float, register=None, wait: float = 30.0, 
                     raise ValueError("target is no longer a bare shell")
                 target = current[0]
             argv = step.argv or ["send-keys", "-t", target, "-l", step.launch]
-            subprocess.run(["tmux", *argv], capture_output=True, text=True, check=True, timeout=10)
+            out = subprocess.run(["tmux", *argv], capture_output=True, text=True, check=True, timeout=10)
+            if step.argv and "-P" in step.argv:
+                created = out.stdout.strip()
             if step.place is not None:
                 _place_first_window(*step.place)
             if step.launch is not None:
                 subprocess.run(["tmux", "send-keys", "-t", target, "C-m"],
                                capture_output=True, text=True, check=True, timeout=10)
-                launched.append((target, step))
+                launched.append((target, step, time.monotonic()))
         except subprocess.CalledProcessError as e:
             failed += 1
             if step.window:
@@ -392,19 +443,111 @@ def apply(steps: list[Step], stagger: float, register=None, wait: float = 30.0, 
             continue
         log(step.describe)
     if register is None:
-        return failed
-    for pane, step in launched:
+        return Outcome(failed)
+    for pane, step, launched_at in launched:
         handle = step.agent["handle"]
         # Registering a pane that still runs a shell would have the hub paste
         # messages into that shell as commands.
-        if not _wait_for_harness(pane, wait):
+        state, why = startup(pane, launched_at, wait, settle)
+        if state == "failed":
             failed += 1
-            log(f"FAILED register {handle} at {pane}: its harness did not start within {wait:.0f}s")
+            log(f"FAILED {handle} at {pane}: {why}")
             continue
         error = register(pane, step.agent)
         if error:
             failed += 1
             log(f"FAILED register {handle} at {pane}: {error}")
+        elif state == "blocked":
+            blocked_agents += 1
+            log(f"BLOCKED {handle} at {pane}: {why}")
         else:
             log(f"registered {handle} at {pane}")
-    return failed
+    return Outcome(failed, blocked_agents)
+
+
+# ---------- one named agent: `buzz restore HANDLE` ----------
+
+
+def find_agent(recipients: list[dict], name: str) -> tuple[dict | None, str | None]:
+    """The hub row `name` means: its full handle, or the first part of one.
+
+    Handles read `smew` or `smew-claude-opus-karanslinux`; `smew` names the
+    latter when no other handle starts with `smew-`. Returns (row, None) or
+    (None, why).
+    """
+    exact = [r for r in recipients if r["user_id"] == name]
+    if exact:
+        return exact[0], None
+    matches = sorted(r["user_id"] for r in recipients if r["user_id"].startswith(name + "-"))
+    if len(matches) == 1:
+        return next(r for r in recipients if r["user_id"] == matches[0]), None
+    if matches:
+        return None, f"{name} could mean {', '.join(matches)}; give the full handle"
+    return None, f"no agent named {name}"
+
+
+def saved_place(directory: Path, agent_id: str) -> tuple[str, dict, dict] | None:
+    """Where the newest snapshot holding this session had it: (session, window, pane)."""
+    for path in sorted(directory.glob("*.json"), reverse=True):
+        try:
+            snap = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        for session in snap.get("sessions", []):
+            for window in session["windows"]:
+                for pane in window["panes"]:
+                    if (pane.get("agent") or {}).get("agent_id") == agent_id:
+                        return session["name"], window, pane
+    return None
+
+
+def plan_one(
+    row: dict, live: list[dict], node: str, server: str,
+    running: set[str], directory: Path = SNAPSHOT_DIR,
+) -> tuple[list[Step], str | None]:
+    """How to resume one stopped agent: (steps, None) or ([], why not).
+
+    Its own pane comes first when it is still in this tmux and back at a
+    bare shell (the harness exited, e.g. at a trust prompt). Otherwise it goes
+    into a new window where the newest snapshot had it, in that folder. A
+    pane running anything else is never touched, and a session already
+    running is never started twice.
+    """
+    handle = row["user_id"]
+    if row.get("node") != node:
+        return [], f"{handle} runs on {row.get('node')}; run restore there"
+    if not row.get("agent_id") or not row.get("flavor"):
+        return [], f"{handle} has no saved session to resume"
+    agent = {"handle": handle, "flavor": row["flavor"], "agent_id": row["agent_id"], "model": row.get("model")}
+    command = resume_command(agent)
+    if command is None:
+        return [], f"no resume command for {row['flavor']}"
+    if agent["agent_id"] in running:
+        return [], f"{handle} is already running (pane {row.get('pane_label') or row.get('tmux_pane')})"
+    place = saved_place(directory, agent["agent_id"])
+    panes = {p["pane_id"]: p for p in live}
+    own = panes.get(row.get("tmux_pane")) if row.get("tmux_server") == server else None
+    if own is not None:
+        if own["command"] not in tmux.SHELL_COMMANDS:
+            return [], f"its pane {own['pane_id']} is running {own['command']}; restore leaves it alone"
+        cwd = place[2]["cwd"] if place else own["cwd"]
+        label = f"{own['session']}:{own['window']}.{own['pane']}"
+        return [Step(f"resume {handle} ({row['flavor']}) in its pane {label}", target=own["pane_id"],
+                     launch=f"cd {shlex.quote(cwd)} && {command}", agent=agent)], None
+    if place is None:
+        return [], (f"{handle}'s pane is gone and no snapshot in {directory} says where it ran; "
+                    "its folder is needed to resume the session")
+    session, window, pane = place
+    sessions = {p["session"] for p in live}
+    if session in sessions:
+        create = Step(f"create a window in {session} for {handle} ({window['name']})",
+                      ["new-window", "-d", "-P", "-F", "#{pane_id}", "-t", f"={session}:",
+                       "-n", window["name"], "-c", pane["cwd"]])
+    else:
+        create = Step(f"create session {session} for {handle}",
+                      ["new-session", "-d", "-P", "-F", "#{pane_id}", "-s", session,
+                       "-n", window["name"], "-c", pane["cwd"], "-x", "220", "-y", "50"])
+    create.window = f"{handle}-window"
+    launch = Step(f"resume {handle} ({row['flavor']}) in {pane['cwd']}", launch=f"cd {shlex.quote(pane['cwd'])} && {command}",
+                  agent=agent, window=create.window)
+    return [create, launch], None

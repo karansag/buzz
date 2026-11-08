@@ -575,6 +575,21 @@ def test_peek_unknown_agent_404(client):
     assert r.status_code == 404
 
 
+def test_a_message_is_never_pasted_into_a_workspace_trust_prompt(client, monkeypatch):
+    # Claude's trust prompt defaults to "No, exit": a pasted message's Enter would end the agent.
+    screen = "Accessing workspace:\n/home/karan\n❯ No, exit\n  Yes, I trust this folder\n"
+    monkeypatch.setattr(tmux, "capture_pane", lambda pane, colors=False: (screen, None))
+    user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
+    before = len(client._calls)
+    r = client.post("/owner/send", json={"recipient": user, "content": "hello"})
+    body = r.json()
+    assert body["ok"] is False and body["status"] == "failed"
+    assert "waiting at Claude's workspace trust prompt for /home/karan" in body["delivery_error"]
+    assert len(client._calls) == before  # nothing reached the pane
+    msgs = client.get("/messages", params={"user": user}).json()["messages"]
+    assert msgs[0]["status"] == "failed"
+
+
 def test_owner_send_delivers_to_pane_and_records(client):
     user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
     r = client.post("/owner/send", json={"recipient": user, "content": "status update please"})

@@ -65,7 +65,7 @@ def plan(
         elif pane is None:
             item.skip = f"its pane is not in this machine's tmux (node {r.get('node')})"
         elif pane["command"] in tmux.SHELL_COMMANDS:
-            item.skip = "no harness is running in its pane"
+            item.skip = f"no harness is running in its pane; `buzz restore {item.handle}` resumes it there"
         elif not r.get("agent_id"):
             item.skip = "no session id, so it could not be resumed"
         elif (command := restore.resume_command(r)) is None:

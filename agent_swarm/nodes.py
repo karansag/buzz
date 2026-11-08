@@ -134,6 +134,9 @@ class Node(Protocol):
     def capture(
         self, pane: str, tmux_server: str | None, colors: bool = False
     ) -> tuple[str | None, str | None]: ...
+    def screen(self, pane: str, tmux_server: str | None) -> str | None:
+        """The pane's plain screen if it can be had without waiting on a node, else None."""
+        ...
     def deliver(
         self,
         op_id: str,
@@ -231,6 +234,9 @@ class LocalNode:
         if stale := _stale_server(tmux_server):
             return None, stale
         return tmux.capture_pane(pane, colors)
+
+    def screen(self, pane: str, tmux_server: str | None) -> str | None:
+        return self.capture(pane, tmux_server)[0]
 
     def deliver(
         self,
@@ -531,6 +537,13 @@ class RemoteNode:
         if r.get("status") != "ok":
             return None, r.get("error") or "capture failed"
         return (r.get("data") or {}).get("text"), None
+
+    def screen(self, pane: str, tmux_server: str | None) -> str | None:
+        # The latest observation only: a message send must not wait on a round trip.
+        last = self._last
+        if not last or (tmux_server is not None and last.get("tmux_server") != tmux_server):
+            return None
+        return (last.get("captures") or {}).get(pane)
 
     def deliver(
         self,

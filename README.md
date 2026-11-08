@@ -602,8 +602,10 @@ window, and pane with the harness session id of the agent in it. After the
 reboot, `buzz restore` shows the plan and `buzz restore --apply`
 recreates the layout and resumes each agent by its session id (`claude
 --resume ID`, `codex resume ID --yolo`, ...), so agents sharing a directory come
-back as themselves and get their handles back. See
-[docs/reboot-restore.md](docs/reboot-restore.md).
+back as themselves and get their handles back. `buzz restore smew --apply`
+resumes just one stopped agent. Buzz never answers a harness's folder trust
+prompt: an agent held at one is reported, and the hub does not paste
+messages into the prompt. See [docs/reboot-restore.md](docs/reboot-restore.md).
 
 **After a harness upgrade.** Running agents keep the old harness until
 they restart. `buzz restart --all` (or `--all --flavor codex`, or
@@ -637,6 +639,7 @@ buzz stop <handle>
 buzz prune [--include-shells]   # forget agents whose pane is gone
 buzz snapshot             # save tmux layout + each pane's agent session
 buzz restore [--apply] [--from <file>] [--stagger 5]   # after a reboot
+buzz restore <handle> [--apply]   # one stopped agent; "smew" for smew-claude-opus-... when unambiguous
 buzz restart <handle>... | --all [--flavor <f>] [--force] [--apply]   # after a harness upgrade
 buzz node-token <name>    # hub: enrol or rotate a machine
 buzz nodes                # hub: enrolled machines

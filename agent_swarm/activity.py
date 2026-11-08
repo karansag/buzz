@@ -77,9 +77,42 @@ ATTENTION_PATTERNS: dict[str, dict[str, list[re.Pattern]]] = {
 }
 
 
+# A harness asking whether to trust its working folder, which it does
+# before the agent starts. Claude draws "Accessing workspace:" over the
+# folder, with "No, exit" selected; Codex asks "Trust this folder?" (older
+# builds: "Do you trust the contents of this directory?"). Each title counts
+# only with its answer on screen, so an agent quoting the words does not.
+TRUST_PROMPTS = [
+    ("Claude", re.compile(r"^\W*Accessing workspace:\s*$"), re.compile(r"Yes, I trust this folder")),
+    ("Codex", re.compile(r"^\W*Trust this folder\?"), re.compile(r"Trust and continue")),
+    ("Codex", re.compile(r"^\W*Do you trust the contents of this directory\?"), re.compile(r"\bYes, continue\b")),
+]
+
+
+def trust_prompt(capture: str) -> str | None:
+    """What a workspace trust prompt on screen asks, or None.
+
+    The prompt has to be answered by a person in the pane. A message pasted
+    there would answer it: Claude's default is "No, exit", so the Enter that
+    submits a message ends the agent.
+    """
+    lines = capture.splitlines()
+    for harness, title, answer in TRUST_PROMPTS:
+        at = next((i for i, line in enumerate(lines) if title.search(line)), None)
+        if at is None or not any(answer.search(line) for line in lines[at:]):
+            continue
+        folder = next((line.strip() for line in lines[at + 1:] if line.strip()), "")
+        if harness == "Claude" and folder.startswith("/"):
+            return f"{harness}'s workspace trust prompt for {folder}"
+        return f"{harness}'s workspace trust prompt"
+    return None
+
+
 def _attention_detail(flavor: str | None, capture: str) -> str | None:
     """If the screen shows a live prompt awaiting the operator, return the line
     to display (its question when visible, else the first marker line)."""
+    if trust := trust_prompt(capture):
+        return f"waiting at {trust}: answer it in the pane"
     patterns = ATTENTION_PATTERNS.get(
         (flavor or "generic").lower(), ATTENTION_PATTERNS["generic"]
     )

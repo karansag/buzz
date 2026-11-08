@@ -527,9 +527,17 @@ def cmd_restart(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 1
     r.raise_for_status()
+    recipients = r.json()["recipients"]
+    handles = []
+    for name in args.handles:
+        row, why = restore.find_agent(recipients, name)
+        if row is None:
+            print(why, file=sys.stderr)
+            return 2
+        handles.append(row["user_id"])
     items = restart.plan(
-        r.json()["recipients"], restore.read_layout(), local_node(), server,
-        handles=args.handles or None, flavor=args.flavor, force=args.force,
+        recipients, restore.read_layout(), local_node(), server,
+        handles=handles or None, flavor=args.flavor, force=args.force,
     )
     if not items:
         print("no agents to restart")
@@ -539,6 +547,7 @@ def cmd_restart(args: argparse.Namespace) -> int:
     items.sort(key=lambda i: i.pane == own)
     failed = 0
     started = 0
+    watch = []
     for item in items:
         if item.skip:
             print(f"  skip {item.handle}: {item.skip}")
@@ -556,33 +565,25 @@ def cmd_restart(args: argparse.Namespace) -> int:
             failed += 1
             print(f"  FAILED {item.handle}: {err}")
         elif item.pane != own:
+            watch.append((item, time.monotonic()))
+    blocked = 0
+    for item, at in watch:
+        state, why = restore.startup(item.pane, at, wait=30.0)
+        if state == "ok":
             print(f"  restarted {item.handle}", flush=True)
+        elif state == "blocked":
+            blocked += 1
+            print(f"  BLOCKED {item.handle}: {why}", flush=True)
+        else:
+            failed += 1
+            print(f"  FAILED {item.handle}: {why}", flush=True)
     if not args.apply:
         print("dry run: nothing changed. Run again with --apply to do this.")
-    return 1 if failed else 0
+    return 1 if failed or blocked else 0
 
 
-def cmd_restore(args: argparse.Namespace) -> int:
-    directory = Path(args.dir).expanduser()
-    path = Path(args.from_file).expanduser() if args.from_file else restore.pick(directory, tmux.server_id())
-    if path is None:
-        print(f"no snapshot from an earlier tmux server in {directory}", file=sys.stderr)
-        return 1
-    snap = json.loads(path.read_text())
-    if snap.get("node") != local_node():
-        print(f"{path} was taken on {snap.get('node')}, not {local_node()}", file=sys.stderr)
-        return 1
-    r = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5)
-    r.raise_for_status()
-    recipients = r.json()["recipients"]
-    running = restore.running_sessions(recipients, restore.agents_in(snap))
-    steps = restore.plan(snap, restore.read_layout(), running)
-    print(f"snapshot {path} (taken {snap['taken_at']}, {len(restore.agents_in(snap))} agents)")
-    if not args.apply:
-        for step in steps:
-            print(f"  {step.describe}" + (f"\n      $ {step.launch}" if step.launch else ""))
-        print("dry run: nothing changed. Run again with --apply to do this.")
-        return 0
+def _restore_register(recipients: list[dict]):
+    """register(pane, agent) for restore.apply: binds a resumed agent to its new pane."""
     rows = {row["user_id"]: row for row in recipients}
 
     def register(pane: str, agent: dict) -> str | None:
@@ -601,10 +602,53 @@ def cmd_restore(args: argparse.Namespace) -> int:
             return f"hub said {response.status_code}: {response.text[:200]}"
         return None
 
-    failed = restore.apply(steps, args.stagger, register=register,
-                           log=lambda line: print(f"  {line}", flush=True))
-    print(f"done, {failed} failed" if failed else "done")
-    return 1 if failed else 0
+    return register
+
+
+def _run_restore(steps: list, args: argparse.Namespace, recipients: list[dict]) -> int:
+    if not args.apply:
+        for step in steps:
+            print(f"  {step.describe}" + (f"\n      $ {step.launch}" if step.launch else ""))
+        print("dry run: nothing changed. Run again with --apply to do this.")
+        return 0
+    outcome = restore.apply(steps, args.stagger, register=_restore_register(recipients),
+                            log=lambda line: print(f"  {line}", flush=True))
+    print(outcome.summary())
+    return 1 if outcome.failed or outcome.blocked else 0
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    directory = Path(args.dir).expanduser()
+    r = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5)
+    r.raise_for_status()
+    recipients = r.json()["recipients"]
+    if args.handle:
+        if args.from_file:
+            print("--from restores a whole snapshot; leave it out to restore one agent", file=sys.stderr)
+            return 2
+        row, why = restore.find_agent(recipients, args.handle)
+        if row is None:
+            print(why, file=sys.stderr)
+            return 2
+        running = restore.running_sessions(recipients, [row])
+        steps, why = restore.plan_one(row, restore.read_layout(), local_node(), tmux.server_id() or "",
+                                      running, directory)
+        if why:
+            print(why, file=sys.stderr)
+            return 1
+        return _run_restore(steps, args, recipients)
+    path = Path(args.from_file).expanduser() if args.from_file else restore.pick(directory, tmux.server_id())
+    if path is None:
+        print(f"no snapshot from an earlier tmux server in {directory}", file=sys.stderr)
+        return 1
+    snap = json.loads(path.read_text())
+    if snap.get("node") != local_node():
+        print(f"{path} was taken on {snap.get('node')}, not {local_node()}", file=sys.stderr)
+        return 1
+    running = restore.running_sessions(recipients, restore.agents_in(snap))
+    steps = restore.plan(snap, restore.read_layout(), running)
+    print(f"snapshot {path} (taken {snap['taken_at']}, {len(restore.agents_in(snap))} agents)")
+    return _run_restore(steps, args, recipients)
 
 
 def cmd_prune(args: argparse.Namespace) -> int:
@@ -951,12 +995,17 @@ def main(argv: list[str] | None = None) -> int:
     rsa.set_defaults(func=cmd_restart)
 
     rst = sub.add_parser(
-        "restore", help="after a reboot, recreate tmux sessions from a snapshot and resume the agents"
+        "restore", help="after a reboot, recreate tmux sessions from a snapshot and resume the agents; "
+                        "with a handle, resume just that stopped agent"
+    )
+    rst.add_argument(
+        "handle", nargs="?",
+        help="resume only this stopped agent: its full handle, or its first part (smew) when unambiguous",
     )
     rst.add_argument("--dir", default=str(restore.SNAPSHOT_DIR))
     rst.add_argument(
         "--from", dest="from_file",
-        help="snapshot file (default: newest one from an earlier tmux server)",
+        help="snapshot file (default: newest one from an earlier tmux server); not with a handle",
     )
     rst.add_argument("--apply", action="store_true", help="do it; without this, only print the plan")
     rst.add_argument("--stagger", type=float, default=5.0, help="seconds between agent launches")
