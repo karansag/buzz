@@ -1,3 +1,4 @@
+import { OwnerNote } from "./owner-note.js";
 import { QuickSwitcher } from "./quick-switch.js";
 import { useAgentHistory } from "./agent-history.js";
 import { TaskTrash } from "./task-trash.js";
@@ -701,7 +702,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       ${managing === g.key && team && html`<${TeamManage} key=${`${g.key}:${team.queen}`} team=${team} members=${g.members} refresh=${refresh} onDone=${() => setManaging(null)} />`}
       <div class="team-bees-chips">${empty && dragging && html`<span class="team-bees-empty">drop here</span>`}${g.members.map(r => {
         const st = STATE[agentStatus(r)] || STATE.unknown;
-        return html`<a key=${r.user_id} class=${`team-mate ${focusUser === r.user_id ? "here" : ""}`}
+        return html`<div key=${r.user_id} class="team-mate-wrap"><a class=${`team-mate ${focusUser === r.user_id ? "here" : ""}`}
           aria-current=${focusUser === r.user_id ? "page" : null} href=${`#/agent/${encodeURIComponent(r.user_id)}`}
           style=${`--machine:${machineColor(r.node)}`} title=${`${r.user_id} · ${machineName(r.node)} · ${st.word}`}
           draggable="true" onDragStart=${e => {
@@ -716,7 +717,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
           ${state.supervisor && state.supervisor.user_id === r.user_id && html`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
           <span class=${`status ${st.cls}`}></span>
           ${unreadFor(r.user_id) && html`<span class="team-mate-unread" title="new reply">●</span>`}
-        </a>`;
+        </a><${OwnerNote} agent=${r} refresh=${refresh} /></div>`;
       })}</div>
       ${g.gone.length > 0 && html`<div class="team-bees-offline"><span title=${g.gone.join(", ")}>${g.gone.length} offline: ${g.gone.join(", ")}</span>
         <${RetireButton} ids=${g.gone} refresh=${refresh} label=${g.gone.length > 1 ? `retire all ${g.gone.length}` : "retire"} /></div>`}
@@ -751,7 +752,7 @@ function AgentsPanel({ state, refresh, machine, harness, setHarness, unreadFor, 
       ${!onClose && filter}
     </div>
     ${view === "tiles"
-      ? html`<${CompactBees} state=${state} machine=${machine} harness=${harness} />`
+      ? html`<${CompactBees} state=${state} machine=${machine} harness=${harness} refresh=${refresh} />`
       : html`<${TeamBees} state=${state} refresh=${refresh} machine=${machine} harness=${harness} unreadFor=${unreadFor} focusUser=${focusUser} />`}
   </div>`;
 }
@@ -1338,17 +1339,19 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 
 // What the agent is doing now, then what it did before, newest first.
 function Doing({ summaries, now }) {
+  const current = summaries.find(s => s.source !== "owner");
   if (summaries.length === 0) {
     return html`<div class="doing-box empty-doing">No status yet. Agents post one with
       <code>buzz status "working on …"</code>; Claude Code and Codex pane titles
       show up here too.</div>`;
   }
-  const [cur, ...past] = summaries.slice(0, 6);
-  const line = (s) => html`<span class="src" title=${SUMMARY_SOURCE[s.source] || s.source}>${s.source === "agent" ? "✎" : "▭"}</span>`;
+  const cur = current;
+  const past = summaries.filter(s => s !== current).slice(0, 19);
+  const line = (s) => html`<span class="src" title=${SUMMARY_SOURCE[s.source] || s.source}>${s.source === "owner" ? "📌" : s.source === "agent" ? "✎" : "▭"}</span>`;
   return html`<div class="doing-box">
-    <div class="now">${line(cur)} ${cur.text} <span class="age">· ${rel(cur.ts, now)}</span></div>
+    ${cur && html`<div class="now">${line(cur)} ${cur.text} <span class="age">· ${rel(cur.ts, now)}</span></div>`}
     ${past.length > 0 && html`<details class="status-history"><summary>${past.length} earlier ${past.length === 1 ? "update" : "updates"}</summary><ol class="past">
-      ${past.map(s => html`<li>${line(s)} ${s.text} <span class="age">· ${rel(s.ts, now)}</span></li>`)}
+      ${past.map(s => html`<li>${line(s)} ${s.source === "owner" ? (s.text ? `you noted: ${s.text}` : "you cleared your note") : s.text} <span class="age">· ${rel(s.ts, now)}</span></li>`)}
     </ol></details>`}
   </div>`;
 }
@@ -1670,6 +1673,7 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
     </div>
     <h2>status updates</h2>
     <${Doing} summaries=${r.summaries || []} now=${state.now} />
+    <${OwnerNote} key=${user} agent=${r} refresh=${refresh} />
     <${Scope} key=${user} user=${user} refresh=${refresh} />
     <h2>conversations ${threads.length > 0 && html`<span class="count">· ${threads.length}</span>`}</h2>
     ${history.error && html`<p role="status">${history.error}</p>`}

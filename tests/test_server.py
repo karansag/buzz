@@ -1706,3 +1706,37 @@ def test_agent_history_is_independent_and_pages_without_gaps(client, tmp_path):
     assert client.get(url, headers={"X-Forwarded-For": "100.1.2.3"}).status_code == 401
     conn.close()
 
+
+
+def test_owner_note_persists_and_is_visible_to_agent(client):
+    c = client
+    reg = {"tmux_pane": "0:0.0", "requested_user": "jax"}
+    c.post('/register', json=reg)
+    endpoint = '/agents/jax/owner-note'
+    def agent():
+        return next(r for r in c.get('/api/state').json()['recipients'] if r['user_id'] == 'jax')
+    assert c.put(endpoint, json={'text':'  rhizome integration plan  '}).json()['owner_note'] == 'rhizome integration plan'
+    assert agent()['summaries'][0]['source'] == 'owner'
+    assert c.get('/whoami', params={'tmux_pane':'0:0.0'}).json()['owner_note'] == 'rhizome integration plan'
+    resumed = c.post('/register', json=reg).json()
+    assert 'Owner note about your work: rhizome integration plan' in resumed['protocol_brief']
+    c.post('/status', json={'tmux_pane':'0:0.0','text':'working on tests'})
+    assert agent()['owner_note'] == 'rhizome integration plan'
+    assert agent()['summaries'][0]['source'] == 'agent'
+    assert c.put(endpoint, json={'text':'review rhizome design'}).status_code == 200
+    assert agent()['owner_note'] == 'review rhizome design'
+    c.put(endpoint, json={'text':'review rhizome design'})
+    assert len([s for s in agent()['summaries'] if s['source'] == 'owner']) == 2
+    c.put(endpoint, json={'text':''})
+    assert agent()['owner_note'] is None
+    assert agent()['summaries'][0]['source'] == 'owner'
+    assert agent()['summaries'][0]['text'] == ''
+    assert c.put('/agents/nobody/owner-note', json={'text':'x'}).status_code == 404
+    assert c.put(endpoint, json={'text':'x'*1001}).status_code == 422
+    token = c.post('/nodes/note-test/token').json()['token']
+    assert c.put(endpoint, json={'text':'forged'}, headers={'Authorization':f'Bearer {token}'}).status_code == 403
+    c.put(endpoint, json={'text':'persistent assignment'})
+    for i in range(25):
+        c.post('/status', json={'tmux_pane':'0:0.0','text':f'progress {i}'})
+    assert agent()['owner_note'] == 'persistent assignment'
+    assert len(agent()['summaries']) == 20

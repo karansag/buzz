@@ -87,7 +87,7 @@ export function rel(ts, now) {
 }
 // Where a status line came from: the agent said it, or its harness put it in
 // the tmux pane title.
-export const SUMMARY_SOURCE = { agent: "said by the agent", title: "from its pane title" };
+export const SUMMARY_SOURCE = { owner: "noted by you", agent: "said by the agent", title: "from its pane title" };
 
 export function currentTask(tasks, user) {
   const mine = (tasks || []).filter(t => t.assignee === user && t.status !== "done");

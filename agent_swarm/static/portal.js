@@ -687,6 +687,7 @@ function rel(ts, now) {
 	return `${Math.round(d / 86400)}d ago`;
 }
 var SUMMARY_SOURCE = {
+	owner: "noted by you",
 	agent: "said by the agent",
 	title: "from its pane title"
 };
@@ -738,6 +739,57 @@ function Bee({ node, flavor, size = "", working = false }) {
     <path d="M19 12v18M29 11v20" stroke=${harness.color} stroke-width="4" />
     <circle cx="44" cy="21" r="6" fill="#16120c" /><circle cx="46" cy="19" r="1.3" fill="#f0e6d2" />
   </svg>`;
+}
+//#endregion
+//#region web/src/owner-note.js
+function OwnerNote({ agent, refresh }) {
+	const [editing, setEditing] = d(false);
+	const [text, setText] = d("");
+	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
+	const save = async (value) => {
+		setBusy(true);
+		setError("");
+		try {
+			const response = await fetch(`/agents/${encodeURIComponent(agent.user_id)}/owner-note`, {
+				method: "PUT",
+				headers: JSONH,
+				body: JSON.stringify({ text: value })
+			});
+			if (!response.ok) {
+				const body = await response.json();
+				throw new Error(body.detail?.error || "Could not save note.");
+			}
+			setEditing(false);
+			refresh?.();
+		} catch (err) {
+			setError(err.message);
+		} finally {
+			setBusy(false);
+		}
+	};
+	return m$1`<div class="owner-note" aria-label=${`Owner note for ${agent.user_id}`}>
+    ${editing ? m$1`<form onSubmit=${(e) => {
+		e.preventDefault();
+		save(text);
+	}}>
+      <label>Your note<textarea aria-label=${`Your note for ${agent.user_id}`} maxLength="1000" rows="2"
+        value=${text} disabled=${busy} onInput=${(e) => setText(e.target.value)} /></label>
+      <div class="owner-note-actions"><button type="submit" disabled=${busy}>Save note</button>
+        <button type="button" disabled=${busy} onClick=${() => {
+		setEditing(false);
+		setError("");
+	}}>Cancel</button>
+        ${agent.owner_note && m$1`<button type="button" disabled=${busy} onClick=${() => save("")}>Clear note</button>`}</div>
+    </form>` : m$1`<button type="button" class="owner-note-edit" aria-label=${`${agent.owner_note ? "Edit" : "Add"} owner note for ${agent.user_id}`}
+      onClick=${() => {
+		setText(agent.owner_note || "");
+		setError("");
+		setEditing(true);
+	}}>
+      ${agent.owner_note ? `📌 you: ${agent.owner_note}` : "+ your note"}</button>`}
+    ${error && m$1`<span role="alert">${error}</span>`}
+  </div>`;
 }
 //#endregion
 //#region web/src/quick-switch.js
@@ -1339,7 +1391,7 @@ function placeTaskCell(ideal, boxes, occupied, width) {
 	}
 	return start;
 }
-function CompactBees({ state, machine, harness = null }) {
+function CompactBees({ state, machine, harness = null, refresh }) {
 	const agents = (state.recipients || []).filter((r) => r.pane_alive && agentShown(r, machine, harness));
 	return m$1`<nav class="compact-hive" aria-label="Live agents">
     <div class="compact-hive-heading"><span>${agents.length} live agents</span><span>Tap a bee to open</span></div>
@@ -1347,12 +1399,12 @@ function CompactBees({ state, machine, harness = null }) {
 		const status = agentStatus(r);
 		const st = STATE[status] || STATE.unknown;
 		const harness = harnessStyle(r.flavor);
-		return m$1`<a key=${r.user_id} class="bee-tile" href=${focusHash(r.user_id)} style=${`--machine:${machineColor(r.node)}`}>
+		return m$1`<div key=${r.user_id} class="bee-tile-wrap"><a class="bee-tile" href=${focusHash(r.user_id)} style=${`--machine:${machineColor(r.node)}`}>
         <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
         <span class="bee-name">${r.user_id}</span>
         <span class="bee-machine">${machineName(r.node)}</span>
         <span class="bee-state"><span class=${`status ${st.cls}`} aria-hidden="true"></span>${st.word} · ${harness.mark} ${harness.label}</span>
-      </a>`;
+      </a><${OwnerNote} agent=${r} refresh=${refresh} /></div>`;
 	})}</div>
     ${!agents.length && m$1`<p class="compact-hive-empty">No live ${harness ? `${harnessStyle(harness).label} ` : ""}agents${machine ? ` on ${machine}` : ""}. Offline agents are listed under their team.</p>`}
   </nav>`;
@@ -1848,14 +1900,14 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 			}
 			for (const bee of beeData) {
 				const { r, name, harness, x, y, dx, dy, q, picked, assigned, primary, extras, working, busy, dancing } = bee;
-				const doing = r.summaries && r.summaries[0];
+				const doing = r.summaries?.find((s) => s.source !== "owner");
 				bees.set(name, {
 					x,
 					y,
 					task: primary,
 					node: machineName(r.node),
 					harness: harness.key,
-					doing: doing && doing.text
+					doing: [doing?.text, r.owner_note && `you: ${r.owner_note}`].filter(Boolean).join(" · ")
 				});
 				ctx.save();
 				if (!agentShown(r, machineRef.current, harnessRef.current)) ctx.globalAlpha = .18;
@@ -2467,7 +2519,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		machine,
 		harness
 	]);
-	return m$1`<div class="hive-panel">${compact ? compactBody || m$1`<${CompactBees} state=${state} machine=${machine} harness=${harness} />` : m$1`<div class="hive-scroll"><canvas ref=${canvasRef} tabindex="0"
+	return m$1`<div class="hive-panel">${compact ? compactBody || m$1`<${CompactBees} state=${state} machine=${machine} harness=${harness} refresh=${refresh} />` : m$1`<div class="hive-scroll"><canvas ref=${canvasRef} tabindex="0"
     aria-label="Live activity. Bee body color and the machine name below each bee identify its machine, matching the machine selector. Stripe color and the symbol beside the agent name identify its harness. Drag a comb cell or a task card onto a bee or a team outline to assign the task, or onto the trash corner to permanently delete it after confirmation; drag a bee into or out of a team outline to change its team; drag a team outline by its empty space to move the whole team somewhere else. Bees outside a team are kept out of team outlines. The task assignee select and the sidebar team boxes are the keyboard and touch alternatives."></canvas><div class="hive-trash-zone" aria-hidden="true"><strong>⌫ Trash task</strong><span>Drag a task here</span></div></div>`}
     <div class="harness-legend" aria-label="Bee harness legend">
       <span class="legend-title">Body = machine · stripes + symbol = harness</span>
@@ -12227,7 +12279,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       ${managing === g.key && team && m$1`<${TeamManage} key=${`${g.key}:${team.queen}`} team=${team} members=${g.members} refresh=${refresh} onDone=${() => setManaging(null)} />`}
       <div class="team-bees-chips">${empty && dragging && m$1`<span class="team-bees-empty">drop here</span>`}${g.members.map((r) => {
 			const st = STATE[agentStatus(r)] || STATE.unknown;
-			return m$1`<a key=${r.user_id} class=${`team-mate ${focusUser === r.user_id ? "here" : ""}`}
+			return m$1`<div key=${r.user_id} class="team-mate-wrap"><a class=${`team-mate ${focusUser === r.user_id ? "here" : ""}`}
           aria-current=${focusUser === r.user_id ? "page" : null} href=${`#/agent/${encodeURIComponent(r.user_id)}`}
           style=${`--machine:${machineColor(r.node)}`} title=${`${r.user_id} · ${machineName(r.node)} · ${st.word}`}
           draggable="true" onDragStart=${(e) => {
@@ -12245,7 +12297,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
           ${state.supervisor && state.supervisor.user_id === r.user_id && m$1`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
           <span class=${`status ${st.cls}`}></span>
           ${unreadFor(r.user_id) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
-        </a>`;
+        </a><${OwnerNote} agent=${r} refresh=${refresh} /></div>`;
 		})}</div>
       ${g.gone.length > 0 && m$1`<div class="team-bees-offline"><span title=${g.gone.join(", ")}>${g.gone.length} offline: ${g.gone.join(", ")}</span>
         <${RetireButton} ids=${g.gone} refresh=${refresh} label=${g.gone.length > 1 ? `retire all ${g.gone.length}` : "retire"} /></div>`}
@@ -12281,7 +12333,7 @@ function AgentsPanel({ state, refresh, machine, harness, setHarness, unreadFor, 
       ${AGENTS_VIEWS.map(([v, label]) => m$1`<button key=${v} type="button" aria-pressed=${view === v} onClick=${() => pick(v)}>${label}</button>`)}
       ${!onClose && filter}
     </div>
-    ${view === "tiles" ? m$1`<${CompactBees} state=${state} machine=${machine} harness=${harness} />` : m$1`<${TeamBees} state=${state} refresh=${refresh} machine=${machine} harness=${harness} unreadFor=${unreadFor} focusUser=${focusUser} />`}
+    ${view === "tiles" ? m$1`<${CompactBees} state=${state} machine=${machine} harness=${harness} refresh=${refresh} />` : m$1`<${TeamBees} state=${state} refresh=${refresh} machine=${machine} harness=${harness} unreadFor=${unreadFor} focusUser=${focusUser} />`}
   </div>`;
 }
 function Overview({ state, refresh, machine, harness, setHarness, unreadFor }) {
@@ -12899,15 +12951,17 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   </div>`;
 }
 function Doing({ summaries, now }) {
+	const current = summaries.find((s) => s.source !== "owner");
 	if (summaries.length === 0) return m$1`<div class="doing-box empty-doing">No status yet. Agents post one with
       <code>buzz status "working on …"</code>; Claude Code and Codex pane titles
       show up here too.</div>`;
-	const [cur, ...past] = summaries.slice(0, 6);
-	const line = (s) => m$1`<span class="src" title=${SUMMARY_SOURCE[s.source] || s.source}>${s.source === "agent" ? "✎" : "▭"}</span>`;
+	const cur = current;
+	const past = summaries.filter((s) => s !== current).slice(0, 19);
+	const line = (s) => m$1`<span class="src" title=${SUMMARY_SOURCE[s.source] || s.source}>${s.source === "owner" ? "📌" : s.source === "agent" ? "✎" : "▭"}</span>`;
 	return m$1`<div class="doing-box">
-    <div class="now">${line(cur)} ${cur.text} <span class="age">· ${rel(cur.ts, now)}</span></div>
+    ${cur && m$1`<div class="now">${line(cur)} ${cur.text} <span class="age">· ${rel(cur.ts, now)}</span></div>`}
     ${past.length > 0 && m$1`<details class="status-history"><summary>${past.length} earlier ${past.length === 1 ? "update" : "updates"}</summary><ol class="past">
-      ${past.map((s) => m$1`<li>${line(s)} ${s.text} <span class="age">· ${rel(s.ts, now)}</span></li>`)}
+      ${past.map((s) => m$1`<li>${line(s)} ${s.source === "owner" ? s.text ? `you noted: ${s.text}` : "you cleared your note" : s.text} <span class="age">· ${rel(s.ts, now)}</span></li>`)}
     </ol></details>`}
   </div>`;
 }
@@ -13211,6 +13265,7 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
     </div>
     <h2>status updates</h2>
     <${Doing} summaries=${r.summaries || []} now=${state.now} />
+    <${OwnerNote} key=${user} agent=${r} refresh=${refresh} />
     <${Scope} key=${user} user=${user} refresh=${refresh} />
     <h2>conversations ${threads.length > 0 && m$1`<span class="count">· ${threads.length}</span>`}</h2>
     ${history.error && m$1`<p role="status">${history.error}</p>`}

@@ -986,3 +986,18 @@ dialog.quick-switch { margin: auto; width: min(680px, calc(100vw - 24px)); max-h
 .hive-trash-zone.over { border-style:solid; background:#792e35; color:#fff; box-shadow:0 0 20px #d9696755; }
 .hive-drop-status { display:block; padding:0 12px; color:var(--cream-dim); font-size:12px; }
 .hive-drop-status:empty { display:none; }
+
+.owner-note { min-width:0; overflow-wrap:anywhere; color:var(--cream-dim); font-size:12px; }
+.owner-note-edit { background:none; border:0; color:var(--cream-dim); text-align:left; padding:6px 8px; cursor:pointer; white-space:normal; overflow-wrap:anywhere; max-width:100%; }
+.owner-note-edit:hover { color:var(--cream); }
+.owner-note form { display:grid; gap:6px; padding:8px; }
+.owner-note label { display:grid; gap:4px; }
+.owner-note textarea { width:100%; box-sizing:border-box; min-width:0; resize:vertical; }
+.owner-note-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.owner-note-actions button { padding:6px 8px; }
+.owner-note [role=alert] { display:block; color:var(--red); }
+.team-mate-wrap, .bee-tile-wrap { min-width:0; max-width:100%; }
+.team-mate-wrap { display:inline-flex; flex-direction:column; align-items:flex-start; }
+@media (pointer:coarse), (max-width:1100px) {
+  .owner-note button { min-height:44px; min-width:44px; }
+}

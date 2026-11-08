@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS summaries (
 CREATE INDEX IF NOT EXISTS idx_summaries_user_ts ON summaries(user_id, ts);
 """
 
-SUMMARY_SOURCES = ("agent", "title")
+SUMMARY_SOURCES = ("agent", "title", "owner")
 # Older summaries past this many per agent are dropped as new ones arrive.
 SUMMARY_HISTORY = 20
 
@@ -273,6 +273,7 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         "instructions",
         "message_prefix",
         "submit_key",
+        "owner_note",
     ):
         if col not in cols:
             conn.execute(f"ALTER TABLE recipients ADD COLUMN {col} TEXT")
@@ -445,7 +446,7 @@ def adopt_agent_id(
 def get_recipient(conn: sqlite3.Connection, user_id: str) -> dict | None:
     _ensure_columns(conn)
     row = conn.execute(
-        "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, registered_at "
+        "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, owner_note, registered_at "
         "FROM recipients WHERE user_id=?",
         (user_id,),
     ).fetchone()
@@ -456,7 +457,7 @@ def get_recipient(conn: sqlite3.Connection, user_id: str) -> dict | None:
 def list_recipients(conn: sqlite3.Connection) -> list[dict]:
     _ensure_columns(conn)
     rows = conn.execute(
-        "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, registered_at "
+        "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, owner_note, registered_at "
         "FROM recipients ORDER BY user_id"
     ).fetchall()
     return [dict(r) for r in rows]
@@ -537,11 +538,11 @@ def record_summary(
     it keeps showing the same text while an agent reports its own summaries.
     An agent's own summary is new unless it is already the current summary.
     """
-    only = "AND source='title' " if source == "title" else ""
+    only = "AND source=? " if source in ("title", "owner") else "AND source!='owner' "
     latest = conn.execute(
         f"SELECT text, source FROM summaries WHERE user_id=? {only}"
         "ORDER BY ts DESC, id DESC LIMIT 1",
-        (user_id,),
+        ((user_id, source) if source in ("title", "owner") else (user_id,)),
     ).fetchone()
     if latest is not None and (latest["text"], latest["source"]) == (text, source):
         return False
@@ -556,6 +557,18 @@ def record_summary(
             (user_id, user_id, SUMMARY_HISTORY),
         )
     return True
+
+
+@_serialized
+def set_owner_note(conn: sqlite3.Connection, user_id: str, text: str) -> dict | None:
+    recipient = get_recipient(conn, user_id)
+    if recipient is None:
+        return None
+    if (recipient["owner_note"] or "") != text:
+        with conn:
+            conn.execute("UPDATE recipients SET owner_note=? WHERE user_id=?", (text or None, user_id))
+            record_summary(conn, user_id, text, "owner")
+    return get_recipient(conn, user_id)
 
 
 @_serialized

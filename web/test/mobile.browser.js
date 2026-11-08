@@ -884,12 +884,12 @@ test('team view: drag an agent chip to another team or to no team', async () => 
     const chip = user => page.locator(`#agent-sidebar .team-mate[href="#/agent/${user}"]`);
     assert.equal(await group('spare').evaluate(d => d.classList.contains('empty')), true);
 
-    await chip('stoat').dragTo(group('no team'));
+    await chip('stoat').dragTo(group('no team').locator('summary').first());
     await page.waitForFunction(() => document.querySelector('#agent-sidebar .team-bees-group.loose a[href="#/agent/stoat"]'));
-    await chip('ferret').dragTo(group('agent-swarm'));
+    await chip('ferret').dragTo(group('agent-swarm').locator('summary').first());
     await page.waitForFunction(() => [...document.querySelectorAll('#agent-sidebar .team-bees-group:not(.loose) a')].some(a => a.getAttribute('href') === '#/agent/ferret'));
     // Dropping a chip on its own group changes nothing.
-    await chip('ferret').dragTo(group('agent-swarm'));
+    await chip('ferret').dragTo(group('agent-swarm').locator('summary').first());
     // An empty team is a target while dragging.
     await page.mouse.move(0, 0);
     const box = await chip('smew').boundingBox();
@@ -1440,5 +1440,46 @@ test('the terminal view shows pane colors and chat colors code, diffs and Markdo
     assert.equal(await bubble.locator('li').first().evaluate(e => getComputedStyle(e, '::marker').color), 'rgb(168, 152, 120)');
     assert.notEqual(await tint('pre code'), 'rgb(156, 200, 240)');
     assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('owner notes edit inline, persist beside live status, and clear', async () => {
+  const { page, state, errors } = await setup(390,844);
+  let fail = false;
+  await page.route('**/agents/stoat/owner-note', async route => {
+    if (fail) return route.fulfill({status:403,json:{detail:{error:'owner only'}}});
+    const text = route.request().postDataJSON().text;
+    state.recipients[0].owner_note = text || null;
+    state.recipients[0].summaries.unshift({source:'owner',text,ts:state.now});
+    await route.fulfill({json:{ok:true,owner_note:text || null}});
+  });
+  try {
+    await page.goto(base+'#/agent/stoat');
+    const note = page.locator('.stage .owner-note').first();
+    await note.getByRole('button', {name:'Add owner note for stoat'}).click();
+    await note.getByRole('textbox').fill('rhizome integration plan');
+    await note.getByRole('button', {name:'Save note'}).click();
+    await note.getByText('📌 you: rhizome integration plan').waitFor();
+    assert.match(await page.locator('.doing-box .now').textContent(), /Reviewing mobile/);
+    await page.locator('.status-history summary').click();
+    await page.getByText('you noted: rhizome integration plan').waitFor();
+    await note.getByRole('button', {name:'Edit owner note for stoat'}).click();
+    await note.getByRole('textbox').fill('review design');
+    fail = true;
+    await note.getByRole('button', {name:'Save note'}).click();
+    await note.getByRole('alert').filter({hasText:'owner only'}).waitFor();
+    assert.equal(state.recipients[0].owner_note,'rhizome integration plan');
+    fail = false;
+    await note.getByRole('button', {name:'Save note'}).click();
+    await note.getByText('📌 you: review design').waitFor();
+    await page.reload();
+    await note.getByText('📌 you: review design').waitFor();
+    await note.getByRole('button', {name:'Edit owner note for stoat'}).click();
+    await note.getByRole('button', {name:'Clear note'}).click();
+    await note.getByRole('button', {name:'Add owner note for stoat'}).waitFor();
+    assert.equal(state.recipients[0].owner_note,null);
+    await page.goto(base+'#/');
+    await fit(page);
+    assert.deepEqual(errors,[]);
   } finally { await page.close(); }
 });

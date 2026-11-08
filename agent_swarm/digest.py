@@ -110,7 +110,7 @@ def render(
             if status == "needs_attention":
                 lines.append(f"  needs attention: {r['user_id']}{tag} — {_clip(act.get('detail') or '')}{age}")
             else:
-                summary = (r.get("summaries") or [{}])[0].get("text") or "(no status line)"
+                summary = next((s for s in r.get("summaries", []) if s.get("source") != "owner"), {}).get("text") or "(no status line)"
                 lines.append(f"  working: {r['user_id']}{tag} — {_clip(summary)}{age}")
     idle = [r["user_id"] for r in by_status.get("idle", [])]
     if idle:

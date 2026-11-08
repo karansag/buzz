@@ -921,6 +921,7 @@ def cmd_whoami(_: argparse.Namespace) -> int:
         json.dumps(
             {
                 "user": answer.get("user_id"),
+                "owner_note": answer.get("owner_note"),
                 "identified_by": answer.get("identified_by"),
                 "session": f"{session[:8]}…" if session else None,
                 "pane": who["pane"],

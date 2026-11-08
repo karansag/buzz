@@ -185,6 +185,11 @@ class PruneReq(BaseModel):
     )
 
 
+class OwnerNoteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(max_length=1000)
+
+
 class StatusReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -471,7 +476,7 @@ def _supervisor_prompt(user_id: str, objective: str, peers: list[dict]) -> str:
     )
 
 
-def _protocol_brief(user_id: str, peers: list[dict]) -> str:
+def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = None) -> str:
     """A one-shot primer the agent sees in its register response.
 
     Tells the agent what inbound messages look like so a line appearing in
@@ -503,8 +508,10 @@ def _protocol_brief(user_id: str, peers: list[dict]) -> str:
         "shell); sending to them is refused until they restart.\n\n"
         if offline else ""
     )
+    owner_note_line = f"Owner note about your work: {owner_note}\n" if owner_note else ""
     return (
         f"You are registered as '{user_id}'.\n"
+        f"{owner_note_line}"
         f"\n"
         f"Incoming messages from the owner and other agents are delivered by injecting a "
         f"line into your tmux pane (as if typed) followed by the configured "
@@ -1161,7 +1168,8 @@ def create_app(
             "assigned": requested is None,
             "requested_user": requested,
             "renamed_from": renamed_from,
-            "protocol_brief": _protocol_brief(user_id, peers),
+            "owner_note": registered.get("owner_note") if registered else None,
+            "protocol_brief": _protocol_brief(user_id, peers, registered.get("owner_note") if registered else None),
         }
 
     def _node_or_422(name: str | None) -> nodes.Node:
@@ -1331,6 +1339,7 @@ def create_app(
             "user_id": user_id, "node": owner_node.name,
             "tmux_pane": pane, "pane_label": label,
             "identified_by": how if user_id else None, "detail": why_not,
+            "owner_note": (db.get_recipient(conn, user_id) or {}).get("owner_note") if user_id else None,
         }
 
     @app.post("/recipients/prune")
@@ -1551,6 +1560,13 @@ def create_app(
             "delivered_to_pane": recipient["tmux_pane"],
             "delivery_error": err,
         }
+
+    @app.put("/agents/{user_id}/owner-note")
+    def owner_note(user_id: str, req: OwnerNoteReq, _: None = Depends(_require_owner)):
+        recipient = db.set_owner_note(conn, user_id, " ".join(req.text.split()))
+        if recipient is None:
+            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        return {"ok": True, "owner_note": recipient["owner_note"]}
 
     @app.post("/status")
     def set_status(req: StatusReq, request: Request):
