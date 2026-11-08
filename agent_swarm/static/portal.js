@@ -9617,9 +9617,75 @@ function useAgentHistory(user) {
 	};
 }
 //#endregion
+//#region web/src/dialogs.js
+var queue = Promise.resolve();
+function openDialog(message, { confirmLabel, cancelLabel }) {
+	const dialog = document.createElement("dialog");
+	dialog.className = "page-dialog";
+	dialog.setAttribute("role", "alertdialog");
+	const text = document.createElement("p");
+	text.className = "page-dialog-message";
+	text.id = `page-dialog-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+	text.textContent = message;
+	dialog.setAttribute("aria-describedby", text.id);
+	dialog.setAttribute("aria-label", cancelLabel ? "Confirm" : "Notice");
+	const actions = document.createElement("div");
+	actions.className = "page-dialog-actions";
+	const button = (label, value, className) => {
+		const b = document.createElement("button");
+		b.type = "button";
+		b.className = className;
+		b.value = value;
+		b.textContent = label;
+		b.addEventListener("click", () => dialog.close(value));
+		actions.append(b);
+		return b;
+	};
+	if (cancelLabel) button(cancelLabel, "cancel", "mini");
+	const ok = button(confirmLabel, "ok", "act");
+	dialog.append(text, actions);
+	const previous = document.activeElement;
+	return new Promise((resolve) => {
+		dialog.addEventListener("keydown", (e) => {
+			if (e.key === "Escape" || e.key === "Enter") e.stopPropagation();
+			if (e.key !== "Enter" || e.isComposing || e.target.value === "cancel") return;
+			e.preventDefault();
+			dialog.close("ok");
+		});
+		dialog.addEventListener("close", () => {
+			const confirmed = dialog.returnValue === "ok";
+			dialog.remove();
+			if (previous?.isConnected) previous.focus();
+			resolve(confirmed);
+		});
+		document.body.append(dialog);
+		dialog.showModal();
+		ok.focus();
+	});
+}
+function enqueue(open) {
+	const result = queue.then(open);
+	queue = result.catch(() => {});
+	return result;
+}
+/** Ask a yes/no question in the page. Resolves true only when confirmed. */
+function confirmDialog(message, { confirmLabel = "OK", cancelLabel = "Cancel" } = {}) {
+	return enqueue(() => openDialog(message, {
+		confirmLabel,
+		cancelLabel
+	}));
+}
+/** Show a message in the page. Resolves when it is dismissed. */
+function showNotice(message) {
+	return enqueue(() => openDialog(message, {
+		confirmLabel: "OK",
+		cancelLabel: null
+	})).then(() => {});
+}
+//#endregion
 //#region web/src/task-trash.js
 async function trashTask(task) {
-	if (!confirm(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files will remain.`)) return false;
+	if (!await confirmDialog(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files will remain.`)) return false;
 	const response = await fetch(`/tasks/${task.id}`, { method: "DELETE" });
 	const body = await response.json();
 	if (!response.ok) throw new Error(body.detail?.error || "Could not trash task.");
@@ -11670,29 +11736,29 @@ function CompactButton({ r }) {
 	const [busy, setBusy] = d(false);
 	if (!r.pane_alive || !r.compact_command) return null;
 	const compact = async () => {
-		if (!confirm(`Compact ${r.user_id}'s context? This types ${r.compact_command} into its pane.`)) return;
+		if (!await confirmDialog(`Compact ${r.user_id}'s context? This types ${r.compact_command} into its pane.`)) return;
 		setBusy(true);
 		const res = await typeInto(r.user_id, { text: r.compact_command });
 		setBusy(false);
-		if (!res.ok) alert(`Could not compact ${r.user_id}: ${await failure(res)}`);
+		if (!res.ok) await showNotice(`Could not compact ${r.user_id}: ${await failure(res)}`);
 	};
 	return m$1`<button type="button" class="mini" disabled=${busy}
     title=${`Type ${r.compact_command} into ${r.user_id}'s pane to compact its context`}
     onClick=${compact}>${busy ? "compacting…" : "compact"}</button>`;
 }
 async function stopAgent(r, state, focusUser, refresh) {
-	if (!confirm(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
+	if (!await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
 	if ((await fetch(`/agents/${encodeURIComponent(r.user_id)}/stop`, { method: "POST" }).catch(() => null))?.ok) {
 		if (focusUser === r.user_id) {
 			const next = state.recipients.find((x) => x.pane_alive && x.user_id !== r.user_id);
 			location.hash = next ? focusHash(next.user_id) : "#/";
 		}
-	} else alert(`Could not stop ${r.user_id}. Check its status before trying again.`);
+	} else await showNotice(`Could not stop ${r.user_id}. Check its status before trying again.`);
 	refresh();
 }
 async function retireAgents(ids, refresh) {
 	const names = ids.length > 6 ? `${ids.slice(0, 6).join(", ")} and ${ids.length - 6} more` : ids.join(", ");
-	if (!ids.length || !confirm(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. Messages and tasks are kept.`)) return null;
+	if (!ids.length || !await confirmDialog(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. Messages and tasks are kept.`)) return null;
 	try {
 		const response = await fetch("/recipients/retire", {
 			method: "POST",
@@ -11701,13 +11767,13 @@ async function retireAgents(ids, refresh) {
 		});
 		const body = await response.json().catch(() => null);
 		if (!response.ok || !body?.ok) {
-			alert("Could not retire. Try again.");
+			await showNotice("Could not retire. Try again.");
 			return null;
 		}
-		if (body.kept_live.length) alert(`Still running, so not retired: ${body.kept_live.join(", ")}`);
+		if (body.kept_live.length) await showNotice(`Still running, so not retired: ${body.kept_live.join(", ")}`);
 		return body;
 	} catch {
-		alert("Could not retire. Try again.");
+		await showNotice("Could not retire. Try again.");
 		return null;
 	} finally {
 		refresh();
@@ -11728,7 +11794,7 @@ function StopAgentButton({ r, refresh }) {
 	const [busy, setBusy] = d(false);
 	const [message, setMessage] = d("");
 	const stop = async () => {
-		if (busy || !confirm(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
+		if (busy || !await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
 		setBusy(true);
 		setMessage("");
 		try {
@@ -11782,7 +11848,7 @@ function ModelLabel({ r, refresh }) {
 		});
 		setBusy(false);
 		if (!res.ok) {
-			alert(`Could not update the model label for ${r.user_id}.`);
+			await showNotice(`Could not update the model label for ${r.user_id}.`);
 			return;
 		}
 		setEditing(false);
@@ -11956,7 +12022,7 @@ function Resend({ m, refresh }) {
 	const [busy, setBusy] = d(false);
 	const [note, setNote] = d("");
 	const resend = async () => {
-		if (!window.confirm("The outcome of this message is unknown: the agent may already have it. Send it again as a new message?")) return;
+		if (!await confirmDialog("The outcome of this message is unknown: the agent may already have it. Send it again as a new message?")) return;
 		setBusy(true);
 		setNote("");
 		try {
@@ -12231,7 +12297,7 @@ function TeamManage({ team, members, refresh, onDone }) {
 		}).catch(() => null);
 		setBusy(false);
 		if (!res?.ok) {
-			alert(`Could not change the queen of ${team.name}.`);
+			await showNotice(`Could not change the queen of ${team.name}.`);
 			return;
 		}
 		onDone();
@@ -12253,9 +12319,9 @@ function TeamManage({ team, members, refresh, onDone }) {
   </form>`;
 }
 async function removeTeam(team, refresh) {
-	if (!confirm(`Remove team ${team.name}? Its agents keep running.`)) return;
+	if (!await confirmDialog(`Remove team ${team.name}? Its agents keep running.`)) return;
 	if (!(await fetch(`/teams/${team.id}`, { method: "DELETE" }).catch(() => null))?.ok) {
-		alert(`Could not remove ${team.name}.`);
+		await showNotice(`Could not remove ${team.name}.`);
 		return;
 	}
 	refresh();
@@ -12910,7 +12976,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	}, [focused]);
 	_(() => {
 		const onKey = (e) => {
-			if (e.isComposing || document.querySelector(".quick-switch[open]")) return;
+			if (e.isComposing || document.querySelector(".quick-switch[open], dialog.page-dialog[open]")) return;
 			if (e.key === "Escape" && focused) {
 				e.preventDefault();
 				e.stopImmediatePropagation();

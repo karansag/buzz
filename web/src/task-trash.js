@@ -1,8 +1,9 @@
 import { html } from "htm/preact";
 import { useState } from "preact/hooks";
+import { confirmDialog } from "./dialogs.js";
 
 export async function trashTask(task) {
-  if (!confirm(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files will remain.`)) return false;
+  if (!await confirmDialog(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files will remain.`)) return false;
   const response = await fetch(`/tasks/${task.id}`, { method: "DELETE" });
   const body = await response.json();
   if (!response.ok) throw new Error(body.detail?.error || "Could not trash task.");
