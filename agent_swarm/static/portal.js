@@ -12973,7 +12973,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     <button type="button" class="history-resizer" role="separator" aria-orientation="horizontal"
       aria-label="Resize conversation history"
       aria-valuemin="120" aria-valuemax=${resizeBounds().max}
-      aria-valuenow=${historyHeight ?? 340} title="Drag to resize conversation history"
+      aria-valuenow=${historyHeight ?? Math.round(boxRef.current?.getBoundingClientRect().height || 0)} title="Drag to resize conversation history"
       onPointerDown=${resizeStart} onPointerMove=${resizeMove}
       onPointerUp=${resizeEnd} onPointerCancel=${resizeEnd} onKeyDown=${resizeKey}>
       <span>drag to resize history</span>

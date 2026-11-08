@@ -455,7 +455,7 @@
   }
   .thread-head > .bar .swap { color: var(--honey); font-family: var(--mono); font-size: 12px; }
   .thread-head > .bar .n { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--cream-dim); letter-spacing: .1em; }
-  .msgs { padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; align-content: start; height: 340px; min-height: 120px; max-height: 85vh; overflow: auto; resize: none; }
+  .msgs { padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; align-content: start; height: clamp(340px, 65vh, 900px); min-height: 120px; max-height: 85vh; overflow: auto; resize: none; }
   /* Floats at the bottom of the history while the reader is scrolled up. The
      dock is always there and takes no room (its row's gap is cancelled), so
      showing the button never changes the history's height or scroll. */

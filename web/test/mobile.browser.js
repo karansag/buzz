@@ -288,7 +288,7 @@ test('a conversation expands to fill the window and back (button, shortcut, Esc)
     assert.equal(await size('.thread .composer textarea'), '14px');
     await page.locator('.thread-focus').first().click();
     assert.equal(await page.locator('.thread.focused').count(), 1);
-    assert.ok((await history.boundingBox()).height > before + 200);
+    assert.ok((await history.boundingBox()).height > before + 50);  // the default is already ~2/3 of the window
     const bubble = page.locator('.thread.focused .msg .bubble').first();
     const font = () => bubble.evaluate(e => getComputedStyle(e).fontSize);
     assert.equal(await font(), '16px');
@@ -1588,4 +1588,17 @@ test('an owner chat scrolled up offers a jump to the newest message, counting ne
     assert.ok(await box.evaluate(e => e.scrollHeight - e.scrollTop - e.clientHeight < 10));
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
+});
+
+test('chat history is tall by default: about two thirds of the window, at least 340px', async () => {
+  for (const [w, h, want] of [[1500, 900, 585], [1500, 500, 340], [1500, 1600, 900]]) {
+    const { page, errors } = await setup(w, h, false);
+    try {
+      await page.goto(base + '#/agent/stoat');
+      const box = page.locator('.thread .msgs').first();
+      await box.waitFor();
+      assert.equal(Math.round(await box.evaluate(e => e.getBoundingClientRect().height)), want);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  }
 });
