@@ -1,4 +1,3 @@
-import { OwnerNote } from "./owner-note.js";
 import { TaskTrash, trashTask } from "./task-trash.js";
 import { TaskStatusActions } from "./task-status.js";
 import { AttachmentList } from "./attachments.js";
@@ -59,7 +58,7 @@ function placeTaskCell(ideal, boxes, occupied, width) {
 }
 
 // Native links keep every agent reachable by touch and keyboard without a map.
-export function CompactBees({ state, machine, harness = null, refresh }) {
+export function CompactBees({ state, machine, harness = null }) {
   const agents = (state.recipients || []).filter(r => r.pane_alive && agentShown(r, machine, harness));
   return html`<nav class="compact-hive" aria-label="Live agents">
     <div class="compact-hive-heading"><span>${agents.length} live agents</span><span>Tap a bee to open</span></div>
@@ -67,12 +66,12 @@ export function CompactBees({ state, machine, harness = null, refresh }) {
       const status = agentStatus(r);
       const st = STATE[status] || STATE.unknown;
       const harness = harnessStyle(r.flavor);
-      return html`<div key=${r.user_id} class="bee-tile-wrap"><a class="bee-tile" href=${focusHash(r.user_id)} style=${`--machine:${machineColor(r.node)}`}>
+      return html`<a key=${r.user_id} class="bee-tile" href=${focusHash(r.user_id)} style=${`--machine:${machineColor(r.node)}`}>
         <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
         <span class="bee-name">${r.user_id}</span>
         <span class="bee-machine">${machineName(r.node)}</span>
         <span class="bee-state"><span class=${`status ${st.cls}`} aria-hidden="true"></span>${st.word} · ${harness.mark} ${harness.label}</span>
-      </a><${OwnerNote} agent=${r} refresh=${refresh} /></div>`;
+      </a>`;
     })}</div>
     ${!agents.length && html`<p class="compact-hive-empty">No live ${harness ? `${harnessStyle(harness).label} ` : ""}agents${machine ? ` on ${machine}` : ""}. Offline agents are listed under their team.</p>`}
   </nav>`;
@@ -490,7 +489,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
       for (const bee of beeData) {
         const { r, name, harness, x, y, dx, dy, q, picked, assigned, primary, extras, working, busy, dancing } = bee;
         const doing = r.summaries?.find(s => s.source !== "owner");
-        bees.set(name, { x, y, task: primary, node: machineName(r.node), harness: harness.key, doing: [doing?.text, r.owner_note && `you: ${r.owner_note}`].filter(Boolean).join(" · ") });
+        bees.set(name, { x, y, task: primary, node: machineName(r.node), harness: harness.key, doing: doing?.text });
         ctx.save();
         if (!agentShown(r, machineRef.current, harnessRef.current)) ctx.globalAlpha = .18;
         if (assigned) token(assigned, x + 22, y + Math.sin(q * .8) * 3);
@@ -995,7 +994,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
       drawRef.current(performance.now(), true);
   }, [state, machine, harness]);
 
-  return html`<div class="hive-panel">${compact ? (compactBody || html`<${CompactBees} state=${state} machine=${machine} harness=${harness} refresh=${refresh} />`) : html`<div class="hive-scroll"><canvas ref=${canvasRef} tabindex="0"
+  return html`<div class="hive-panel">${compact ? (compactBody || html`<${CompactBees} state=${state} machine=${machine} harness=${harness} />`) : html`<div class="hive-scroll"><canvas ref=${canvasRef} tabindex="0"
     aria-label="Live activity. Bee body color and the machine name below each bee identify its machine, matching the machine selector. Stripe color and the symbol beside the agent name identify its harness. Drag a comb cell or a task card onto a bee or a team outline to assign the task, or onto the trash corner to permanently delete it after confirmation; drag a bee into or out of a team outline to change its team; drag a team outline by its empty space to move the whole team somewhere else. Bees outside a team are kept out of team outlines. The task assignee select and the sidebar team boxes are the keyboard and touch alternatives."></canvas><div class="hive-trash-zone" aria-hidden="true"><strong>⌫ Trash task</strong><span>Drag a task here</span></div></div>`}
     <div class="harness-legend" aria-label="Bee harness legend">
       <span class="legend-title">Body = machine · stripes + symbol = harness</span>

@@ -713,7 +713,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       ${managing === g.key && team && html`<${TeamManage} key=${`${g.key}:${team.queen}`} team=${team} members=${g.members} refresh=${refresh} onDone=${() => setManaging(null)} />`}
       <div class="team-bees-chips">${empty && dragging && html`<span class="team-bees-empty">drop here</span>`}${g.members.map(r => {
         const st = STATE[agentStatus(r)] || STATE.unknown;
-        return html`<div key=${r.user_id} class="team-mate-wrap"><a class=${`team-mate ${focusUser === r.user_id ? "here" : ""}`}
+        return html`<a key=${r.user_id} class=${`team-mate ${focusUser === r.user_id ? "here" : ""}`}
           aria-current=${focusUser === r.user_id ? "page" : null} href=${`#/agent/${encodeURIComponent(r.user_id)}`}
           style=${`--machine:${machineColor(r.node)}`} title=${`${r.user_id} · ${machineName(r.node)} · ${st.word}`}
           draggable="true" onDragStart=${e => {
@@ -728,7 +728,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
           ${state.supervisor && state.supervisor.user_id === r.user_id && html`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
           <span class=${`status ${st.cls}`}></span>
           ${unreadFor(r.user_id) && html`<span class="team-mate-unread" title="new reply">●</span>`}
-        </a><${OwnerNote} agent=${r} refresh=${refresh} /></div>`;
+        </a>`;
       })}</div>
       ${g.gone.length > 0 && html`<div class="team-bees-offline"><span title=${g.gone.join(", ")}>${g.gone.length} offline: ${g.gone.join(", ")}</span>
         <${RetireButton} ids=${g.gone} refresh=${refresh} label=${g.gone.length > 1 ? `retire all ${g.gone.length}` : "retire"} /></div>`}
@@ -763,7 +763,7 @@ function AgentsPanel({ state, refresh, machine, harness, setHarness, unreadFor, 
       ${!onClose && filter}
     </div>
     ${view === "tiles"
-      ? html`<${CompactBees} state=${state} machine=${machine} harness=${harness} refresh=${refresh} />`
+      ? html`<${CompactBees} state=${state} machine=${machine} harness=${harness} />`
       : html`<${TeamBees} state=${state} refresh=${refresh} machine=${machine} harness=${harness} unreadFor=${unreadFor} focusUser=${focusUser} />`}
   </div>`;
 }

@@ -1009,8 +1009,6 @@ dialog.quick-switch { margin: auto; width: min(680px, calc(100vw - 24px)); max-h
 .owner-note-actions { display:flex; flex-wrap:wrap; gap:6px; }
 .owner-note-actions button { padding:6px 8px; }
 .owner-note [role=alert] { display:block; color:var(--red); }
-.team-mate-wrap, .bee-tile-wrap { min-width:0; max-width:100%; }
-.team-mate-wrap { display:inline-flex; flex-direction:column; align-items:flex-start; }
 @media (pointer:coarse), (max-width:1100px) {
   .owner-note button { min-height:44px; min-width:44px; }
 }

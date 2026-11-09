@@ -1506,7 +1506,7 @@ test('the terminal view shows pane colors and chat colors code, diffs and Markdo
   } finally { await page.close(); }
 });
 
-test('owner notes edit inline, persist beside live status, and clear', async () => {
+test('owner notes edit on the agent detail page, persist beside live status, and clear', async () => {
   const { page, state, errors } = await setup(390,844);
   let fail = false;
   await page.route('**/agents/stoat/owner-note', async route => {
@@ -1518,7 +1518,10 @@ test('owner notes edit inline, persist beside live status, and clear', async () 
   });
   try {
     await page.goto(base+'#/agent/stoat');
-    const note = page.locator('.stage .owner-note').first();
+    const note = page.locator('.stage .owner-note');
+    await note.waitFor();
+    assert.equal(await note.count(),1);
+    assert.equal(await page.locator('#agent-sidebar .owner-note').count(),0);
     await note.getByRole('button', {name:'Add owner note for stoat'}).click();
     await note.getByRole('textbox').fill('rhizome integration plan');
     await note.getByRole('button', {name:'Save note'}).click();
@@ -1542,6 +1545,8 @@ test('owner notes edit inline, persist beside live status, and clear', async () 
     await note.getByRole('button', {name:'Add owner note for stoat'}).waitFor();
     assert.equal(state.recipients[0].owner_note,null);
     await page.goto(base+'#/');
+    await page.locator('.agents-panel').waitFor();
+    assert.equal(await page.locator('.owner-note').count(),0);
     await fit(page);
     assert.deepEqual(errors,[]);
   } finally { await page.close(); }
