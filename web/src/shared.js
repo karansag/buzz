@@ -5,6 +5,10 @@ export const POLL_MS = 2000;
 export const PEEK_MS = 2000;
 export const JSONH = { "content-type": "application/json" };
 
+export function stopAgentPrompt(agent) {
+  return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`;
+}
+
 export const FLAVOR_ICON = { claude: "✳", codex: "◇", pi: "π", hermes: "☿", generic: "▪" };
 
 // Harness glyphs identify the runtime; machine colors live in machines.js.

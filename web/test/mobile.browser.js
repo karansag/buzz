@@ -1414,24 +1414,40 @@ test('desktop hive task trash: cancel, failure, success, and card drop', async (
     state.tasks = state.tasks.filter(t => t.id !== 74);
     await route.fulfill({json:{ok:true}});
   });
-  const drag = async () => {
+  const drag = async (cancel = false) => {
     await page.waitForFunction(() => window.__hive?.taskCells().some(c => c.task.id === 74));
     const cell = await page.evaluate(() => {
       const c = window.__hive.taskCells().find(c => c.task.id === 74);
       const r = document.querySelector('canvas').getBoundingClientRect();
       return {x:r.left+c.x,y:r.top+c.y};
     });
-    const zone = await page.locator('.hive-trash-zone').boundingBox();
+    const zoneNode = page.locator('.hive-trash-zone');
+    assert.equal(await zoneNode.isVisible(),false);
     await page.mouse.move(cell.x, cell.y);
     await page.mouse.down();
+    assert.equal(await zoneNode.isVisible(),false);
+    await page.mouse.move(cell.x+8,cell.y+8,{steps:2});
+    await zoneNode.waitFor({state:'visible'});
+    assert.match(await zoneNode.innerText(),/Trash task/);
+    const zone = await zoneNode.boundingBox();
     await page.mouse.move(zone.x+zone.width/2, zone.y+zone.height/2, {steps:12});
     assert.ok(await page.locator('.hive-trash-zone.over').count());
+    if (cancel) await page.locator('canvas').dispatchEvent('pointercancel',{pointerId:1});
     await page.mouse.up();
+    assert.equal(await zoneNode.isVisible(),false);
   };
   try {
     await page.goto(base+'#/');
     await page.locator('canvas').waitFor();
+    await page.evaluate(() => {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.setData('text/plain','74');
+      document.querySelector('canvas').dispatchEvent(new DragEvent('dragover',{bubbles:true,dataTransfer}));
+    });
+    assert.equal(await page.locator('.hive-trash-zone').isVisible(),false);
     if (process.env.TASK339_SCREENSHOT) await page.locator('.hive-panel').screenshot({path:process.env.TASK339_SCREENSHOT});
+    await drag(true);
+    assert.deepEqual(deleted,[]);
     await drag();
     assert.match(await answer(page, 'Cancel'), /#74: Long path regression/);
     assert.deepEqual(deleted, []);
@@ -1451,9 +1467,11 @@ test('desktop hive task trash: cancel, failure, success, and card drop', async (
     await page.locator('canvas').waitFor();
     await page.evaluate(() => {
       const canvas = document.querySelector('canvas');
-      const r = document.querySelector('.hive-trash-zone').getBoundingClientRect();
       const dataTransfer = new DataTransfer();
       dataTransfer.setData('application/x-agent-swarm-task','74');
+      window.dispatchEvent(new DragEvent('dragstart',{dataTransfer}));
+      const r = document.querySelector('.hive-trash-zone').getBoundingClientRect();
+      if (!r.width) throw Error('Task-card drag must reveal the zone before entering canvas');
       canvas.dispatchEvent(new DragEvent('dragover',{bubbles:true,clientX:r.x+10,clientY:r.y+10,dataTransfer}));
       canvas.dispatchEvent(new DragEvent('drop',{bubbles:true,clientX:r.x+10,clientY:r.y+10,dataTransfer}));
     });
@@ -1849,6 +1867,72 @@ test('a refresh queued at poll completion gets its own fresh snapshot', async ()
     // A queued refresh must complete now, without waiting for the next 2s tick.
     await page.locator('.stage .owner-note').getByText('📌 you: saved note').waitFor({timeout:1000});
     assert.equal(calls,3);
+    assert.deepEqual(errors,[]);
+  } finally {await page.close();}
+});
+
+
+test('hive stop corner appears only during bee drags and preserves registration', async () => {
+  const {page,state,errors} = await setup(1440,1000,false);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  let outcome='failed';
+  const mutations=[];
+  page.on('request',r=>{if(r.method()!=='GET') mutations.push(new URL(r.url()).pathname);});
+  await page.route('**/agents/stoat/stop',async route=>{
+    if(outcome==='failed') return route.fulfill({status:500,json:{detail:{error:'node busy'}}});
+    if(outcome==='unknown') return route.fulfill({status:502,json:{detail:{error:'lost reply',status:'unknown'}}});
+    state.recipients[0].pane_alive=false;
+    await route.fulfill({json:{ok:true}});
+  });
+  const drag=async()=>{
+    const bee=await page.evaluate(()=>{
+      const b=window.__hive.bees().get('stoat');
+      const r=document.querySelector('canvas').getBoundingClientRect();
+      return{x:r.x+b.x,y:r.y+b.y};
+    });
+    const zone=page.locator('.hive-trash-zone');
+    assert.equal(await zone.isVisible(),false);
+    await page.mouse.move(bee.x,bee.y);
+    await page.mouse.down();
+    assert.equal(await zone.isVisible(),false);
+    await page.mouse.move(bee.x+8,bee.y+8,{steps:2});
+    await zone.waitFor({state:'visible'});
+    assert.match(await zone.innerText(),/Stop agent/);
+    const box=await zone.boundingBox();
+    await page.mouse.move(box.x+box.width/2,box.y+box.height/2,{steps:10});
+    assert.equal(await zone.evaluate(e=>e.classList.contains('over')),true);
+    await page.mouse.up();
+    assert.equal(await zone.isVisible(),false);
+  };
+  try {
+    await page.goto(base+'#/');
+    await page.waitForFunction(()=>window.__hive?.bees().has('stoat'));
+    const canvas=page.locator('canvas');
+    assert.match(await canvas.getAttribute('aria-label'),/drop a bee.*stop its agent.*resume agent/);
+    assert.equal(await page.locator('.hive-trash-zone').isVisible(),false);
+    await drag();
+    const prompt=await answer(page,'Cancel');
+    assert.match(prompt,/Stop stoat on karans-linux/);
+    assert.match(prompt, /"resume agent" on its page brings the session back later/);
+    assert.deepEqual(mutations,[]);
+    await drag();
+    await answer(page);
+    await page.getByRole('status').filter({hasText:'Could not stop agent: node busy'}).waitFor();
+    assert.equal(state.recipients[0].pane_alive,true);
+    outcome='unknown';
+    await drag();
+    await answer(page);
+    await page.getByRole('status').filter({hasText:'Stop not confirmed'}).waitFor();
+    assert.equal(state.recipients[0].pane_alive,true);
+    outcome='ok';
+    await drag();
+    await answer(page);
+    await page.waitForFunction(()=>!window.__hive.bees().has('stoat'));
+    assert.equal(state.recipients.some(r=>r.user_id==='stoat'),true);
+    assert.equal(state.recipients[0].team_id,1);
+    assert.equal(state.tasks[0].assignee,'stoat');
+    assert.deepEqual(mutations,Array(3).fill('/agents/stoat/stop'));
+    assert.equal(await page.locator('.hive-trash-zone').isVisible(),false);
     assert.deepEqual(errors,[]);
   } finally {await page.close();}
 });

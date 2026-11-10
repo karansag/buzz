@@ -10,7 +10,7 @@ import { html, render } from "htm/preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import {
-  POLL_MS,
+  POLL_MS, stopAgentPrompt,
   PEEK_MS,
   JSONH,
   FLAVOR_ICON,
@@ -94,7 +94,7 @@ function CompactButton({ r }) {
 // Stopping kills the agent's tmux pane. If its page is open, go to another
 // running agent's page, or the overview if none are left.
 async function stopAgent(r, state, focusUser, refresh) {
-  if (!await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`)) return;
+  if (!await confirmDialog(stopAgentPrompt(r))) return;
   const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/stop`, { method: "POST" }).catch(() => null);
   if (res?.ok) {
     if (focusUser === r.user_id) {
@@ -136,7 +136,7 @@ function StopAgentButton({ r, refresh }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const stop = async () => {
-    if (busy || !await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`)) return;
+    if (busy || !await confirmDialog(stopAgentPrompt(r))) return;
     setBusy(true);
     setMessage("");
     try {

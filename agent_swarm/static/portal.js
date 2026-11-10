@@ -9146,6 +9146,9 @@ function machineList(nodes = [], recipients = []) {
 var POLL_MS = 2e3;
 var PEEK_MS = 2e3;
 var JSONH = { "content-type": "application/json" };
+function stopAgentPrompt(agent) {
+	return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`;
+}
 var FLAVOR_ICON = {
 	claude: "✳",
 	codex: "◇",
@@ -10587,7 +10590,8 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 			};
 			const targetBox = dropTeamRef.current != null && teamBoxesRef.current.find((b) => b.id === dropTeamRef.current);
 			const dropTarget = dropTargetRef.current && bees.get(dropTargetRef.current);
-			if (dragTaskRef.current && dropTarget) {
+			if ((dragTaskRef.current || dragBeeRef.current) && trashZone.classList.contains("over")) banner(dragBeeRef.current ? `release to stop ${dragBeeRef.current}` : `release to trash task #${dragTaskRef.current}`);
+			else if (dragTaskRef.current && dropTarget) {
 				ctx.save();
 				ctx.strokeStyle = "#f2a93b";
 				ctx.lineWidth = 2;
@@ -10723,13 +10727,32 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 			return teamBoxesRef.current.find((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) || null;
 		};
 		const trashZone = canvas.parentElement.querySelector(".hive-trash-zone");
+		let nativeTaskDrag = false;
 		const hitTrash = (e) => {
+			if (!trashZone.classList.contains("active")) return false;
 			const r = trashZone.getBoundingClientRect();
 			return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
 		};
-		const highlightTrash = (e, task) => {
-			trashZone.classList.toggle("active", !!task);
-			trashZone.classList.toggle("over", !!task && hitTrash(e));
+		const highlightTrash = (e, kind) => {
+			trashZone.querySelector("strong").textContent = kind === "agent" ? "⌫ Stop agent" : "⌫ Trash task";
+			trashZone.querySelector("span").textContent = kind === "agent" ? "Drop agent here" : "Drop task here";
+			trashZone.classList.toggle("active", !!kind);
+			trashZone.classList.toggle("over", !!kind && hitTrash(e));
+		};
+		const stopBee = async (user) => {
+			const agent = (stateRef.current.recipients || []).find((r) => r.user_id === user);
+			if (!agent || !await confirmDialog(stopAgentPrompt(agent))) return;
+			try {
+				const response = await fetch(`/agents/${encodeURIComponent(user)}/stop`, { method: "POST" });
+				const body = await response.json().catch(() => null);
+				if (response.ok && body?.ok === true) setDropStatus(body.already_stopped ? `${user} is already stopped.` : `Stopped ${user}. Messages and tasks are kept; "resume agent" brings it back.`);
+				else if (body?.detail?.status === "unknown" || !body?.detail?.error) setDropStatus("Stop not confirmed. Check the agent's status before retrying.");
+				else setDropStatus(`Could not stop agent: ${body.detail.error}${body.detail.detail ? ` — ${body.detail.detail}` : ""}`);
+			} catch {
+				setDropStatus("Stop not confirmed. Check the agent's status before retrying.");
+			} finally {
+				refresh();
+			}
 		};
 		const removeTask = async (id) => {
 			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
@@ -10743,11 +10766,13 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				setDropStatus(`${err.message} Refresh to check the task before retrying.`);
 			}
 		};
+		const hasTask = (e) => Array.from(e.dataTransfer?.types || []).includes("application/x-agent-swarm-task");
 		const taskId = (e) => {
 			const raw = e.dataTransfer?.getData("application/x-agent-swarm-task") || e.dataTransfer?.getData("text/plain");
 			return /^\d+$/.test(raw || "") ? Number(raw) : null;
 		};
 		const clearDrop = () => {
+			nativeTaskDrag = false;
 			trashZone.classList.remove("active", "over");
 			dragTaskRef.current = null;
 			dragBeeRef.current = null;
@@ -10889,12 +10914,12 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				return;
 			}
 			dragPointRef.current = p;
-			highlightTrash(e, press.id);
+			highlightTrash(e, press.bee ? "agent" : "task");
 			if (press.bee) {
 				dragBeeRef.current = press.bee;
 				const box = hitTeam(e);
 				dropTeamRef.current = box ? box.id : null;
-				canvas.style.cursor = "grabbing";
+				canvas.style.cursor = hitTrash(e) ? "copy" : "grabbing";
 			} else {
 				dragTaskRef.current = press.id;
 				dropTargetRef.current = hit(e);
@@ -10915,12 +10940,13 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				clearDrop();
 				return;
 			}
-			const trash = !bee && hitTrash(e);
+			const trash = hitTrash(e);
 			const targetBee = hit(e);
 			const box = hitTeam(e);
 			clearDrop();
 			if (trash) {
-				await removeTask(id);
+				if (bee) await stopBee(bee);
+				else await removeTask(id);
 				return;
 			}
 			if (bee) {
@@ -10950,7 +10976,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 			if (press) return;
 			hoverRef.current = null;
 			taskHoverRef.current = null;
-			if (dragTaskRef.current) clearDrop();
+			if (dragTaskRef.current && !nativeTaskDrag) clearDrop();
 			else {
 				canvas.style.cursor = "default";
 				if (reduced) draw(performance.now(), true);
@@ -10969,23 +10995,35 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 			const cell = hitTask(e);
 			if (cell) setSelectedTask((id) => id === cell.task.id ? null : cell.task.id);
 		};
+		const dragStart = (e) => {
+			if (!hasTask(e)) return;
+			nativeTaskDrag = true;
+			dragTaskRef.current = taskId(e);
+			highlightTrash(e, "task");
+		};
 		const dragOver = (e) => {
+			if (!hasTask(e)) return;
 			const id = taskId(e);
-			if (id === null && !Array.from(e.dataTransfer?.types || []).includes("application/x-agent-swarm-task")) return;
 			e.preventDefault();
 			e.dataTransfer.dropEffect = "move";
 			dragTaskRef.current = id;
-			highlightTrash(e, true);
+			nativeTaskDrag = true;
+			highlightTrash(e, "task");
 			dropTargetRef.current = hit(e);
 			const box = dropTargetRef.current ? null : hitTeam(e);
 			dropTeamRef.current = box ? box.id : null;
 			canvas.style.cursor = hitTrash(e) || dropTargetRef.current || dropTeamRef.current != null ? "copy" : "not-allowed";
 			if (reduced) draw(performance.now(), true);
 		};
-		const dragLeave = (e) => {
-			if (e.target === canvas) clearDrop();
+		const dragLeave = () => {
+			dropTargetRef.current = null;
+			dropTeamRef.current = null;
+			trashZone.classList.remove("over");
+			canvas.style.cursor = "default";
+			if (reduced) draw(performance.now(), true);
 		};
 		const drop = async (e) => {
+			if (!hasTask(e)) return;
 			const id = taskId(e);
 			const trash = hitTrash(e);
 			const assignee = hit(e);
@@ -11014,6 +11052,8 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		canvas.addEventListener("dragleave", dragLeave);
 		canvas.addEventListener("drop", drop);
 		canvas.addEventListener("dragend", clearDrop);
+		window.addEventListener("dragstart", dragStart);
+		window.addEventListener("drop", clearDrop);
 		window.addEventListener("dragend", clearDrop);
 		const resize = new ResizeObserver(() => {
 			if (reduced) draw(performance.now(), true);
@@ -11046,6 +11086,8 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 			canvas.removeEventListener("dragleave", dragLeave);
 			canvas.removeEventListener("drop", drop);
 			canvas.removeEventListener("dragend", clearDrop);
+			window.removeEventListener("dragstart", dragStart);
+			window.removeEventListener("drop", clearDrop);
 			window.removeEventListener("dragend", clearDrop);
 		};
 	}, [compact]);
@@ -11057,7 +11099,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		harness
 	]);
 	return m$1`<div class="hive-panel">${compact ? compactBody || m$1`<${CompactBees} state=${state} machine=${machine} harness=${harness} />` : m$1`<div class="hive-scroll"><canvas ref=${canvasRef} tabindex="0"
-    aria-label="Live activity. Bee body color and the machine name below each bee identify its machine, matching the machine selector. Stripe color and the symbol beside the agent name identify its harness. Drag a comb cell or a task card onto a bee or a team outline to assign the task, or onto the trash corner to permanently delete it after confirmation; drag a bee into or out of a team outline to change its team; drag a team outline by its empty space to move the whole team somewhere else. Bees outside a team are kept out of team outlines. The task assignee select and the sidebar team boxes are the keyboard and touch alternatives."></canvas><div class="hive-trash-zone" aria-hidden="true"><strong>⌫ Trash task</strong><span>Drag a task here</span></div></div>`}
+    aria-label="Live activity. Bee body color and the machine name below each bee identify its machine, matching the machine selector. Stripe color and the symbol beside the agent name identify its harness. Drag a comb cell or a task card onto a bee or a team outline to assign the task, or onto the trash corner shown during a drag to permanently delete it after confirmation; drop a bee on that corner to stop its agent after confirmation, keeping its registration so resume agent can bring it back; drag a bee into or out of a team outline to change its team; drag a team outline by its empty space to move the whole team somewhere else. Bees outside a team are kept out of team outlines. The task assignee select, sidebar team boxes and agent detail stop button are the keyboard and touch alternatives."></canvas><div class="hive-trash-zone" aria-hidden="true"><strong>⌫ Trash task</strong><span>Drop task here</span></div></div>`}
     <div class="harness-legend" aria-label="Bee harness legend">
       <span class="legend-title">Body = machine · stripes + symbol = harness</span>
       <span class="working-halo-key" style=${`--working:${WORKING_HALO.color}`}><span aria-hidden="true"></span>Green halo = working</span>
@@ -11747,7 +11789,7 @@ function CompactButton({ r }) {
     onClick=${compact}>${busy ? "compacting…" : "compact"}</button>`;
 }
 async function stopAgent(r, state, focusUser, refresh) {
-	if (!await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`)) return;
+	if (!await confirmDialog(stopAgentPrompt(r))) return;
 	if ((await fetch(`/agents/${encodeURIComponent(r.user_id)}/stop`, { method: "POST" }).catch(() => null))?.ok) {
 		if (focusUser === r.user_id) {
 			const next = state.recipients.find((x) => x.pane_alive && x.user_id !== r.user_id);
@@ -11794,7 +11836,7 @@ function StopAgentButton({ r, refresh }) {
 	const [busy, setBusy] = d(false);
 	const [message, setMessage] = d("");
 	const stop = async () => {
-		if (busy || !await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`)) return;
+		if (busy || !await confirmDialog(stopAgentPrompt(r))) return;
 		setBusy(true);
 		setMessage("");
 		try {
