@@ -1780,3 +1780,51 @@ for (const stale of ['success', 'error']) {
     } finally { releaseOld(); releaseNew(); await page.close(); }
   });
 }
+
+test('a refresh queued at poll completion gets its own fresh snapshot', async () => {
+  const {page,state,errors} = await setup(1440,900,false);
+  let calls=0, noteRequested;
+  const noteReady=new Promise(resolve => noteRequested=resolve);
+  await page.exposeFunction('noteRequested',()=>noteRequested());
+  await page.addInitScript(() => {
+    const originalFetch=window.fetch.bind(window);
+    window.fetch=(input,options)=> {
+      if (String(input).endsWith('/agents/stoat/owner-note')) {
+        return new Promise(resolve => {
+          window.releaseNote=()=>resolve(new Response('{}',{status:200}));
+          window.noteRequested();
+        });
+      }
+      return originalFetch(input,options);
+    };
+    window.__TAURI__={core:{invoke:()=>{
+      window.releaseNote?.();
+      return Promise.resolve();
+    }}};
+  });
+  await page.route('**/api/state',async route=>{
+    const number=++calls;
+    const snapshot=structuredClone(state);
+    snapshot.recipients[0].summaries[0].text=`snapshot ${number}`;
+    if(number===2) {
+      await noteReady;
+      // Changed attention invokes the bridge during snapshot application.
+      // This settles the mutation before the poll's promise finalizer runs.
+      snapshot.recipients[1].activity.status='idle';
+    }
+    if(number>=3) snapshot.recipients[0].owner_note='saved note';
+    await route.fulfill({json:snapshot});
+  });
+  try {
+    await page.goto(base+'#/agent/stoat');
+    await page.locator('.doing-box .now').filter({hasText:'snapshot 1'}).waitFor();
+    await page.locator('.stage').getByRole('button',{name:'Add owner note for stoat'}).click();
+    await page.locator('.stage .owner-note textarea').fill('saved note');
+    await page.locator('.stage .owner-note').getByRole('button',{name:'Save note'}).click();
+    await page.locator('.stage .owner-note textarea').waitFor({state:'detached'});
+    // A queued refresh must complete now, without waiting for the next 2s tick.
+    await page.locator('.stage .owner-note').getByText('📌 you: saved note').waitFor({timeout:1000});
+    assert.equal(calls,3);
+    assert.deepEqual(errors,[]);
+  } finally {await page.close();}
+});

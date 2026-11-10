@@ -13588,6 +13588,7 @@ function App() {
 			} while (job.active && job.queued);
 		})().finally(() => {
 			job.inFlight = null;
+			if (job.active && job.queued) return poll(false);
 		});
 		return job.inFlight;
 	};

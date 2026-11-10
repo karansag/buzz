@@ -1878,7 +1878,13 @@ function App() {
           if (job.active && generation === job.generation) setConnected(false);
         }
       } while (job.active && job.queued);
-    })().finally(() => { job.inFlight = null; });
+    })().finally(() => {
+      job.inFlight = null;
+      // Another promise can request a refresh after the loop exits but
+      // before this finalizer runs. Drain it and keep awaiting callers tied
+      // to that fresh read, rather than losing it until the next timer tick.
+      if (job.active && job.queued) return poll(false);
+    });
     return job.inFlight;
   };
   useEffect(() => {
