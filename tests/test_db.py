@@ -92,7 +92,7 @@ def test_task_update_status_and_assignee(tmp_path):
     assert updated["worktree"] == "/tmp/repo-task-1"
     assert updated["updated_at"] >= t["updated_at"]
     # updating only status keeps the assignee
-    done = db.update_task(conn, t["id"], status="done")
+    done = db.update_task(conn, t["id"], status="done", note="Run the task verification.")
     assert done["assignee"] == "otter"
     assert done["worktree"] == "/tmp/repo-task-1"
     # explicit None unassigns
@@ -220,4 +220,17 @@ def test_reply_migration_legacy_preview_and_missing_original(tmp_path):
     retained = db.get_message(conn, reply)
     assert retained['reply_to'] == original
     assert retained['reply_preview'] is None
+    conn.close()
+
+
+def test_task_patch_rolls_back_fields_when_dependency_write_fails(tmp_path):
+    import pytest
+    conn = db.connect(tmp_path / 'atomic.sqlite')
+    parent = db.create_task(conn,'dependency')
+    before = db.create_task(conn,'original')
+    conn.execute("CREATE TRIGGER reject_edge BEFORE INSERT ON task_deps BEGIN SELECT RAISE(ABORT, 'edge rejected'); END")
+    with pytest.raises(sqlite3.IntegrityError, match='edge rejected'):
+        db.update_task(conn,before['id'],title='changed',status='done',note='verify',depends_on=[parent['id']])
+    assert db.get_task(conn,before['id']) == before
+    assert not conn.in_transaction
     conn.close()

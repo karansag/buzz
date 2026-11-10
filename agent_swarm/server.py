@@ -1770,12 +1770,6 @@ def create_app(
     def tasks_list():
         return {"tasks": db.list_tasks(conn)}
 
-    def _set_deps(task_id: int, depends_on: list[int]):
-        try:
-            db.set_task_deps(conn, task_id, depends_on)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail={"error": str(exc)})
-
     @app.post("/tasks")
     def tasks_create(req: TaskCreateReq, request: Request):
         actor = _actor(request, req)
@@ -1836,18 +1830,15 @@ def create_app(
         if "note" in req.model_fields_set:
             kwargs["note"] = (req.note or "").strip() or None
         if "depends_on" in req.model_fields_set:
-            _set_deps(task_id, req.depends_on or [])
-        # Closing is the one moment the worker still has the context needed to
-        # say how the work is checked, so it is the moment we insist on it.
-        if req.status == "done" and not (kwargs.get("note") or before["note"]):
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": "a task needs a note before it can be closed",
-                    "note": NOTE_GUIDANCE,
-                },
-            )
-        task = db.update_task(conn, task_id, **kwargs)
+            kwargs["depends_on"] = req.depends_on or []
+        try:
+            task = db.update_task(conn, task_id, **kwargs)
+        except db.TaskNoteRequired as exc:
+            raise HTTPException(status_code=422, detail={"error": str(exc), "note": NOTE_GUIDANCE}) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+        if task is None:
+            raise HTTPException(status_code=404, detail={"error": "unknown task"})
         if task["assignee"] and task["assignee"] != before["assignee"]:
             _notify_assignment(task, actor)
         elif task["team_id"] and task["team_id"] != before["team_id"]:

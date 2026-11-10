@@ -673,11 +673,10 @@ def list_tasks(conn: sqlite3.Connection) -> list[dict]:
     return tasks
 
 
-@_serialized
-def set_task_deps(
+def _validate_task_deps(
     conn: sqlite3.Connection, task_id: int, depends_on: list[int]
-) -> None:
-    """Replace a task's dependency list. Rejects unknown tasks and cycles."""
+) -> list[int]:
+    """Validate the next dependency graph without writing it."""
     unique = sorted(set(depends_on))
     for dep in unique:
         if dep == task_id:
@@ -697,12 +696,11 @@ def set_task_deps(
             if dep not in seen:
                 seen.add(dep)
                 stack.append(dep)
-    conn.execute("DELETE FROM task_deps WHERE task_id=?", (task_id,))
-    conn.executemany(
-        "INSERT INTO task_deps(task_id, depends_on) VALUES(?,?)",
-        [(task_id, dep) for dep in unique],
-    )
-    conn.commit()
+    return unique
+
+
+class TaskNoteRequired(ValueError):
+    """The next task state would be done without its verification note."""
 
 
 @_serialized
@@ -717,56 +715,66 @@ def update_task(
     team_id: int | None | object = _UNSET,
     note: str | None | object = _UNSET,
     worktree_node: str | None | object = _UNSET,
+    depends_on: list[int] | object = _UNSET,
 ) -> dict | None:
-    task = get_task(conn, task_id)
-    if task is None:
-        return None
-    if status is not None:
-        if status not in TASK_STATUSES:
-            raise ValueError(f"invalid status: {status}")
-        task["status"] = status
-    if title is not None:
-        task["title"] = title
-    if description is not _UNSET:
-        task["description"] = description
-    # A task is owned by an individual or a team, never both; setting one
-    # side clears the other.
-    if assignee is not _UNSET:
-        task["assignee"] = assignee
-        if assignee is not None:
-            task["team_id"] = None
-    if team_id is not _UNSET:
-        task["team_id"] = team_id
-        if team_id is not None:
-            task["assignee"] = None
-    if worktree is not _UNSET:
-        task["worktree"] = worktree
-    # A path only means something on the machine it is on; the two are set
-    # and cleared together.
-    if worktree_node is not _UNSET:
-        task["worktree_node"] = worktree_node
-    if task["worktree"] is None:
-        task["worktree_node"] = None
-    if note is not _UNSET:
-        task["note"] = note
-    conn.execute(
-        "UPDATE tasks SET status=?, title=?, description=?, assignee=?, team_id=?, worktree=?, "
-        "worktree_node=?, note=?, updated_at=? WHERE id=?",
-        (
-            task["status"],
-            task["title"],
-            task["description"],
-            task["assignee"],
-            task["team_id"],
-            task["worktree"],
-            task["worktree_node"],
-            task["note"],
-            time.time(),
-            task_id,
-        ),
-    )
-    conn.commit()
-    return get_task(conn, task_id)
+    """Validate and commit the full task aggregate against one database snapshot."""
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        task = get_task(conn, task_id)
+        if task is None:
+            return None
+        if status is not None:
+            if status not in TASK_STATUSES:
+                raise ValueError(f"invalid status: {status}")
+            task["status"] = status
+        if title is not None:
+            task["title"] = title
+        if description is not _UNSET:
+            task["description"] = description
+        # A task is owned by an individual or a team, never both; setting one
+        # side clears the other.
+        if assignee is not _UNSET:
+            task["assignee"] = assignee
+            if assignee is not None:
+                task["team_id"] = None
+        if team_id is not _UNSET:
+            task["team_id"] = team_id
+            if team_id is not None:
+                task["assignee"] = None
+        if worktree is not _UNSET:
+            task["worktree"] = worktree
+        # A path only means something on the machine it is on; the two are set
+        # and cleared together.
+        if worktree_node is not _UNSET:
+            task["worktree_node"] = worktree_node
+        if task["worktree"] is None:
+            task["worktree_node"] = None
+        if note is not _UNSET:
+            task["note"] = note
+        if task["status"] == "done" and not (task["note"] or "").strip():
+            raise TaskNoteRequired("a task needs a note before it can be closed")
+        deps = _validate_task_deps(conn, task_id, depends_on) if depends_on is not _UNSET else None
+        conn.execute(
+            "UPDATE tasks SET status=?, title=?, description=?, assignee=?, team_id=?, worktree=?, "
+            "worktree_node=?, note=?, updated_at=? WHERE id=?",
+            (
+                task["status"],
+                task["title"],
+                task["description"],
+                task["assignee"],
+                task["team_id"],
+                task["worktree"],
+                task["worktree_node"],
+                task["note"],
+                time.time(),
+                task_id,
+            ),
+        )
+        if deps is not None:
+            conn.execute("DELETE FROM task_deps WHERE task_id=?", (task_id,))
+            conn.executemany("INSERT INTO task_deps(task_id, depends_on) VALUES(?,?)",
+                             [(task_id, dep) for dep in deps])
+        return get_task(conn, task_id)
 
 
 @_serialized

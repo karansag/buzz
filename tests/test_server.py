@@ -1793,3 +1793,42 @@ def test_reply_links_preview_and_delivery_note(client):
     assert '(in reply to message' in c._calls[-1][1]
     owner_reply = c.post('/send', json={'tmux_pane':'0:0.0','recipient':'owner','content':'answer for human','reply_to':reply['id']})
     assert c.get('/messages',params={'id':owner_reply.json()['message_id']}).json()['messages'][0]['reply_to'] == reply['id']
+
+
+def test_task_patch_rejection_keeps_fields_dependencies_and_timestamp(client):
+    c = client
+    parent = c.post('/tasks', json={'title':'dependency'}).json()['task']
+    before = c.post('/tasks', json={'title':'keep original title'}).json()['task']
+    calls_before = len(c._calls)
+    response = c.patch(f"/tasks/{before['id']}", json={
+        'status':'done', 'title':'must not persist', 'description':'must not persist',
+        'worktree':'/tmp/must-not-persist', 'depends_on':[parent['id']],
+    })
+    assert response.status_code == 422
+    assert 'note' in response.json()['detail']
+    after = next(t for t in c.get('/tasks').json()['tasks'] if t['id'] == before['id'])
+    assert after == before
+    assert len(c._calls) == calls_before
+    # A valid next state commits the fields, verification and graph together.
+    response = c.patch(f"/tasks/{before['id']}", json={
+        'status':'done', 'title':'verified title', 'depends_on':[parent['id']],
+        'note':'Open the task and check its dependency.',
+    })
+    assert response.status_code == 200
+    completed = response.json()['task']
+    assert (completed['status'],completed['title'],completed['depends_on']) == ('done','verified title',[parent['id']])
+    # Explicitly clearing the note cannot fall back to the previous note.
+    assert c.patch(f"/tasks/{before['id']}",json={'status':'done','note':'','depends_on':[]}).status_code == 422
+    assert next(t for t in c.get('/tasks').json()['tasks'] if t['id'] == before['id']) == completed
+    assert c.patch(f"/tasks/{before['id']}",json={'status':'open','note':'','depends_on':[]}).status_code == 200
+
+
+def test_task_patch_bad_dependency_cannot_change_other_fields(client):
+    c = client
+    task = c.post('/tasks', json={'title':'original'}).json()['task']
+    for dependency in [999999,task['id']]:
+        response = c.patch(f"/tasks/{task['id']}",json={
+            'status':'done','title':'changed','note':'verify','depends_on':[dependency],
+        })
+        assert response.status_code == 400
+        assert next(t for t in c.get('/tasks').json()['tasks'] if t['id'] == task['id']) == task

@@ -172,8 +172,8 @@ def test_export_reads_an_older_database_without_writing_to_it(tmp_path):
     db.update_team(conn, team["id"], queen="otter")
     first = db.create_task(conn, "first", "details", "otter")
     second = db.create_task(conn, "second")
-    db.set_task_deps(conn, second["id"], [first["id"]])
-    db.update_task(conn, second["id"], worktree="/Users/k/repo", worktree_node="mac")
+    db.update_task(conn, second["id"], depends_on=[first["id"]],
+                   worktree="/Users/k/repo", worktree_node="mac")
     db.record_message(conn, "owner", "otter", None, "hello", "delivered")
     # An agent-swarm from before nodes, reservations, and message statuses.
     for drop in ("node", "reserved"):
