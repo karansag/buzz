@@ -9,7 +9,9 @@ newly installed harness.
 
 What does not survive: anything the agent was running in that pane, such as
 background shells, watchers, or a half-finished turn. So by default only
-agents that the hub sees idle are restarted.
+agents observed idle by the hub are eligible. Unknown, missing, stopped or
+busy activity is skipped unless --force overrides the activity guard; pane
+identity and resumability checks still apply.
 """
 
 from __future__ import annotations
@@ -20,8 +22,8 @@ from dataclasses import dataclass
 
 from . import restore, tmux
 
-# Agents in these states are mid-turn or waiting on the owner.
-BUSY = {"working", "needs_attention"}
+# Allow-list: uncertainty or a newly introduced activity state is not idle.
+RESTARTABLE_ACTIVITY = {"idle"}
 
 
 @dataclass
@@ -70,8 +72,9 @@ def plan(
             item.skip = "no session id, so it could not be resumed"
         elif (command := restore.resume_command(r)) is None:
             item.skip = f"no resume command for {r.get('flavor')}"
-        elif status in BUSY and not force:
-            item.skip = f"it is {status.replace('_', ' ')} (--force restarts it anyway)"
+        elif status not in RESTARTABLE_ACTIVITY and not force:
+            activity = status.replace("_", " ") if status else "unknown (no activity report)"
+            item.skip = f"activity is {activity}; only observed-idle agents restart by default (--force overrides)"
         else:
             item.cwd, item.command = pane["cwd"], command
         out.append(item)

@@ -637,9 +637,9 @@ they restart. `buzz restart --all` (or `--all --flavor codex`, or
 named handles) shows which agents it would restart and the command for
 each; add `--apply` to do it. Each agent's pane is respawned in place (same
 pane, same directory) and the harness resumes the agent's session, so it
-keeps its conversation and handle. Agents that are working or waiting on
-you are skipped unless you pass `--force`; anything else running in the
-pane, such as background shells, is lost.
+keeps its conversation and handle. Only agents observed idle are eligible by default. Working, waiting,
+unknown or missing activity is skipped unless you pass `--force`; anything
+else running in the pane, such as background shells, is lost.
 
 ## CLI reference
 

@@ -168,8 +168,9 @@ pane id), in the directory the harness ran in. Then it types the resume
 command. The agent comes back with its conversation and re-registers under
 its handle.
 
-- Agents the hub sees working or waiting on you are skipped; `--force`
-  restarts them anyway, losing the turn in progress.
+- Only agents the hub observes idle are eligible by default. Working, waiting,
+  unknown or missing activity is skipped; `--force` overrides this activity
+  check, potentially losing a turn in progress. Pane/session checks still apply.
 - An agent whose pane is already back at a bare shell is skipped; `buzz
   restore <handle>` resumes it there.
 - Each restarted agent is watched for a few seconds: one held at a trust

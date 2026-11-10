@@ -42,7 +42,7 @@ def test_all_restarts_idle_resumable_agents_on_this_machine_and_says_why_not():
     assert got == {
         "otter": "cd /repo && claude --resume s-otter --permission-mode auto",
         "tapir": "cd /w && codex resume t-tapir -c check_for_update_on_startup=false --yolo --no-daemon",
-        "busy": "it is working (--force restarts it anyway)",
+        "busy": "activity is working; only observed-idle agents restart by default (--force overrides)",
         "gone": "no harness is running in its pane; `buzz restore gone` resumes it there",
         "anon": "no session id, so it could not be resumed",
     }
@@ -67,3 +67,33 @@ def test_own_pane_is_handed_to_the_tmux_server(monkeypatch):
     assert restart.apply(item, own_pane="%1") is None
     assert len(calls) == 1 and calls[0][1:3] == ["run-shell", "-b"]
     assert "respawn-pane -k -t %1" in calls[0][3] and "claude --resume s" in calls[0][3]
+
+
+@pytest.mark.parametrize("status", ["working", "needs_attention", "unknown", "stopped", "future_state", None, ""])
+def test_default_restart_rejects_every_unobserved_or_nonidle_activity(status):
+    row = agent("probe", "%1", status=status)
+    planned = restart.plan([row], [pane("%1")], "n1", SERVER)[0]
+    assert planned.skip is not None
+    assert "only observed-idle" in planned.skip
+    assert "--force" in planned.skip
+    forced = restart.plan([row], [pane("%1")], "n1", SERVER, force=True)[0]
+    assert forced.skip is None
+
+
+@pytest.mark.parametrize("activity", [None, {}])
+def test_missing_activity_is_skipped_and_force_can_override(activity):
+    row = agent("probe", "%1")
+    if activity is None:
+        row.pop("activity")
+    else:
+        row["activity"] = activity
+    assert "unknown (no activity report)" in restart.plan([row], [pane("%1")], "n1", SERVER)[0].skip
+    assert restart.plan([row], [pane("%1")], "n1", SERVER, force=True)[0].skip is None
+
+
+def test_force_keeps_pane_and_session_safety_checks():
+    planned = {p.handle:p for p in restart.plan(AGENTS, LIVE, "n1", SERVER,
+                                               handles=["gone", "anon", "far"], force=True)}
+    assert "no harness" in planned["gone"].skip
+    assert "no session id" in planned["anon"].skip
+    assert "not in this machine" in planned["far"].skip

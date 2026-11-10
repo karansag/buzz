@@ -994,7 +994,7 @@ def main(argv: list[str] | None = None) -> int:
     rsa.add_argument("handles", nargs="*", help="agents to restart")
     rsa.add_argument("--all", action="store_true", help="every agent on this machine")
     rsa.add_argument("--flavor", help="with --all: only this harness (claude, codex, pi, hermes)")
-    rsa.add_argument("--force", action="store_true", help="also restart agents that are working or waiting on you")
+    rsa.add_argument("--force", action="store_true", help="also restart agents without observed idle activity")
     rsa.add_argument("--apply", action="store_true", help="do it; without this, only print the plan")
     rsa.add_argument("--stagger", type=float, default=3.0, help="seconds between restarts")
     rsa.set_defaults(func=cmd_restart)
