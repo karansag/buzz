@@ -1803,6 +1803,8 @@ function App() {
   const [route, setRoute] = useState(location.hash);
   const [freshIds, setFreshIds] = useState(new Set());
   const seen = useRef({ maxId: 0, first: true, byAgent: {} });
+  // Snapshot ownership is independent of message read cursors.
+  const polling = useRef({ generation: 0, inFlight: null, queued: false, active: true });
   const [pending, setPending] = useState([]);
   useEffect(() => {
     const add = (e) => setPending(p => [...p, e.detail]);
@@ -1831,36 +1833,57 @@ function App() {
       document.querySelector(".stage")?.scrollIntoView({ block: "start" });
   }, [focusUser, onHistory, compact]);
 
-  const poll = async () => {
-    try {
-      const r = await fetch("/api/state");
-      const s = await r.json();
-      const st = seen.current;
-      const maxId = Math.max(st.maxId, ...s.messages.map(m => m.id), 0);
-      const fresh = s.messages.filter(m => m.id > st.maxId);
-      if (!st.first && fresh.length) {
-        setFreshIds(new Set(fresh.map(m => m.id)));
+  const poll = (refresh = true) => {
+    const job = polling.current;
+    if (!job.active) return Promise.resolve();
+    if (job.inFlight) {
+      if (refresh) {
+        // A mutation needs a snapshot taken after it, not the old in-flight
+        // snapshot. Coalesce refreshes, but make every prior completion stale.
+        job.generation++;
+        job.queued = true;
       }
-      for (const rec of s.recipients) {
-        if (st.first || !(rec.user_id in st.byAgent)) st.byAgent[rec.user_id] = maxId;
-      }
-      st.maxId = maxId;
-      // A page opened straight onto an agent that has since gone (a
-      // bookmark, or the Mac app reopening where it was) shows the overview.
-      if (st.first && location.hash.startsWith("#/agent/")
-          && !s.recipients.some(r => r.user_id === decodeURIComponent(location.hash.slice("#/agent/".length))))
-        location.replace("#/");
-      st.first = false;
-      setState(s);
-      setConnected(true);
-      reportAttention(s.recipients);
-    } catch {
-      setConnected(false);
+      return job.inFlight;
     }
+    job.generation++;
+    job.inFlight = (async () => {
+      do {
+        job.queued = false;
+        const generation = job.generation;
+        try {
+          const r = await fetch("/api/state");
+          if (!r.ok) throw new Error("Snapshot unavailable");
+          const s = await r.json();
+          if (!job.active || generation !== job.generation) continue;
+          const st = seen.current;
+          const maxId = Math.max(st.maxId, ...s.messages.map(m => m.id), 0);
+          const fresh = s.messages.filter(m => m.id > st.maxId);
+          if (!st.first && fresh.length) {
+            setFreshIds(new Set(fresh.map(m => m.id)));
+          }
+          for (const rec of s.recipients) {
+            if (st.first || !(rec.user_id in st.byAgent)) st.byAgent[rec.user_id] = maxId;
+          }
+          st.maxId = maxId;
+          // A page opened straight onto an agent that has since gone (a
+          // bookmark, or the Mac app reopening where it was) shows the overview.
+          if (st.first && location.hash.startsWith("#/agent/")
+              && !s.recipients.some(r => r.user_id === decodeURIComponent(location.hash.slice("#/agent/".length))))
+            location.replace("#/");
+          st.first = false;
+          setState(s);
+          setConnected(true);
+          reportAttention(s.recipients);
+        } catch {
+          if (job.active && generation === job.generation) setConnected(false);
+        }
+      } while (job.active && job.queued);
+    })().finally(() => { job.inFlight = null; });
+    return job.inFlight;
   };
   useEffect(() => {
-    poll();
-    const t = setInterval(poll, POLL_MS);
+    poll(false);
+    const t = setInterval(() => poll(false), POLL_MS);
     const c = setInterval(() => setClock(new Date().toLocaleTimeString()), 1000);
     const onHash = () => setRoute(location.hash);
     const onKey = (e) => {
@@ -1892,6 +1915,8 @@ function App() {
     addEventListener("hashchange", onHash);
     addEventListener("keydown", onKey);
     return () => {
+      polling.current.active = false;
+      polling.current.generation++;
       clearInterval(t); clearInterval(c);
       removeEventListener("hashchange", onHash);
       removeEventListener("keydown", onKey);

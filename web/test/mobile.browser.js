@@ -1720,3 +1720,63 @@ test('reply quote opens an unloaded original in place and handles unavailable hi
     assert.deepEqual(errors,[]);
   } finally { await page.close(); }
 });
+
+for (const stale of ['success', 'error']) {
+  test(`dashboard polls skip overlap and ignore superseded ${stale} completions`, async () => {
+    const {page,state,errors} = await setup(1440,900,false);
+    let calls = 0, releaseOld, releaseNew, oldStarted, newStarted;
+    const oldReady = new Promise(resolve => oldStarted = resolve);
+    const newReady = new Promise(resolve => newStarted = resolve);
+    const oldGate = new Promise(resolve => releaseOld = resolve);
+    const newGate = new Promise(resolve => releaseNew = resolve);
+    await page.route('**/agents/stoat/owner-note', async route => {
+      state.recipients[0].owner_note = route.request().postDataJSON().text;
+      await route.fulfill({json:{ok:true}});
+    });
+    await page.route('**/api/state', async route => {
+      const number = ++calls;
+      const snapshot = structuredClone(state);
+      if (number === 2) {
+        snapshot.recipients[0].summaries[0].text = 'STALE SNAPSHOT';
+        oldStarted(); await oldGate;
+        return route.fulfill({status:stale === 'error' ? 503 : 200,json:snapshot});
+      }
+      if (number === 3) {
+        newStarted(); await newGate;
+        snapshot.recipients[0].summaries[0].text = 'CURRENT SNAPSHOT';
+        snapshot.messages.push({id:3,sender:'stoat',recipient:'owner',content:'fresh after queued refresh',ts:state.now,status:'delivered',attachments:[]});
+      }
+      if (stale === 'error' && number === 4)
+        return route.fulfill({status:503,json:snapshot});
+      if (stale === 'error' && number >= 5)
+        snapshot.recipients[0].summaries[0].text = 'RECOVERED SNAPSHOT';
+      await route.fulfill({json:snapshot});
+    });
+    try {
+      await page.goto(base+'#/agent/stoat');
+      await page.locator('.doing-box .now').filter({hasText:'Reviewing mobile'}).waitFor();
+      await oldReady;
+      // At least one more periodic tick occurs while request 2 is held.
+      await page.waitForTimeout(2200);
+      assert.equal(calls,2);
+      await page.locator('.stage').getByRole('button',{name:'Add owner note for stoat'}).click();
+      await page.locator('.stage .owner-note textarea').fill('refresh after mutation');
+      await page.locator('.stage .owner-note').getByRole('button',{name:'Save note'}).click();
+      await page.locator('.stage .owner-note').getByRole('button',{name:'Add owner note for stoat'}).waitFor();
+      assert.equal(calls,2); // mutation refresh coalesces, rather than overlaps
+      releaseOld(); await newReady;
+      assert.match(await page.locator('.doing-box .now').innerText(),/Reviewing mobile/);
+      assert.equal(await page.locator('header.top .beacon.down').count(),0);
+      releaseNew();
+      await page.locator('.doing-box .now').filter({hasText:'CURRENT SNAPSHOT'}).waitFor();
+      await page.locator('.msg.fresh[data-message-id="3"]').waitFor();
+      assert.equal(calls,3);
+      if (stale === 'error') {
+        await page.locator('header.top .beacon.down').waitFor();
+        await page.locator('.doing-box .now').filter({hasText:'RECOVERED SNAPSHOT'}).waitFor();
+        assert.equal(await page.locator('header.top .beacon.down').count(),0);
+      }
+      assert.deepEqual(errors,[]);
+    } finally { releaseOld(); releaseNew(); await page.close(); }
+  });
+}
