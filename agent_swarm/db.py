@@ -275,6 +275,9 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         "message_prefix",
         "submit_key",
         "owner_note",
+        # The folder the agent's harness last ran in: where resuming its
+        # session starts it again, long after its pane is gone.
+        "cwd",
     ):
         if col not in cols:
             conn.execute(f"ALTER TABLE recipients ADD COLUMN {col} TEXT")
@@ -458,7 +461,7 @@ def adopt_agent_id(
 def get_recipient(conn: sqlite3.Connection, user_id: str) -> dict | None:
     _ensure_columns(conn)
     row = conn.execute(
-        "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, owner_note, registered_at "
+        "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, owner_note, cwd, registered_at "
         "FROM recipients WHERE user_id=?",
         (user_id,),
     ).fetchone()
@@ -469,7 +472,7 @@ def get_recipient(conn: sqlite3.Connection, user_id: str) -> dict | None:
 def list_recipients(conn: sqlite3.Connection) -> list[dict]:
     _ensure_columns(conn)
     rows = conn.execute(
-        "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, owner_note, registered_at "
+        "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, owner_note, cwd, registered_at "
         "FROM recipients ORDER BY user_id"
     ).fetchall()
     return [dict(r) for r in rows]
@@ -569,6 +572,12 @@ def record_summary(
             (user_id, user_id, SUMMARY_HISTORY),
         )
     return True
+
+
+@_serialized
+def set_cwd(conn: sqlite3.Connection, user_id: str, cwd: str) -> None:
+    with conn:
+        conn.execute("UPDATE recipients SET cwd=? WHERE user_id=?", (cwd, user_id))
 
 
 @_serialized

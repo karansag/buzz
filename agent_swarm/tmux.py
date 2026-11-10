@@ -688,16 +688,16 @@ def resolve_pane(target: str) -> tuple[str, str] | None:
 
 
 def pane_table() -> dict[str, dict[str, str]]:
-    """Every pane by id: its label, foreground command, and title. {} without tmux."""
+    """Every pane by id: its label, foreground command, title and folder. {} without tmux."""
     out = _tmux_out(
         "list-panes", "-a", "-F",
-        "#{pane_id}\t#S:#I.#P\t#{pane_current_command}\t#{pane_title}\t#{@agent_swarm}",
+        "#{pane_id}\t#S:#I.#P\t#{pane_current_command}\t#{pane_title}\t#{@agent_swarm}\t#{pane_current_path}",
     )
     table = {}
     for line in (out or "").splitlines():
-        pane_id, label, command, title, handle = (line.split("\t") + ["", "", "", ""])[:5]
+        pane_id, label, command, title, handle, cwd = (line.split("\t") + [""] * 5)[:6]
         if pane_id:
-            table[pane_id] = {"label": label, "command": command.strip(), "title": title}
+            table[pane_id] = {"label": label, "command": command.strip(), "title": title, "cwd": cwd}
             if handle:
                 table[pane_id]["agent_swarm"] = handle
     return table

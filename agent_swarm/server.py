@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import activity, attachments, bundle, db, digest, names, nodes, panes, protocol, tmux
+from . import activity, attachments, bundle, db, digest, names, nodes, panes, protocol, restore, tmux
 
 log = logging.getLogger("agent_swarm.monitor")
 
@@ -674,6 +674,11 @@ def create_app(
                 topic = tmux.title_summary(snap.title(pane) or "")
                 if topic:
                     db.record_summary(conn, r["user_id"], topic, "title")
+                # Remember where the harness runs: resuming its session after
+                # the pane is gone starts it there again.
+                cwd = snap.cwd(pane)
+                if cwd and cwd != r.get("cwd"):
+                    db.set_cwd(conn, r["user_id"], cwd)
                 # Subprocess capture must not block the event loop, and one
                 # pane's failure must not end the tick for the others.
                 try:
@@ -1903,6 +1908,56 @@ def create_app(
             "launch": "ok" if spawned.ok else spawned.status,
             "launch_error": spawned.error,
             "flavor": req.flavor, "model": model, "command": command, "cwd": cwd,
+        }
+
+    @app.post("/agents/{user_id}/resume")
+    def agents_resume(user_id: str, _: None = Depends(_require_owner)):
+        """Start a stopped agent's own session again in a new window, in the
+        folder it last ran in, on its own machine. It keeps its handle,
+        conversation, tasks and history. Its old pane is left alone."""
+        recipient = db.get_recipient(conn, user_id)
+        if recipient is None:
+            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        if not recipient.get("agent_id") or not recipient.get("flavor"):
+            raise HTTPException(status_code=409, detail={"error": f"{user_id} has no saved session to resume"})
+        node = _node_of(recipient)
+        if node is None:
+            raise HTTPException(status_code=409, detail={"error": f"node {recipient['node']} is not connected"})
+        snap = _try_snapshot(node)
+        if snap is None:
+            raise HTTPException(
+                status_code=409, detail={"error": f"node {recipient['node']} cannot be observed right now"}
+            )
+        if _stale(recipient, snap.server) is None and recipient["tmux_pane"] in snap.live:
+            raise HTTPException(status_code=409, detail={"error": f"{user_id} is already running"})
+        cwd = recipient.get("cwd")
+        if not cwd and node is fleet.local:
+            place = restore.saved_place(restore.SNAPSHOT_DIR, recipient["agent_id"])
+            cwd = place[2]["cwd"] if place else None
+        if not cwd:
+            raise HTTPException(
+                status_code=409, detail={"error": f"the hub does not know which folder {user_id} ran in"}
+            )
+        command = restore.resume_command(recipient)
+        if command is None:
+            raise HTTPException(status_code=409, detail={"error": f"no resume command for {recipient['flavor']}"})
+        spawned = node.spawn(nodes.new_op_id(), command, cwd, resume=True)
+        if spawned.pane is None:
+            raise HTTPException(
+                status_code=502 if spawned.status == "unknown" else 500,
+                detail={"error": "could not create tmux window", "status": spawned.status, "detail": spawned.error},
+            )
+        pane, label, server = spawned.pane, spawned.label or spawned.pane, spawned.tmux_server
+        # Bound to the new pane now, so the harness's own registration from
+        # there finds this handle by its session id.
+        db.register(conn, user_id, pane, tmux_server=server, pane_label=label, node=node.name)
+        node.tag_pane(nodes.new_op_id(), pane, server, user_id)
+        node.rename_window(nodes.new_op_id(), pane, server, user_id)
+        _refresh_watch(node.name)
+        return {
+            "ok": True, "user_id": user_id, "tmux_pane": pane, "pane_label": label, "node": node.name,
+            "launch": "ok" if spawned.ok else spawned.status, "launch_error": spawned.error,
+            "command": command, "cwd": cwd,
         }
 
     @app.post("/agents/{user_id}/stop")

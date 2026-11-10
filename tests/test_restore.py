@@ -359,7 +359,7 @@ def test_plan_one_refuses_what_it_must_not_touch(tmp_path):
     assert plan(hub_row(agent_id=None))[1] == "smew-claude-opus-karanslinux has no saved session to resume"
     assert plan(hub_row(flavor="generic"))[1] == "no resume command for generic"
     steps, why = restore.plan_one(hub_row(), [], "here", "srv", set(), tmp_path / "none")
-    assert steps == [] and "no snapshot" in why
+    assert steps == [] and "knows its folder" in why
 
 
 def test_plan_one_puts_an_agent_whose_pane_is_gone_in_a_new_window_where_it_ran(tmp_path):
@@ -392,3 +392,10 @@ def test_restore_one_agent_into_a_new_window_end_to_end(isolated_tmux, tmp_path)
     assert len(panes) == 2
     new = panes[1].split()
     assert registered == [new[0]] and new[1:] == [str(folder), "sleep"]
+
+
+def test_plan_one_uses_the_hub_recorded_folder_without_a_snapshot(tmp_path):
+    steps, why = restore.plan_one(hub_row(cwd="/work/smew"), [], "here", "srv", set(), tmp_path / "none")
+    assert why is None
+    assert steps[0].argv[:2] == ["new-session", "-d"] and "/work/smew" in steps[0].argv
+    assert steps[1].launch.startswith("cd /work/smew && ")

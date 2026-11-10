@@ -323,7 +323,7 @@ class Executor:
             )
             return protocol.result(op_id, r.status, r.error)
         if kind == "spawn":
-            s = self.local.spawn(op_id, a.get("command"), a.get("cwd"))
+            s = self.local.spawn(op_id, a.get("command"), a.get("cwd"), bool(a.get("resume")))
             return protocol.result(
                 op_id, s.status, s.error, pane=s.pane, label=s.label, tmux_server=s.tmux_server
             )

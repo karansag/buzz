@@ -94,7 +94,7 @@ function CompactButton({ r }) {
 // Stopping kills the agent's tmux pane. If its page is open, go to another
 // running agent's page, or the overview if none are left.
 async function stopAgent(r, state, focusUser, refresh) {
-  if (!await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
+  if (!await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`)) return;
   const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/stop`, { method: "POST" }).catch(() => null);
   if (res?.ok) {
     if (focusUser === r.user_id) {
@@ -110,7 +110,7 @@ async function stopAgent(r, state, focusUser, refresh) {
 // any that are running. Returns the hub's answer, or null if not confirmed.
 async function retireAgents(ids, refresh) {
   const names = ids.length > 6 ? `${ids.slice(0, 6).join(", ")} and ${ids.length - 6} more` : ids.join(", ");
-  if (!ids.length || !await confirmDialog(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. Messages and tasks are kept.`)) return null;
+  if (!ids.length || !await confirmDialog(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. Messages and tasks are kept, but a retired agent can no longer be resumed.`)) return null;
   try {
     const response = await fetch("/recipients/retire", { method: "POST", headers: JSONH, body: JSON.stringify({ user_ids: ids }) });
     const body = await response.json().catch(() => null);
@@ -136,7 +136,7 @@ function StopAgentButton({ r, refresh }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const stop = async () => {
-    if (busy || !await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
+    if (busy || !await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -160,9 +160,38 @@ function StopAgentButton({ r, refresh }) {
     ${r.pane_alive
       ? html`<button type="button" class="mini stop-agent" disabled=${busy} onClick=${stop}>
           ${busy ? "stopping…" : "stop agent"}</button>`
-      : html`<${RetireButton} ids=${[r.user_id]} refresh=${refresh} label="retire agent" onDone=${() => { location.hash = "#/"; }} />`}
+      : html`<${ResumeAgentButton} r=${r} refresh=${refresh} />
+        <${RetireButton} ids=${[r.user_id]} refresh=${refresh} label="retire agent" onDone=${() => { location.hash = "#/"; }} />`}
     ${message && html`<span role="status"> ${message}</span>`}
   </span>`;
+}
+
+// Resuming starts a stopped agent's own session again, in a new window in the
+// folder it last ran in, so it keeps its handle and conversation.
+function ResumeAgentButton({ r, refresh }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const resume = async () => {
+    if (busy) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/agents/${encodeURIComponent(r.user_id)}/resume`, { method: "POST" });
+      const body = await response.json().catch(() => null);
+      if (response.ok && body?.ok === true) {
+        setMessage(body.launch === "ok" ? `Resuming in ${body.pane_label} (${body.cwd}).` : `Window ${body.pane_label} opened; the launch was not confirmed.`);
+      } else {
+        setMessage(`Could not resume: ${body?.detail?.error || "the hub did not answer"}${body?.detail?.detail ? ` — ${body.detail.detail}` : ""}`);
+      }
+    } catch {
+      setMessage("Resume not confirmed. Check the agent's status before retrying.");
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  };
+  return html`<button type="button" class="mini resume-agent" disabled=${busy} onClick=${resume}>
+    ${busy ? "resuming…" : "resume agent"}</button>${message && html`<span role="status"> ${message}</span>`} `;
 }
 
 // "claude-opus-4-7" reads as "opus-4-7" next to the claude flavor tag.

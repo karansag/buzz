@@ -105,6 +105,12 @@ class PaneSnapshot:
         row = self.table.get(pane)
         return row["title"] if row else None
 
+    def cwd(self, pane: str) -> str | None:
+        """The folder the pane's foreground program runs in; None from a node
+        too old to report it."""
+        row = self.table.get(pane)
+        return (row.get("cwd") or None) if row else None
+
 
 class Node(Protocol):
     """One machine's tmux.
@@ -151,7 +157,7 @@ class Node(Protocol):
         flavor: str | None = None,
         retry_submit: bool = True,
     ) -> Result: ...
-    def spawn(self, op_id: str, command: str | None, cwd: str | None = None) -> Spawned: ...
+    def spawn(self, op_id: str, command: str | None, cwd: str | None = None, resume: bool = False) -> Spawned: ...
     def kill(self, op_id: str, pane: str, tmux_server: str | None) -> Result: ...
     def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str) -> Result: ...
     def tag_pane(self, op_id: str, pane: str, tmux_server: str | None, handle: str) -> Result: ...
@@ -275,10 +281,11 @@ class LocalNode:
     def spawn_dirs(self) -> list[str]:
         return config.spawn_dirs()
 
-    def spawn(self, op_id: str, command: str | None, cwd: str | None = None) -> Spawned:
+    def spawn(self, op_id: str, command: str | None, cwd: str | None = None, resume: bool = False) -> Spawned:
         # Only a folder this machine's owner listed: the hub is not trusted
-        # to pick an arbitrary folder for an agent to start (and be trusted) in.
-        if cwd is not None and cwd not in self.spawn_dirs:
+        # to pick an arbitrary folder for a new agent to start (and be trusted)
+        # in. A resumed session goes back to the folder it already ran in.
+        if cwd is not None and not resume and cwd not in self.spawn_dirs:
             return Spawned("failed", None, f"{cwd} is not a start folder on this machine")
         # The pane's identity comes from the command that created it, never
         # from a later look: a restart in between would pair the id with an
@@ -577,8 +584,8 @@ class RemoteNode:
         )
         return Result(r.get("status", "unknown"), r.get("error"))
 
-    def spawn(self, op_id: str, command: str | None, cwd: str | None = None) -> Spawned:
-        r = self._call("spawn", COMMAND_TTL, op_id=op_id, command=command, cwd=cwd)
+    def spawn(self, op_id: str, command: str | None, cwd: str | None = None, resume: bool = False) -> Spawned:
+        r = self._call("spawn", COMMAND_TTL, op_id=op_id, command=command, cwd=cwd, resume=resume)
         data = r.get("data") or {}
         return Spawned(
             r.get("status", "unknown"), data.get("pane"), r.get("error"),

@@ -42,7 +42,7 @@ class FakeLocal(nodes.LocalNode):
         self.calls.append(("deliver", op_id, pane, tmux_server, text, kw))
         return self.results.get("deliver", nodes.Result("ok"))
 
-    def spawn(self, op_id, command, cwd=None):
+    def spawn(self, op_id, command, cwd=None, resume=False):
         self.calls.append(("spawn", op_id, command))
         return self.results.get("spawn", nodes.Spawned("ok", "%7"))
 

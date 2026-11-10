@@ -530,24 +530,29 @@ def plan_one(
     if own is not None:
         if own["command"] not in tmux.SHELL_COMMANDS:
             return [], f"its pane {own['pane_id']} is running {own['command']}; restore leaves it alone"
-        cwd = place[2]["cwd"] if place else own["cwd"]
+        cwd = row.get("cwd") or (place[2]["cwd"] if place else own["cwd"])
         label = f"{own['session']}:{own['window']}.{own['pane']}"
         return [Step(f"resume {handle} ({row['flavor']}) in its pane {label}", target=own["pane_id"],
                      launch=f"cd {shlex.quote(cwd)} && {command}", agent=agent)], None
-    if place is None:
-        return [], (f"{handle}'s pane is gone and no snapshot in {directory} says where it ran; "
-                    "its folder is needed to resume the session")
-    session, window, pane = place
+    # The hub records the folder the agent last ran in; an older row falls
+    # back to the newest snapshot that had it.
+    if place is None and not row.get("cwd"):
+        return [], (f"{handle}'s pane is gone and neither the hub nor a snapshot in {directory} "
+                    "knows its folder; its folder is needed to resume the session")
+    if place is not None:
+        session, name, cwd = place[0], place[1]["name"], row.get("cwd") or place[2]["cwd"]
+    else:
+        session, name, cwd = tmux.AGENTS_SESSION, handle, row["cwd"]
     sessions = {p["session"] for p in live}
     if session in sessions:
-        create = Step(f"create a window in {session} for {handle} ({window['name']})",
+        create = Step(f"create a window in {session} for {handle} ({name})",
                       ["new-window", "-d", "-P", "-F", "#{pane_id}", "-t", f"={session}:",
-                       "-n", window["name"], "-c", pane["cwd"]])
+                       "-n", name, "-c", cwd])
     else:
         create = Step(f"create session {session} for {handle}",
                       ["new-session", "-d", "-P", "-F", "#{pane_id}", "-s", session,
-                       "-n", window["name"], "-c", pane["cwd"], "-x", "220", "-y", "50"])
+                       "-n", name, "-c", cwd, "-x", "220", "-y", "50"])
     create.window = f"{handle}-window"
-    launch = Step(f"resume {handle} ({row['flavor']}) in {pane['cwd']}", launch=f"cd {shlex.quote(pane['cwd'])} && {command}",
+    launch = Step(f"resume {handle} ({row['flavor']}) in {cwd}", launch=f"cd {shlex.quote(cwd)} && {command}",
                   agent=agent, window=create.window)
     return [create, launch], None

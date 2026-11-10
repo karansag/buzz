@@ -11747,7 +11747,7 @@ function CompactButton({ r }) {
     onClick=${compact}>${busy ? "compacting…" : "compact"}</button>`;
 }
 async function stopAgent(r, state, focusUser, refresh) {
-	if (!await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
+	if (!await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`)) return;
 	if ((await fetch(`/agents/${encodeURIComponent(r.user_id)}/stop`, { method: "POST" }).catch(() => null))?.ok) {
 		if (focusUser === r.user_id) {
 			const next = state.recipients.find((x) => x.pane_alive && x.user_id !== r.user_id);
@@ -11758,7 +11758,7 @@ async function stopAgent(r, state, focusUser, refresh) {
 }
 async function retireAgents(ids, refresh) {
 	const names = ids.length > 6 ? `${ids.slice(0, 6).join(", ")} and ${ids.length - 6} more` : ids.join(", ");
-	if (!ids.length || !await confirmDialog(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. Messages and tasks are kept.`)) return null;
+	if (!ids.length || !await confirmDialog(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. Messages and tasks are kept, but a retired agent can no longer be resumed.`)) return null;
 	try {
 		const response = await fetch("/recipients/retire", {
 			method: "POST",
@@ -11794,7 +11794,7 @@ function StopAgentButton({ r, refresh }) {
 	const [busy, setBusy] = d(false);
 	const [message, setMessage] = d("");
 	const stop = async () => {
-		if (busy || !await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept.`)) return;
+		if (busy || !await confirmDialog(`Stop ${r.user_id} on ${machineName(r.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`)) return;
 		setBusy(true);
 		setMessage("");
 		try {
@@ -11812,11 +11812,34 @@ function StopAgentButton({ r, refresh }) {
 	};
 	return m$1`<span class="agent-stop-control">
     ${r.pane_alive ? m$1`<button type="button" class="mini stop-agent" disabled=${busy} onClick=${stop}>
-          ${busy ? "stopping…" : "stop agent"}</button>` : m$1`<${RetireButton} ids=${[r.user_id]} refresh=${refresh} label="retire agent" onDone=${() => {
+          ${busy ? "stopping…" : "stop agent"}</button>` : m$1`<${ResumeAgentButton} r=${r} refresh=${refresh} />
+        <${RetireButton} ids=${[r.user_id]} refresh=${refresh} label="retire agent" onDone=${() => {
 		location.hash = "#/";
 	}} />`}
     ${message && m$1`<span role="status"> ${message}</span>`}
   </span>`;
+}
+function ResumeAgentButton({ r, refresh }) {
+	const [busy, setBusy] = d(false);
+	const [message, setMessage] = d("");
+	const resume = async () => {
+		if (busy) return;
+		setBusy(true);
+		setMessage("");
+		try {
+			const response = await fetch(`/agents/${encodeURIComponent(r.user_id)}/resume`, { method: "POST" });
+			const body = await response.json().catch(() => null);
+			if (response.ok && body?.ok === true) setMessage(body.launch === "ok" ? `Resuming in ${body.pane_label} (${body.cwd}).` : `Window ${body.pane_label} opened; the launch was not confirmed.`);
+			else setMessage(`Could not resume: ${body?.detail?.error || "the hub did not answer"}${body?.detail?.detail ? ` — ${body.detail.detail}` : ""}`);
+		} catch {
+			setMessage("Resume not confirmed. Check the agent's status before retrying.");
+		} finally {
+			setBusy(false);
+			refresh();
+		}
+	};
+	return m$1`<button type="button" class="mini resume-agent" disabled=${busy} onClick=${resume}>
+    ${busy ? "resuming…" : "resume agent"}</button>${message && m$1`<span role="status"> ${message}</span>`} `;
 }
 function ModelLabel({ r, refresh }) {
 	const [editing, setEditing] = d(false);

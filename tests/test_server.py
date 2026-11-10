@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_swarm import nodes, server, tmux
+from agent_swarm import db, nodes, server, tmux
 
 
 WEB_ROOT = Path(__file__).parents[1] / "web"
@@ -1832,3 +1832,48 @@ def test_task_patch_bad_dependency_cannot_change_other_fields(client):
         })
         assert response.status_code == 400
         assert next(t for t in c.get('/tasks').json()['tasks'] if t['id'] == task['id']) == task
+
+
+
+
+def test_monitor_records_the_folder_each_agent_runs_in(client, monkeypatch, tmp_path):
+    user = client.post("/register", json={"tmux_pane": "0:0.0", "agent_id": "sess-a", "flavor": "claude"}).json()["user_id"]
+    monkeypatch.setattr(
+        tmux, "pane_table",
+        lambda: {"0:0.0": {"label": "0:0.0", "command": "claude", "title": "", "cwd": "/work/a"}},
+    )
+    asyncio.run(client.app.state.monitor_tick())
+    assert db.get_recipient(db.connect(tmp_path / "db.sqlite"), user)["cwd"] == "/work/a"
+
+
+def test_resume_starts_a_stopped_agents_session_in_its_folder(client, monkeypatch, tmp_path):
+    folder = tmp_path / "work"
+    folder.mkdir()
+    user = client.post(
+        "/register", json={"tmux_pane": "0:2.0", "agent_id": "sess-b", "flavor": "claude", "model": "claude-opus-5-5"},
+    ).json()["user_id"]
+    conn = db.connect(tmp_path / "db.sqlite")
+    db.set_cwd(conn, user, str(folder))
+    r = client.post(f"/agents/{user}/resume")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["cwd"] == str(folder) and body["tmux_pane"] == "agents:1.0"
+    assert "--resume sess-b" in body["command"]
+    # Outside the start folders: a resumed session returns to its own folder.
+    assert client._spawn_cwds == [str(folder)]
+    row = db.get_recipient(conn, user)
+    assert (row["tmux_pane"], row["agent_id"]) == ("agents:1.0", "sess-b")
+    # The harness registering from the new pane keeps the same handle.
+    monkeypatch.setattr(tmux, "list_panes", lambda: {"0:0.0", "0:1.0", "0:2.0", "agents:1.0"})
+    again = client.post("/register", json={"tmux_pane": "agents:1.0", "agent_id": "sess-b", "flavor": "claude"})
+    assert again.json().get("user_id") == user, again.text
+
+
+def test_resume_refuses_running_unknown_folder_and_sessionless_agents(client):
+    live = client.post("/register", json={"tmux_pane": "0:0.0", "agent_id": "sess-c", "flavor": "claude"}).json()["user_id"]
+    assert "already running" in client.post(f"/agents/{live}/resume").json()["detail"]["error"]
+    nofolder = client.post("/register", json={"tmux_pane": "0:2.0", "agent_id": "sess-d", "flavor": "claude"}).json()["user_id"]
+    r = client.post(f"/agents/{nofolder}/resume")
+    assert r.status_code == 409 and "which folder" in r.json()["detail"]["error"]
+    assert client.post("/agents/ghost/resume").status_code == 404
+    assert client._spawn_cwds == []

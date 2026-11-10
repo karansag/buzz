@@ -295,7 +295,7 @@ def test_live_agent_panes_excludes_bare_shells(monkeypatch):
 
     monkeypatch.setattr(tmux.subprocess, "run", fake_run)
     assert tmux.live_agent_panes() == {"%1", "%3"}
-    assert tmux.pane_table()["%3"] == {"label": "b:2.0", "command": "node", "title": "t"}
+    assert tmux.pane_table()["%3"] == {"label": "b:2.0", "command": "node", "title": "t", "cwd": ""}
 
 
 def test_offline_reason_distinguishes_gone_from_shell():

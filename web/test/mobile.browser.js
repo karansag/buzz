@@ -587,13 +587,37 @@ test('offline agents show per team and can be retired, there or from their page'
     const question = await answer(page);
     await page.locator('#agent-sidebar .team-bees-offline', { hasText: 'old-ghost' }).waitFor({ state: 'detached' });
     assert.deepEqual(asked, [['old-ghost']]);
-    assert.match(question, /Retire old-ghost\? It leaves the dashboard and its team\. Messages and tasks are kept\./);
+    assert.match(question, /Retire old-ghost\? It leaves the dashboard and its team\. Messages and tasks are kept, but a retired agent can no longer be resumed\./);
     // A stopped agent's own page offers retire instead of stop.
     await page.goto(base + '#/agent/stopped-agent');
     await page.locator('.fhead button.retire', { hasText: 'retire agent' }).click();
     await answer(page);
     await page.waitForFunction(() => location.hash === '#/');
     assert.deepEqual(asked[1], ['stopped-agent']);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('a stopped agent can be resumed from its page', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  const asked = [];
+  await page.route('**/agents/*/resume', async r => {
+    asked.push(r.request().url());
+    if (asked.length === 1) return r.fulfill({ status: 409, json: { detail: { error: 'the hub does not know which folder stopped-agent ran in' } } });
+    state.recipients.find(x => x.user_id === 'stopped-agent').pane_alive = true;
+    await r.fulfill({ json: { ok: true, user_id: 'stopped-agent', pane_label: 'agents:7.0', cwd: '/home/k/agents', launch: 'ok' } });
+  });
+  try {
+    await page.goto(base + '#/agent/stopped-agent');
+    const resume = page.locator('.fhead').getByRole('button', { name: 'resume agent', exact: true });
+    await resume.click();
+    await page.getByText('Could not resume: the hub does not know which folder stopped-agent ran in', { exact: true }).waitFor();
+    await resume.click();
+    // Running again: the page offers stop, not resume.
+    await page.locator('.fhead .stop-agent').waitFor();
+    assert.equal(await resume.count(), 0);
+    assert.equal(asked.length, 2);
+    assert.match(asked[0], /\/agents\/stopped-agent\/resume$/);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
