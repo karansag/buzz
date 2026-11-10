@@ -1936,3 +1936,79 @@ test('hive stop corner appears only during bee drags and preserves registration'
     assert.deepEqual(errors,[]);
   } finally {await page.close();}
 });
+
+for (const width of [390,1440]) {
+  test(`agent switcher previews and searches note before latest status: ${width}`, async () => {
+    const {page,state,errors}=await setup(width,900,width<1000);
+    const note='Rhizome integration plan '+('long preview '.repeat(24))+'needle-at-end';
+    state.recipients[0].owner_note=note;
+    state.recipients[0].summaries=[{source:'owner',text:'ignored owner history'}, {source:'agent',text:'overridden runtime update'}];
+    state.recipients[1].summaries=[{source:'owner',text:'ignored owner history'}, {source:'title',text:'Investigating query latency'}, {source:'agent',text:'outdated runtime update'}];
+    try {
+      await page.goto(base+'#/');
+      await page.locator('.quick-switch-launchers > button').last().click();
+      const dialog=page.getByRole('dialog',{name:'Switch agent'});
+      await dialog.waitFor();
+      const stoat=dialog.locator('#switch-agent-stoat');
+      const preview=stoat.locator('.quick-switch-summary');
+      assert.equal(await preview.innerText(),'📌 note: '+note);
+      assert.equal(await preview.getAttribute('title'),'📌 note: '+note);
+      assert.match(await stoat.locator('small').first().innerText(),/agent-swarm · karans-linux · working/);
+      const clipped=await preview.evaluate(el=>{
+        const s=getComputedStyle(el);
+        return{whiteSpace:s.whiteSpace,overflow:s.overflow,textOverflow:s.textOverflow,clipped:el.scrollWidth>el.clientWidth};
+      });
+      assert.deepEqual(clipped,{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',clipped:true});
+      const rect=await dialog.boundingBox();
+      assert.ok(rect.x>=0 && rect.x+rect.width<=width+1);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+      const input=dialog.getByRole('combobox');
+      await input.fill('rhizome needle-at-end');
+      assert.equal(await dialog.getByRole('option').count(),1);
+      assert.equal(await dialog.getByRole('option').locator('b').innerText(),'stoat');
+      await input.fill('overridden runtime update');
+      assert.equal(await dialog.getByRole('option').count(),0);
+      await input.fill('query latency');
+      assert.equal(await dialog.getByRole('option').count(),1);
+      assert.equal(await dialog.getByRole('option').locator('.quick-switch-summary').innerText(),'Investigating query latency');
+      await input.fill('ignored owner history');
+      assert.equal(await dialog.getByRole('option').count(),0);
+      await input.fill('outdated runtime update');
+      assert.equal(await dialog.getByRole('option').count(),0);
+      assert.deepEqual(errors,[]);
+    } finally {await page.close();}
+  });
+}
+
+test('sidebar chip and tile tooltips prefer owner note and fall back to current status', async () => {
+  const {page,state,errors}=await setup(1440,900,false);
+  state.recipients[0].owner_note='Pinned integration plan';
+  state.recipients[0].summaries=[{source:'owner',text:'old owner history'}, {source:'agent',text:'Current runtime fallback'}];
+  state.recipients[1].summaries=[{source:'owner',text:'old owner history'}, {source:'title',text:'Current status from title'}, {source:'agent',text:'older status'}];
+  try {
+    await page.goto(base+'#/');
+    const sidebar=page.locator('#agent-sidebar');
+    const chip=sidebar.locator('.team-mate[href="#/agent/stoat"]');
+    await chip.waitFor();
+    await chip.hover();
+    const title=await chip.getAttribute('title');
+    assert.match(title,/stoat · karans-linux · working/);
+    assert.match(title,/📌 note: Pinned integration plan/);
+    assert.doesNotMatch(title,/Current runtime fallback|old owner history/);
+    const other=sidebar.locator(`.team-mate[href="#/agent/${names[1]}"]`);
+    assert.match(await other.getAttribute('title'),/Current status from title/);
+    assert.doesNotMatch(await other.getAttribute('title'),/old owner history|older status/);
+    assert.doesNotMatch(await sidebar.innerText(),/Pinned integration plan|Current runtime fallback/);
+    await sidebar.getByRole('button',{name:'tiles',exact:true}).click();
+    const tile=sidebar.locator('.bee-tile[href="#/agent/stoat"]');
+    await tile.waitFor();
+    await tile.hover();
+    assert.equal(await tile.getAttribute('title'),title);
+    assert.match(await sidebar.locator(`.bee-tile[href="#/agent/${names[1]}"]`).getAttribute('title'),/Current status from title/);
+    assert.doesNotMatch(await sidebar.innerText(),/Pinned integration plan|Current runtime fallback/);
+    state.recipients[0].owner_note=null;
+    await page.waitForFunction(()=>document.querySelector('#agent-sidebar .bee-tile[href="#/agent/stoat"]')?.title.includes('Current runtime fallback'));
+    assert.doesNotMatch(await tile.getAttribute('title'),/📌 note:|old owner history|Pinned integration plan/);
+    assert.deepEqual(errors,[]);
+  } finally {await page.close();}
+});

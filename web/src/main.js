@@ -1,3 +1,4 @@
+import { agentPreview } from "./agent-preview.js";
 import { replySnippet } from "./replies.js";
 import { ReplyPreview } from "./reply-preview.js";
 import { OwnerNote } from "./owner-note.js";
@@ -744,7 +745,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
         const st = STATE[agentStatus(r)] || STATE.unknown;
         return html`<a key=${r.user_id} class=${`team-mate ${focusUser === r.user_id ? "here" : ""}`}
           aria-current=${focusUser === r.user_id ? "page" : null} href=${`#/agent/${encodeURIComponent(r.user_id)}`}
-          style=${`--machine:${machineColor(r.node)}`} title=${`${r.user_id} · ${machineName(r.node)} · ${st.word}`}
+          style=${`--machine:${machineColor(r.node)}`} title=${[r.user_id, machineName(r.node), st.word, agentPreview(r)].filter(Boolean).join(" · ")}
           draggable="true" onDragStart=${e => {
             e.dataTransfer.effectAllowed = "move";
             e.dataTransfer.setData(AGENT_DRAG_TYPE, r.user_id);

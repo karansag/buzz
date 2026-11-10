@@ -1,3 +1,4 @@
+import { agentPreview } from "./agent-preview.js";
 import { html } from "htm/preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Bee } from "./shared.js";
@@ -21,9 +22,10 @@ export function switchOptions(state, mode, query) {
   } else {
     options = agents.map(a => {
       const team = teams.find(t => t.id === a.team_id)?.name || "no team";
-      return { id: `agent-${a.user_id}`, name: a.user_id, target: a,
+      const summary = agentPreview(a);
+      return { id: `agent-${a.user_id}`, name: a.user_id, target: a, summary,
         detail: `${team} · ${a.node || "unknown machine"} · ${a.pane_alive ? (a.activity?.status || "online").replaceAll("_", " ") : "offline"}`,
-        search: [a.user_id, team, a.node, a.flavor, a.model].filter(Boolean).join(" ") };
+        search: [a.user_id, team, a.node, a.flavor, a.model, summary].filter(Boolean).join(" ") };
     });
   }
   const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
@@ -93,14 +95,15 @@ export function QuickSwitcher({ state, navigate }) {
       <input ref=${input} type="search" aria-label=${mode === "teams" ? "Find team" : "Find agent"}
         role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="switch-results"
         aria-activedescendant=${current ? `switch-${current.id}` : undefined}
-        placeholder=${mode === "teams" ? "Search teams…" : "Search name, team, machine, or harness…"}
+        placeholder=${mode === "teams" ? "Search teams…" : "Search name, team, machine, harness, note, or status…"}
         value=${query} onInput=${e => { setQuery(e.target.value); setSelected(null); }} />
       <div id="switch-results" role="listbox" aria-label="Matches" class="quick-switch-results">
         ${options.map(o => html`<div key=${o.id} id=${`switch-${o.id}`} role="option" aria-selected=${current?.id === o.id}
           aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
           onClick=${() => choose(o)}>
           ${o.target && html`<${Bee} node=${o.target.node} flavor=${o.target.flavor} size="small" working=${o.target.activity?.status === "working"} />`}
-          <span><b>${o.name}</b><small>${o.detail}</small></span>
+          <span><b>${o.name}</b><small>${o.detail}</small>
+            ${o.summary && html`<small class="quick-switch-summary" title=${o.summary}>${o.summary}</small>`}</span>
         </div>`)}
         ${!options.length && html`<p class="empty">No matches.</p>`}
       </div>

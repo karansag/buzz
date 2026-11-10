@@ -976,8 +976,9 @@ dialog.quick-switch { margin: auto; width: min(680px, calc(100vw - 24px)); max-h
 .quick-switch input { width: 100%; min-height: 44px; padding: 10px; background: var(--panel); color: var(--cream); border: 1px solid var(--honey-dim); border-radius: 6px; font: inherit; }
 .quick-switch-results { max-height: min(55dvh, 460px); overflow: auto; margin-top: 10px; }
 .quick-switch-option { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; overflow-wrap: anywhere; }
-.quick-switch-option > span { min-width: 0; }
+.quick-switch-option > span { flex: 1; min-width: 0; }
 .quick-switch-option small { display: block; color: var(--cream-dim); }
+.quick-switch-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quick-switch-option.selected, .quick-switch-option:hover { background: var(--panel); border-color: var(--honey-dim); }
 .quick-switch-option[aria-disabled=true] { opacity: .5; cursor: default; }
 .quick-switch-help { margin-top: 12px; color: var(--cream-dim); font-size: 11px; }

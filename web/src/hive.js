@@ -1,3 +1,4 @@
+import { agentPreview } from "./agent-preview.js";
 import { confirmDialog } from "./dialogs.js";
 import { TaskTrash, trashTask } from "./task-trash.js";
 import { TaskStatusActions } from "./task-status.js";
@@ -67,7 +68,8 @@ export function CompactBees({ state, machine, harness = null }) {
       const status = agentStatus(r);
       const st = STATE[status] || STATE.unknown;
       const harness = harnessStyle(r.flavor);
-      return html`<a key=${r.user_id} class="bee-tile" href=${focusHash(r.user_id)} style=${`--machine:${machineColor(r.node)}`}>
+      return html`<a key=${r.user_id} class="bee-tile" href=${focusHash(r.user_id)}
+        title=${[r.user_id, machineName(r.node), st.word, agentPreview(r)].filter(Boolean).join(" · ")} style=${`--machine:${machineColor(r.node)}`}>
         <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
         <span class="bee-name">${r.user_id}</span>
         <span class="bee-machine">${machineName(r.node)}</span>

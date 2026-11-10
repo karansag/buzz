@@ -61,6 +61,13 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 	}
 })();
 //#endregion
+//#region web/src/agent-preview.js
+function agentPreview(agent) {
+	const note = (agent.owner_note || "").trim();
+	if (note) return `📌 note: ${note}`;
+	return (agent.summaries || []).find((s) => s.source !== "owner")?.text || "";
+}
+//#endregion
 //#region web/src/replies.js
 function replySnippet(message, limit = 100) {
 	const text = (message.content || "").replace(/\s+/g, " ").trim() || "(files)";
@@ -9414,17 +9421,20 @@ function switchOptions(state, mode, query) {
 	});
 	else options = agents.map((a) => {
 		const team = teams.find((t) => t.id === a.team_id)?.name || "no team";
+		const summary = agentPreview(a);
 		return {
 			id: `agent-${a.user_id}`,
 			name: a.user_id,
 			target: a,
+			summary,
 			detail: `${team} · ${a.node || "unknown machine"} · ${a.pane_alive ? (a.activity?.status || "online").replaceAll("_", " ") : "offline"}`,
 			search: [
 				a.user_id,
 				team,
 				a.node,
 				a.flavor,
-				a.model
+				a.model,
+				summary
 			].filter(Boolean).join(" ")
 		};
 	});
@@ -9509,7 +9519,7 @@ function QuickSwitcher({ state, navigate }) {
       <input ref=${input} type="search" aria-label=${mode === "teams" ? "Find team" : "Find agent"}
         role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="switch-results"
         aria-activedescendant=${current ? `switch-${current.id}` : void 0}
-        placeholder=${mode === "teams" ? "Search teams…" : "Search name, team, machine, or harness…"}
+        placeholder=${mode === "teams" ? "Search teams…" : "Search name, team, machine, harness, note, or status…"}
         value=${query} onInput=${(e) => {
 		setQuery(e.target.value);
 		setSelected(null);
@@ -9519,7 +9529,8 @@ function QuickSwitcher({ state, navigate }) {
           aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
           onClick=${() => choose(o)}>
           ${o.target && m$1`<${Bee} node=${o.target.node} flavor=${o.target.flavor} size="small" working=${o.target.activity?.status === "working"} />`}
-          <span><b>${o.name}</b><small>${o.detail}</small></span>
+          <span><b>${o.name}</b><small>${o.detail}</small>
+            ${o.summary && m$1`<small class="quick-switch-summary" title=${o.summary}>${o.summary}</small>`}</span>
         </div>`)}
         ${!options.length && m$1`<p class="empty">No matches.</p>`}
       </div>
@@ -9939,7 +9950,13 @@ function CompactBees({ state, machine, harness = null }) {
 		const status = agentStatus(r);
 		const st = STATE[status] || STATE.unknown;
 		const harness = harnessStyle(r.flavor);
-		return m$1`<a key=${r.user_id} class="bee-tile" href=${focusHash(r.user_id)} style=${`--machine:${machineColor(r.node)}`}>
+		return m$1`<a key=${r.user_id} class="bee-tile" href=${focusHash(r.user_id)}
+        title=${[
+			r.user_id,
+			machineName(r.node),
+			st.word,
+			agentPreview(r)
+		].filter(Boolean).join(" · ")} style=${`--machine:${machineColor(r.node)}`}>
         <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
         <span class="bee-name">${r.user_id}</span>
         <span class="bee-machine">${machineName(r.node)}</span>
@@ -12469,7 +12486,12 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 			const st = STATE[agentStatus(r)] || STATE.unknown;
 			return m$1`<a key=${r.user_id} class=${`team-mate ${focusUser === r.user_id ? "here" : ""}`}
           aria-current=${focusUser === r.user_id ? "page" : null} href=${`#/agent/${encodeURIComponent(r.user_id)}`}
-          style=${`--machine:${machineColor(r.node)}`} title=${`${r.user_id} · ${machineName(r.node)} · ${st.word}`}
+          style=${`--machine:${machineColor(r.node)}`} title=${[
+				r.user_id,
+				machineName(r.node),
+				st.word,
+				agentPreview(r)
+			].filter(Boolean).join(" · ")}
           draggable="true" onDragStart=${(e) => {
 				e.dataTransfer.effectAllowed = "move";
 				e.dataTransfer.setData(AGENT_DRAG_TYPE, r.user_id);
