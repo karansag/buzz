@@ -824,6 +824,9 @@ for (const width of [320, 1500]) {
     try {
       await page.goto(base + '#/chats');
       const switches = page.getByRole('group', { name: 'Which chats' });
+      // Read the switch buttons only once they exist: a loaded machine can
+      // otherwise snapshot the page mid-render.
+      await switches.getByRole('button').first().waitFor();
       assert.deepEqual(await switches.getByRole('button').allTextContents(), ['with you', 'you and queens', 'between agents']);
       const buttons = await switches.getByRole('button').evaluateAll(bs => bs.map(b => {
         const r = b.getBoundingClientRect(); return { x: r.x, y: r.y, height: r.height };
