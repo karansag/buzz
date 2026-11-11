@@ -880,22 +880,36 @@ def test_terminal_text_is_typed_bare(client):
     assert all(m["content"] != "/fast" for m in client.get("/api/state").json()["messages"])
 
 
-def test_terminal_key_is_pressed(client, monkeypatch):
+@pytest.mark.parametrize("key", ["Escape", "C-c", "C-b"])
+def test_terminal_key_is_pressed(client, monkeypatch, key):
     pressed = []
     monkeypatch.setattr(tmux, "send_key", lambda pane, key: pressed.append((pane, key)) or (True, None))
     user = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["user_id"]
-    assert client.post(f"/agents/{user}/terminal", json={"key": "Escape"}).status_code == 200
-    assert pressed == [("0:0.0", "Escape")]
+    assert client.post(f"/agents/{user}/terminal", json={"key": key}).status_code == 200
+    assert pressed == [("0:0.0", key)]
     assert client._calls == []
 
 
 def test_terminal_rejects_bad_requests_and_dead_panes(client):
     user = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["user_id"]
-    for body in ({}, {"text": "x", "key": "Up"}, {"text": "  "}, {"key": "C-c"}):
+    for body in ({}, {"text": "x", "key": "Up"}, {"text": "  "}, {"key": "C-z"}):
         assert client.post(f"/agents/{user}/terminal", json=body).status_code == 422
     shell = client.post("/register", json={"tmux_pane": "0:2.0"}).json()["user_id"]
     assert client.post(f"/agents/{shell}/terminal", json={"text": "/fast"}).status_code == 409
     assert client.post("/agents/ghost/terminal", json={"text": "/fast"}).status_code == 404
+    assert client._calls == []
+
+
+@pytest.mark.parametrize("key", ["C-c", "C-b"])
+def test_control_key_routes_to_the_agents_node(client, monkeypatch, key):
+    remote = _connect_node(client, "macbook")
+    user = client.post("/register", json={"tmux_pane": "0:1.0", "node": "macbook"}).json()["user_id"]
+    pressed = []
+    monkeypatch.setattr(remote, "send_key", lambda op, pane, server_id, key: pressed.append(
+        (pane, server_id, key)) or nodes.Result("ok"))
+    monkeypatch.setattr(tmux, "send_key", lambda *args: pytest.fail("used the local pane"))
+    assert client.post(f"/agents/{user}/terminal", json={"key": key}).status_code == 200
+    assert pressed == [("0:1.0", "srv-1", key)]
     assert client._calls == []
 
 

@@ -35,6 +35,12 @@ def enrol(app, name):
     return r.json()["token"]
 
 
+@pytest.mark.parametrize("key", ["C-c", "C-b"])
+def test_control_keys_are_owner_only(hub, key):
+    token = enrol(hub, "macbook")
+    assert remote(hub, token).post("/agents/otter/terminal", json={"key": key}).status_code == 403
+
+
 def test_a_request_from_the_tailnet_needs_a_token(hub):
     assert remote(hub).get("/health").status_code == 200
     r = remote(hub).get("/recipients")

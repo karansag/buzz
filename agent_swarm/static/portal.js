@@ -12661,6 +12661,51 @@ function typeInto(user, body) {
 		body: JSON.stringify(body)
 	});
 }
+function InterruptAgent({ r }) {
+	const [busy, setBusy] = d(false);
+	const [cooling, setCooling] = d(false);
+	const [message, setMessage] = d("");
+	const flight = A(false);
+	const cooldown = A({
+		until: 0,
+		timer: null
+	});
+	h(() => () => clearTimeout(cooldown.current.timer), []);
+	const press = async (key, label) => {
+		if (!r.pane_alive || flight.current || key === "C-c" && Date.now() < cooldown.current.until) return;
+		flight.current = true;
+		setBusy(true);
+		setMessage("");
+		if (key === "C-c") setCooling(true);
+		try {
+			const response = await typeInto(r.user_id, { key });
+			const body = await response.json().catch(() => null);
+			if (response.ok && body?.ok === true) setMessage(`${label} sent.`);
+			else if (body?.detail?.status === "unknown" || !body?.detail?.error) setMessage(`${label} not confirmed. Check the terminal before trying again.`);
+			else setMessage(`Could not send ${label}: ${body.detail.error}${body.detail.detail ? ` — ${body.detail.detail}` : ""}`);
+		} catch {
+			setMessage(`${label} not confirmed. Check the terminal before trying again.`);
+		} finally {
+			if (key === "C-c") {
+				cooldown.current.until = Date.now() + 2e3;
+				clearTimeout(cooldown.current.timer);
+				cooldown.current.timer = setTimeout(() => setCooling(false), 2e3);
+			}
+			flight.current = false;
+			setBusy(false);
+		}
+	};
+	return m$1`<span class="agent-interrupt" role="group" aria-label=${`Interrupt ${r.user_id}`}>
+    <span>interrupt</span>
+    <button type="button" class="mini" disabled=${busy || !r.pane_alive || cooling}
+      aria-label=${`Send Ctrl+C to ${r.user_id}`} title=${cooling ? "Wait two seconds between Ctrl+C presses" : "Send Ctrl+C to interrupt current work"}
+      onClick=${() => press("C-c", "Ctrl+C")}>Ctrl+C</button>
+    <button type="button" class="mini" disabled=${busy || !r.pane_alive}
+      aria-label=${`Send Ctrl+B to ${r.user_id}`} title="Send Ctrl+B to the agent"
+      onClick=${() => press("C-b", "Ctrl+B")}>Ctrl+B</button>
+    ${message && m$1`<span role="status">${message}</span>`}
+  </span>`;
+}
 async function failure(res) {
 	return (await res.json().catch(() => ({}))).detail?.error || `error ${res.status}`;
 }
@@ -13560,6 +13605,7 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
           <${JumpToPane} r=${r} />
           <${CompactButton} r=${r} />
           <${StopAgentButton} key=${user} r=${r} refresh=${refresh} />
+          <${InterruptAgent} key=${`interrupt-${user}`} r=${r} />
           · joined ${rel(r.registered_at, state.now)}
           · <span style=${`color:${st.color}`}>${st.word}</span>${status === "needs_attention" && detail ? m$1` <span class="attn">${detail}</span>` : ""}
         </div>

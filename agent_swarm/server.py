@@ -2005,8 +2005,9 @@ def create_app(
         """Type straight into an agent's pane, as if at its keyboard.
 
         `text` is pasted and submitted, like a line typed at the prompt
-        (`/fast`, `/model sonnet`). `key` presses one key, for menus a command
-        opens. Neither is a message: no prefix, no envelope, no message row.
+        (`/fast`, `/model sonnet`). `key` presses one key, for menu navigation
+        or interrupting work. Neither is a message: no prefix, no envelope,
+        no message row.
         """
         if (req.text is None) == (req.key is None):
             raise HTTPException(status_code=422, detail={"error": "send exactly one of text or key"})

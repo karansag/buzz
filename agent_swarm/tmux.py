@@ -761,8 +761,8 @@ def kill_pane(pane: str) -> tuple[bool, str | None]:
 
 
 # Keys the dashboard's terminal panel can press in an agent's pane, as tmux
-# key names: enough to drive a harness's menus, such as Codex's /model picker.
-TERMINAL_KEYS = ("Escape", "Up", "Down", "Enter", "Tab")
+# key names: menu navigation plus explicit owner-requested control keys.
+TERMINAL_KEYS = ("Escape", "Up", "Down", "Enter", "Tab", "C-c", "C-b")
 
 
 def send_key(pane: str, key: str) -> tuple[bool, str | None]:

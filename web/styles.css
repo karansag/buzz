@@ -261,6 +261,7 @@
   .fhead .nm { font-family: var(--serif); font-style: italic; font-size: 26px; }
   .fhead .meta { font-size: 11px; color: var(--cream-dim); margin-top: 2px; }
   .fhead .meta b { color: var(--cream); font-weight: 500; }
+  .agent-interrupt { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: 6px; max-width: 100%; }
   .fhead .jump-cmd code { color: var(--cream); background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; user-select: all; }
   .fhead .jump-cmd .mini { margin-left: 4px; }
   .fhead .model-label { font: inherit; color: inherit; background: none; border: 0; padding: 0 2px; cursor: pointer; border-radius: 3px; }

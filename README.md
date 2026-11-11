@@ -272,6 +272,13 @@ On an agent page, **Cmd+Shift+L** on Mac or **Ctrl+Shift+L** elsewhere toggles c
 
 On an agent page, **Cmd+Shift+Y** on Mac or **Ctrl+Shift+Y** elsewhere opens or closes the terminal pane. Chat and terminal drafts are preserved. The shortcut is shown in the terminal heading.
 
+The agent detail header also has **Ctrl+C** and **Ctrl+B** interrupt buttons,
+available while the terminal pane is closed. Each sends that control key directly
+to the registered pane without Enter or a chat message. The agent harness decides
+how it responds. Ctrl+C waits two seconds between clicks to avoid a double press
+exiting Claude Code. Stopped/offline agents have disabled controls; failures or
+unconfirmed delivery are shown beside the buttons.
+
 On desktop, **Cmd+B** on Mac or **Ctrl+B** elsewhere toggles the agent sidebar. The shortcut also works from the reply box without moving the cursor.
 
 Teammates are listed at the top of the page; Alt+[ and Alt+] move between

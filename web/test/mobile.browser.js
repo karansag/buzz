@@ -1878,6 +1878,54 @@ test('the terminal view shows pane colors and chat colors code, diffs and Markdo
   } finally { await page.close(); }
 });
 
+
+for (const width of [390, 1500]) {
+  test(`interrupt controls at ${width}px send control keys with terminal closed and guard rapid Ctrl+C`, async () => {
+    const {page, state, errors} = await setup(width, 900, width < 500);
+    const sent=[];
+    let outcome='ok';
+    await page.route('**/agents/stoat/terminal', async route => {
+      sent.push(route.request().postDataJSON());
+      if(outcome==='failed') return route.fulfill({status:409,json:{detail:{error:'recipient offline'}}});
+      if(outcome==='unknown') return route.fulfill({status:502,json:{detail:{status:'unknown',error:'could not type into the pane',detail:'connection lost'}}});
+      return route.fulfill({json:{ok:true,user_id:'stoat'}});
+    });
+    try {
+      await page.goto(base+'#/agent/stoat');
+      const group=page.getByRole('group',{name:'Interrupt stoat',exact:true});
+      const ctrlC=group.getByRole('button',{name:'Send Ctrl+C to stoat',exact:true});
+      const ctrlB=group.getByRole('button',{name:'Send Ctrl+B to stoat',exact:true});
+      await ctrlC.waitFor();
+      assert.equal(await page.locator('details.scope').getAttribute('open'),null);
+      await ctrlC.click();
+      await group.getByRole('status').filter({hasText:'Ctrl+C sent.'}).waitFor();
+      assert.equal(await ctrlC.isDisabled(),true);
+      // Even a synthetic extra click cannot bypass the synchronous guard.
+      await ctrlC.evaluate(b=>b.dispatchEvent(new MouseEvent('click',{bubbles:true})));
+      assert.deepEqual(sent,[{key:'C-c'}]);
+      await ctrlB.click();
+      await group.getByRole('status').filter({hasText:'Ctrl+B sent.'}).waitFor();
+      assert.deepEqual(sent,[{key:'C-c'},{key:'C-b'}]);
+      await page.waitForFunction(()=>!document.querySelector('.agent-interrupt button').disabled);
+      outcome='unknown';
+      await ctrlC.click();
+      await group.getByRole('status').filter({hasText:'not confirmed'}).waitFor();
+      assert.equal(sent.length,3);
+      outcome='failed';
+      await ctrlB.click();
+      await group.getByRole('status').filter({hasText:'recipient offline'}).waitFor();
+      assert.equal(await ctrlB.isEnabled(),true);
+      assert.equal(await page.locator('details.scope').getAttribute('open'),null);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);
+      state.recipients.find(r=>r.user_id==='stoat').pane_alive=false;
+      await page.waitForFunction(()=>[...document.querySelectorAll('.agent-interrupt button')].every(b=>b.disabled));
+      assert.equal(await ctrlC.isDisabled(),true);
+      assert.equal(await ctrlB.isDisabled(),true);
+      assert.deepEqual(errors,[]);
+    } finally {await page.close();}
+  });
+}
+
 test('owner notes edit on the agent detail page, persist beside live status, and clear', async () => {
   const { page, state, errors } = await setup(390,844);
   let fail = false;

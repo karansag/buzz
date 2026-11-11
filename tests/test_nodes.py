@@ -1,6 +1,16 @@
 """The Node interface: LocalNode delegates to tmux; the registry finds nodes."""
 
+import pytest
+
 from agent_swarm import nodes, tmux
+
+
+@pytest.mark.parametrize("key", ["C-c", "C-b"])
+def test_control_keys_are_single_tmux_keys_without_enter(monkeypatch, key):
+    calls = []
+    monkeypatch.setattr(tmux.subprocess, "run", lambda args, **kwargs: calls.append(args))
+    assert tmux.send_key("%7", key) == (True, None)
+    assert calls == [["tmux", "send-keys", "-t", "%7", key]]
 
 
 def test_local_node_snapshot_derives_everything_from_one_pane_read(monkeypatch):
