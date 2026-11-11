@@ -12102,9 +12102,13 @@ function NewTeam({ refresh }) {
 }
 function Resend({ m, refresh }) {
 	const [busy, setBusy] = d(false);
+	const [sent, setSent] = d(false);
 	const [note, setNote] = d("");
+	const clientId = A(null);
 	const resend = async () => {
-		if (!await confirmDialog("The outcome of this message is unknown: the agent may already have it. Send it again as a new message?")) return;
+		if (busy || sent) return;
+		if (m.status === "unknown" && !await confirmDialog("The outcome of this message is unknown: the agent may already have it. Send it again as a new message?")) return;
+		if (!clientId.current) clientId.current = newClientId();
 		setBusy(true);
 		setNote("");
 		try {
@@ -12116,7 +12120,8 @@ function Resend({ m, refresh }) {
 					content: m.content,
 					context: m.context,
 					attachments: m.attachments || [],
-					reply_to: m.reply_to ?? null
+					reply_to: m.reply_to ?? null,
+					client_id: clientId.current
 				})
 			});
 			let body = null;
@@ -12126,7 +12131,8 @@ function Resend({ m, refresh }) {
 				body = null;
 			}
 			const outcome = deliveryOutcome(r.ok, body);
-			if (outcome.status !== "delivered") setNote(`${outcome.status}: ${outcome.reason}`);
+			if (outcome.status === "delivered") setSent(true);
+			else setNote(`${outcome.status}: ${outcome.reason}`);
 		} catch (err) {
 			setNote(`not confirmed: ${unansweredOutcome(err).reason}`);
 		} finally {
@@ -12134,8 +12140,9 @@ function Resend({ m, refresh }) {
 			refresh();
 		}
 	};
-	return m$1`<button type="button" class="resend" disabled=${busy} onClick=${resend}
-    title="Send this message again as a new message">${busy ? "sending…" : "send again"}</button>${note && m$1` <span class="ctx">${note}</span>`}`;
+	return m$1`<button type="button" class="resend" disabled=${busy || sent} onClick=${resend}
+    aria-label=${m.status === "failed" ? `Retry message ${m.id}` : null}
+    title="Send this message again as a new message">${busy ? "sending…" : sent ? "sent" : m.status === "failed" ? "retry" : "send again"}</button>${note && m$1` <span class="ctx" role="status">${note}</span>`}`;
 }
 function MachineBar({ state, machine, selectMachine }) {
 	const machines = machineList(state.nodes, state.recipients);
@@ -13190,7 +13197,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}${m.attachments?.length > 0 && m$1`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
-          <div class="tag">${disp(m.sender)}${m.context && m$1` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && m$1` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && m$1` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>${m.sender === "owner" && m$1` <${Resend} m=${m} refresh=${refresh} />`}`}${canReply(m) && m$1` <button type="button" class="msg-reply"
+          <div class="tag">${disp(m.sender)}${m.context && m$1` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && m$1` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && m$1` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && m$1` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && m$1` <button type="button" class="msg-reply"
             title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}</div>
         </div>`)}
       ${recipient && m$1`<div class="jump-dock">${awayFrom !== null && m$1`<button type="button" class="jump-bottom" onClick=${jumpToBottom}

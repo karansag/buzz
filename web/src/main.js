@@ -395,27 +395,32 @@ function NewTeam({ refresh }) {
   </form>`;
 }
 
-// A delivery whose outcome was lost is never replayed by the server. The
-// owner can send the same text again, as a new message with its own id,
-// knowing the agent may already have the first.
+// Retrying a failed owner send makes a new message. Unknown outcomes require
+// confirmation because the agent may already have the first. Keep this new
+// attempt's client id if its answer is lost, so another click cannot duplicate it.
 function Resend({ m, refresh }) {
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
   const [note, setNote] = useState("");
+  const clientId = useRef(null);
   const resend = async () => {
-    if (!await confirmDialog(
+    if (busy || sent) return;
+    if (m.status === "unknown" && !await confirmDialog(
       "The outcome of this message is unknown: the agent may already have it. Send it again as a new message?"
     )) return;
+    if (!clientId.current) clientId.current = newClientId();
     setBusy(true);
     setNote("");
     try {
       const r = await fetch("/owner/send", {
         method: "POST", headers: JSONH,
-        body: JSON.stringify({ recipient: m.recipient, content: m.content, context: m.context, attachments: m.attachments || [], reply_to: m.reply_to ?? null }),
+        body: JSON.stringify({ recipient: m.recipient, content: m.content, context: m.context, attachments: m.attachments || [], reply_to: m.reply_to ?? null, client_id: clientId.current }),
       });
       let body = null;
       try { body = await r.json(); } catch { body = null; }
       const outcome = deliveryOutcome(r.ok, body);
-      if (outcome.status !== "delivered") setNote(`${outcome.status}: ${outcome.reason}`);
+      if (outcome.status === "delivered") setSent(true);
+      else setNote(`${outcome.status}: ${outcome.reason}`);
     } catch (err) {
       setNote(`not confirmed: ${unansweredOutcome(err).reason}`);
     } finally {
@@ -423,8 +428,9 @@ function Resend({ m, refresh }) {
       refresh();
     }
   };
-  return html`<button type="button" class="resend" disabled=${busy} onClick=${resend}
-    title="Send this message again as a new message">${busy ? "sending…" : "send again"}</button>${note && html` <span class="ctx">${note}</span>`}`;
+  return html`<button type="button" class="resend" disabled=${busy || sent} onClick=${resend}
+    aria-label=${m.status === "failed" ? `Retry message ${m.id}` : null}
+    title="Send this message again as a new message">${busy ? "sending…" : sent ? "sent" : m.status === "failed" ? "retry" : "send again"}</button>${note && html` <span class="ctx" role="status">${note}</span>`}`;
 }
 
 // The same machine key drives the hive and roster, including disconnected
@@ -1405,7 +1411,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}${m.attachments?.length > 0 && html`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map(name => html`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
-          <div class="tag">${disp(m.sender)}${m.context && html` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && html` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && html` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>${m.sender === "owner" && html` <${Resend} m=${m} refresh=${refresh} />`}`}${canReply(m) && html` <button type="button" class="msg-reply"
+          <div class="tag">${disp(m.sender)}${m.context && html` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && html` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && html` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && html` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && html` <button type="button" class="msg-reply"
             title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}</div>
         </div>`)}
       ${recipient && html`<div class="jump-dock">${awayFrom !== null && html`<button type="button" class="jump-bottom" onClick=${jumpToBottom}

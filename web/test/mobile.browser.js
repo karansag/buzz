@@ -770,6 +770,105 @@ for (const width of [320, 1500]) {
   });
 }
 
+
+for (const width of [390, 1500]) {
+  test(`failed owner message retry at ${width}px preserves payload, reports failure, then sends`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    const failed = { id: 80, sender: 'owner', recipient: 'stoat', content: 'Please review the attached plan', context: 'review', attachments: [file, image], reply_to: 1, reply_preview: { id: 1, sender: 'owner', content: 'original request' }, status: 'failed', delivery_error: 'pane vanished', ts: state.now + 1 };
+    state.messages.push(failed, { id: 81, sender: 'stoat', recipient: 'owner', content: 'incoming historical failure', status: 'failed', ts: state.now + 2 });
+    const requests = [];
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    await page.route('**/owner/send', async route => {
+      const body = route.request().postDataJSON();
+      requests.push(body);
+      if (requests.length === 1) {
+        await held;
+        return route.fulfill({ json: { ok: false, status: 'failed', message_id: 82, delivery_error: 'still offline' } });
+      }
+      state.messages.push({ ...failed, id: 83, status: 'delivered', delivery_error: null, ts: state.now + 3 });
+      await route.fulfill({ json: { ok: true, status: 'delivered', message_id: 83 } });
+    });
+    try {
+      await page.goto(base + '#/agent/stoat');
+      const row = page.locator('[data-message-id="80"]');
+      const retry = row.getByRole('button', { name: 'Retry message 80', exact: true });
+      await retry.waitFor();
+      assert.equal(await retry.textContent(), 'retry');
+      assert.equal(await page.locator('[data-message-id="81"] .resend').count(), 0);
+      await retry.click();
+      assert.equal(await retry.isDisabled(), true);
+      assert.equal(await retry.textContent(), 'sending…');
+      assert.equal(await page.locator('dialog[open]').count(), 0);
+      release();
+      await row.getByRole('status').waitFor();
+      assert.match(await row.getByRole('status').textContent(), /failed: still offline/);
+      assert.equal(await retry.isEnabled(), true);
+      await retry.click();
+      await page.locator('[data-message-id="83"]').waitFor();
+      // The poll can show delivery before this request's receipt settles.
+      await page.waitForFunction(() => document.querySelector('[data-message-id="80"] .resend').textContent === 'sent');
+      assert.equal(await retry.textContent(), 'sent');
+      assert.equal(await retry.isDisabled(), true);
+      assert.equal(requests.length, 2);
+      const {client_id, ...payload} = requests[0];
+      assert.match(client_id, /^[a-f0-9]{32}$/);
+      assert.deepEqual(payload, { recipient: 'stoat', content: failed.content, context: 'review', attachments: [file, image], reply_to: 1 });
+      assert.deepEqual(requests[1], requests[0]);
+      assert.equal(await page.locator('[data-message-id="83"] .resend').count(), 0);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      assert.deepEqual(errors, []);
+    } finally { release(); await page.close(); }
+  });
+}
+
+test('failed message retry reuses its attempt id after an unreadable response', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  state.messages.push({ id: 80, sender: 'owner', recipient: 'stoat', content: 'retry once', status: 'failed', ts: state.now + 1 });
+  const requests = [];
+  await page.route('**/owner/send', async route => {
+    requests.push(route.request().postDataJSON());
+    if (requests.length === 1) return route.fulfill({ status: 200, body: '{', contentType: 'application/json' });
+    await route.fulfill({ json: { ok: true, status: 'delivered', message_id: 82 } });
+  });
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const row = page.locator('[data-message-id="80"]');
+    const retry = row.getByRole('button', { name: 'Retry message 80', exact: true });
+    await retry.click();
+    await row.getByRole('status').waitFor();
+    assert.match(await row.getByRole('status').textContent(), /uncertain:.*could not be read/);
+    await retry.click();
+    await page.waitForFunction(() => document.querySelector('[data-message-id="80"] .resend').textContent === 'sent');
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].client_id, requests[0].client_id);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('unknown delivery still requires confirmation before sending again', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  state.messages.push({ id: 80, sender: 'owner', recipient: 'stoat', content: 'possibly already sent', status: 'unknown', delivery_error: 'connection lost', ts: state.now + 1 });
+  const requests = [];
+  await page.route('**/owner/send', async route => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ json: { ok: true, status: 'delivered', message_id: 82 } });
+  });
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const resend = page.locator('[data-message-id="80"] .resend');
+    await resend.click();
+    assert.match(await answer(page, 'Cancel'), /agent may already have it/);
+    assert.equal(requests.length, 0);
+    await resend.click();
+    await answer(page);
+    await page.waitForFunction(() => document.querySelector('[data-message-id="80"] .resend').textContent === 'sent');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].content, 'possibly already sent');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 test('queen chats show an empty state when no team has a queen', async () => {
   const { page, state, errors } = await setup(390, 844);
   state.teams[0].queen = null;
