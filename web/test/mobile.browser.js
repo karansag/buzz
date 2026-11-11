@@ -545,6 +545,42 @@ test('a tab from AGENT_SWARM_TABS shows its page and passes shortcuts up', async
   } finally { await page.close(); }
 });
 
+
+for (const width of [390, 1500]) {
+  test(`configured Usage and PR tabs follow built-ins and load their own pages at ${width}px`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    state.tabs = ['usage', 'prs'];
+    const loads = [];
+    await page.route('**/tabs/*/**', async route => {
+      const path = new URL(route.request().url()).pathname;
+      loads.push(path);
+      const name = path.split('/')[2];
+      if (path.endsWith('api/data')) return route.fulfill({json: {name}});
+      if (path.endsWith('style.css')) return route.fulfill({contentType:'text/css',body:'h1 { color: rgb(1, 2, 3); }'});
+      return route.fulfill({contentType:'text/html',body:`<!doctype html><link rel="stylesheet" href="style.css"><h1>${name}</h1><output></output><input id=q><script>fetch('api/data').then(r=>r.json()).then(d=>document.querySelector('output').textContent=d.name)</script>`});
+    });
+    try {
+      await page.goto(base + '#/');
+      assert.deepEqual(await page.locator('nav.views a').allTextContents(), ['overview', 'chats', 'task history', 'usage', 'prs']);
+      for (const name of ['usage', 'prs']) {
+        await page.locator(`nav.views a[href="#/tab/${name}"]`).click();
+        const frame = page.frameLocator('iframe.tab-frame');
+        await frame.locator('output').filter({hasText:name}).waitFor();
+        assert.equal(await frame.locator('h1').innerText(), name);
+        assert.equal(await frame.locator('h1').evaluate(e=>getComputedStyle(e).color), 'rgb(1, 2, 3)');
+        assert.equal(await page.locator('.tab-bar a').getAttribute('href'), `/tabs/${name}/`);
+        assert.ok(loads.includes(`/tabs/${name}/api/data`));
+        assert.ok(loads.includes(`/tabs/${name}/style.css`));
+      }
+      await page.reload();
+      await page.frameLocator('iframe.tab-frame').getByRole('heading', {name:'prs',exact:true}).waitFor();
+      assert.equal(await page.locator('nav.views a.on').textContent(), 'prs');
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth), width);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
 test('Ctrl+Shift+[ / ] step through the header views, including extra tabs', async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   state.tabs = ['usage'];
@@ -558,12 +594,12 @@ test('Ctrl+Shift+[ / ] step through the header views, including extra tabs', asy
       await page.waitForFunction(h => location.hash === h, hash);
     };
     await go('Control+Shift+BracketRight', '#/chats');
+    await go('Control+Shift+BracketRight', '#/tasks');
     await go('Control+Shift+BracketRight', '#/tab/usage');
     // From inside the tab's page too.
     await page.frameLocator('iframe.tab-frame').locator('#q').click();
-    await go('Control+Shift+BracketRight', '#/tasks');
     await go('Control+Shift+BracketRight', '#/');
-    await go('Control+Shift+BracketLeft', '#/tasks');
+    await go('Control+Shift+BracketLeft', '#/tab/usage');
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });

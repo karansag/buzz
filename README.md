@@ -277,8 +277,8 @@ On desktop, **Cmd+B** on Mac or **Ctrl+B** elsewhere toggles the agent sidebar. 
 Teammates are listed at the top of the page; Alt+[ and Alt+] move between
 them. **Alt+H** (Option+H on Mac) goes back to the overview from any page,
 including from the reply box; unsent drafts are kept. **Cmd+Shift+[** and **Cmd+Shift+]**
-(Ctrl+Shift elsewhere) step through overview, chats, any extra tabs, and
-task history. Browsers keep these keys for their own tabs, so they work in
+(Ctrl+Shift elsewhere) step through overview, chats, task history, and then any
+configured extra tabs. Browsers keep these keys for their own tabs, so they work in
 the Mac app and in an installed app window (Chrome's install, Safari's Add
 to Dock), not in a normal browser tab.
 
@@ -356,18 +356,36 @@ Tailscale user as the owner; on a shared tailnet, limit that with
 it off with `tailscale serve --https=8445 off`.
 
 **Other pages as tabs.** `AGENT_SWARM_TABS` adds your own pages to the
-dashboard as tabs next to chats, for example an AI usage page:
+dashboard after the built-in overview, chats and task history views. For example,
+keep Usage and a PR dashboard as two independently hosted pages:
 
 ```bash
-AGENT_SWARM_TABS="usage=http://127.0.0.1:8531"
+AGENT_SWARM_TABS="usage=http://127.0.0.1:8531,prs=http://127.0.0.1:8790"
 ```
 
-Each `name=url` pair becomes a tab. The hub fetches the page and serves it
+Each `name=url` pair becomes a tab, in configuration order. Names are lowercase
+route labels of 1–24 letters, digits or hyphens, starting with a letter or digit.
+Duplicate names and invalid entries are skipped. No page-specific Buzz code is needed. Open a tab directly at
+`/#/tab/prs`, or use the header and view-switching shortcuts.
+
+For a systemd user service, put the same configuration in its drop-in and restart
+the hub after changing it:
+
+```ini
+[Service]
+Environment="AGENT_SWARM_TABS=usage=http://127.0.0.1:8531,prs=http://127.0.0.1:8790"
+```
+
+The label and upstream base URL stay in hub configuration; upstream URLs are not
+exposed in the navigation state. The hub fetches the page and serves it
 at `/tabs/<name>/`, for the owner only. So a page on the hub's machine
 works from any device that can open the dashboard, and the hub's name
 and port are all you publish. The hub forwards only GET requests, and the
-page must use relative links (`api/x`, not `/api/x`). The page runs with
-the dashboard's access, so add only pages you trust.
+page must support a path prefix for its links, assets and API calls (`api/x`
+resolves under the tab; `/api/x` would target Buzz itself). Buzz does not rewrite
+arbitrary JavaScript. A page may instead derive its mount prefix and include it
+in each URL. WebSockets, cross-origin sign-in flows and cookies are not proxied.
+The page runs with the dashboard's access, so add only pages you trust.
 
 **As an app.** In Safari, File > Add to Dock gives the dashboard its own
 window and Dock icon; Chrome's install button does the same. For a Dock

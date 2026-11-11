@@ -1981,7 +1981,7 @@ function App() {
       if (by && modifier && e.shiftKey && !e.altKey && !e.isComposing
           && !document.querySelector(".quick-switch[open]")) {
         e.preventDefault();
-        location.hash = stepView(location.hash, ["#/", CHATS_ROUTE, ...tabsRef.current.map(tabHash), HISTORY_ROUTE], by);
+        location.hash = stepView(location.hash, ["#/", CHATS_ROUTE, HISTORY_ROUTE, ...tabsRef.current.map(tabHash)], by);
       }
     };
     addEventListener("hashchange", onHash);
@@ -2011,8 +2011,8 @@ function App() {
     <nav class="views" aria-label="views" title=${`Switch views: ${mac ? "⌘⇧[ / ⌘⇧]" : "Ctrl+Shift+[ / ]"}`}>
       <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${mac ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
       <a href=${CHATS_ROUTE} class=${onChats ? "on" : ""}>chats</a>
-      ${(state?.tabs || []).map(t => html`<a key=${t} href=${tabHash(t)} class=${onTab === t ? "on" : ""}>${t}</a>`)}
       <a href=${HISTORY_ROUTE} class=${onHistory ? "on" : ""}>task history</a>
+      ${(state?.tabs || []).map(t => html`<a key=${t} href=${tabHash(t)} class=${onTab === t ? "on" : ""}>${t}</a>`)}
     </nav>
     <${QuickSwitcher} state=${state} navigate=${(user, previous) => {
       if (location.hash === focusHash(user)) return;

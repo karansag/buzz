@@ -81,3 +81,19 @@ def test_unknown_and_unreachable_tabs(hub, monkeypatch):
     monkeypatch.setenv("AGENT_SWARM_TABS", "usage=http://127.0.0.1:9")
     r = hub.get("/tabs/usage/")
     assert r.status_code == 502 and "usage is unreachable" in r.text
+
+
+def test_multiple_tabs_keep_their_configured_base_paths(hub, upstream, monkeypatch):
+    url, seen = upstream
+    monkeypatch.setenv("AGENT_SWARM_TABS", f"usage={url}/metrics,prs={url}/dashboard")
+    assert hub.get("/api/state").json()["tabs"] == ["usage", "prs"]
+    assert hub.get("/tabs/usage/api/usage").json()["path"] == "/metrics/api/usage"
+    assert hub.get("/tabs/prs/api/prs?repo=a%2Fb").json()["path"] == "/dashboard/api/prs?repo=a%2Fb"
+    assert [r["path"] for r in seen] == ["/metrics/api/usage", "/dashboard/api/prs?repo=a%2Fb"]
+
+
+def test_tab_pages_require_owner_access(hub, upstream, monkeypatch):
+    monkeypatch.setenv("AGENT_SWARM_TABS", f"prs={upstream[0]}")
+    with TestClient(hub.app, client=("100.64.0.9", 40001)) as remote:
+        assert remote.get("/tabs/prs/").status_code == 401
+    assert upstream[1] == []

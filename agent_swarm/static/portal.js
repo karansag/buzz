@@ -13742,8 +13742,8 @@ function App() {
 				location.hash = stepView(location.hash, [
 					"#/",
 					CHATS_ROUTE,
-					...tabsRef.current.map(tabHash),
-					HISTORY_ROUTE
+					HISTORY_ROUTE,
+					...tabsRef.current.map(tabHash)
 				], by);
 			}
 		};
@@ -13771,8 +13771,8 @@ function App() {
     <nav class="views" aria-label="views" title=${`Switch views: ${mac ? "⌘⇧[ / ⌘⇧]" : "Ctrl+Shift+[ / ]"}`}>
       <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${mac ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
       <a href=${CHATS_ROUTE} class=${onChats ? "on" : ""}>chats</a>
-      ${(state?.tabs || []).map((t) => m$1`<a key=${t} href=${tabHash(t)} class=${onTab === t ? "on" : ""}>${t}</a>`)}
       <a href=${HISTORY_ROUTE} class=${onHistory ? "on" : ""}>task history</a>
+      ${(state?.tabs || []).map((t) => m$1`<a key=${t} href=${tabHash(t)} class=${onTab === t ? "on" : ""}>${t}</a>`)}
     </nav>
     <${QuickSwitcher} state=${state} navigate=${(user, previous) => {
 		if (location.hash === focusHash(user)) return;
