@@ -1013,8 +1013,11 @@ for (const width of [390, 1500]) {
       await page.locator('.quick-switch-launchers > button').first().click();
       const teamsDialog = page.getByRole('dialog', { name: 'Switch team' });
       await teamsDialog.waitFor();
-      assert.equal(await crownCount('#switch-team-1'), 1);
-      assert.match(await teamsDialog.locator('#switch-team-1 small').first().innerText(), /♛ queen/);
+      // A team row names the queen once, in the detail line, not also beside
+      // the team name.
+      assert.equal(await crownCount('#switch-team-1'), 0);
+      assert.match(await teamsDialog.locator('#switch-team-1 small').first().innerText(), /opens stoat · ♛ queen/);
+      assert.equal(await teamsDialog.locator('#switch-team-1 .crown-word').count(), 0);
       await teamsDialog.getByRole('button', { name: 'close' }).click();
 
       // Chat rows: a crown, plus the word "queen" where the row is not already

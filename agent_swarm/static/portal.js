@@ -9434,7 +9434,7 @@ function switchOptions(state, mode, query) {
 			id: `team-${team.id}`,
 			name: team.name,
 			target,
-			detail: target ? `${members.filter((a) => a.pane_alive).length} live · opens ${target.user_id}${target.user_id === team.queen ? " · ♛ queen" : ""}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
+			detail: target ? `${members.filter((a) => a.pane_alive).length} live · opens ${target.user_id}${queenSuffix(teams, target.user_id)}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
 			search: [team.name, ...members.map((a) => a.user_id)].join(" ")
 		};
 	});
@@ -9548,7 +9548,7 @@ function QuickSwitcher({ state, navigate }) {
           aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
           onClick=${() => choose(o)}>
           ${o.target && m$1`<${Bee} node=${o.target.node} flavor=${o.target.flavor} size="small" working=${o.target.activity?.status === "working"} />`}
-          <span><b>${o.name}</b><${Crown} teams=${state.teams} user=${o.target?.user_id} word=${true} /><small>${o.detail}</small>
+          <span><b>${o.name}</b>${mode === "agents" && m$1`<${Crown} teams=${state.teams} user=${o.target?.user_id} word=${true} />`}<small>${o.detail}</small>
             ${o.summary && m$1`<small class="quick-switch-summary" title=${o.summary}>${o.summary}</small>`}</span>
         </div>`)}
         ${!options.length && m$1`<p class="empty">No matches.</p>`}
