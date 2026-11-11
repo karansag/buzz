@@ -488,6 +488,7 @@ test('team strip and Alt+] / Alt+[ switch teammates, keeping the draft and the c
     await page.waitForFunction(() => location.hash === '#/agent/stoat');
     await page.waitForFunction(() => document.querySelector('.thread .composer textarea')?.value === 'draft for stoat');
     // A conversation between two agents links to the other agent's page.
+    await page.getByRole('button', {name:'Show agent chats', exact:true}).click();
     await page.locator('.thread-goto').click();
     await page.waitForFunction(() => location.hash === '#/agent/numbat-claude-opus-karansmbp');
     assert.deepEqual(errors, []);
@@ -678,6 +679,54 @@ test('the first message to an agent clears the composer', async () => {
   } finally { await page.close(); }
 });
 
+
+for (const width of [390, 1500]) {
+  test(`agent detail at ${width}px reveals peer chats only on request and keeps the owner draft`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    state.messages.push(
+      {id:70,sender:'stoat',recipient:'ferret',content:'peer conversation',ts:state.now,status:'delivered'},
+      {id:71,sender:'stoat',recipient:'stoat',content:'private reminder',ts:state.now,status:'delivered'});
+    try {
+      await page.goto(base + '#/agent/stoat');
+      const show = page.getByRole('button', {name:'Show agent chats',exact:true});
+      await show.waitFor();
+      assert.equal(await show.getAttribute('aria-expanded'), 'false');
+      assert.equal(await page.locator('.thread').count(), 1);
+      assert.equal(await page.locator('.thread-goto').count(), 0);
+      const draft = page.locator('.thread .composer textarea');
+      await draft.fill('keep my draft');
+      const owner = await page.locator('.thread').evaluate(e => { e.dataset.ownerLifetime='kept'; return true; });
+      assert.ok(owner);
+      await show.click();
+      const hide = page.getByRole('button', {name:'Hide agent chats',exact:true});
+      assert.equal(await hide.getAttribute('aria-expanded'), 'true');
+      assert.equal(await page.locator('.thread').count(), 3);
+      assert.equal(await page.locator('.thread-goto').count(), 1);
+      assert.equal(await draft.inputValue(), 'keep my draft');
+      assert.equal(await page.locator('.thread').first().getAttribute('data-owner-lifetime'), 'kept');
+      await hide.click();
+      assert.equal(await page.locator('.thread').count(), 1);
+      assert.equal(await draft.inputValue(), 'keep my draft');
+      // Polling in more peer traffic must not reopen it.
+      state.messages.push({id:72,sender:'tapir',recipient:'stoat',content:'new peer',ts:state.now+1,status:'delivered'});
+      await page.waitForFunction(() => document.querySelector('.agent-chats-toggle').textContent.includes('3'));
+      assert.equal(await page.locator('.thread').count(), 1);
+      assert.equal(await show.getAttribute('aria-expanded'), 'false');
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth), width);
+      // Reload and another agent's page both start hidden again.
+      await page.reload();
+      await page.getByRole('button', {name:'Show agent chats',exact:true}).waitFor();
+      assert.equal(await page.locator('.thread').count(), 1);
+      await page.getByRole('button', {name:'Show agent chats',exact:true}).click();
+      await page.goto(base + '#/agent/ferret');
+      await page.getByRole('button', {name:'Show agent chats',exact:true}).waitFor();
+      assert.equal(await page.locator('.thread').count(), 1);
+      assert.equal(await page.locator('.composer textarea').count(), 1);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
 test("between two agents, the page's agent sits on the right", async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   const peer = 'numbat-claude-opus-karansmbp';
@@ -690,6 +739,7 @@ test("between two agents, the page's agent sits on the right", async () => {
     els.map(e => [e.querySelector('.md')?.textContent.trim(), e.classList.contains('right')])));
   try {
     await page.goto(base + '#/agent/stoat');
+    await page.getByRole('button', {name:'Show agent chats', exact:true}).click();
     await page.waitForSelector('.thread-goto');
     let s = await sides();
     assert.equal(s['from stoat'], true);
@@ -697,6 +747,7 @@ test("between two agents, the page's agent sits on the right", async () => {
     // A thread with itself, or with the hub (supervisor nudges), has no agent page to open.
     assert.equal(await page.locator('.thread-goto').count(), 1);
     await page.goto(base + '#/agent/' + peer);
+    await page.getByRole('button', {name:'Show agent chats', exact:true}).click();
     await page.waitForSelector('.thread-goto');
     s = await sides();
     assert.equal(s['from numbat'], true);

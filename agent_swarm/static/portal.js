@@ -13493,6 +13493,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
 }
 function FocusView({ user, state, refresh, freshIds, unreadFor }) {
 	const history = useAgentHistory(user);
+	const [showAgentChats, setShowAgentChats] = d(false);
 	const messages = [...new Map([...history.messages, ...state.messages].filter((m) => m.sender === user || m.recipient === user).map((m) => [m.id, m])).values()].sort((a, b) => a.ts - b.ts || a.id - b.id);
 	const crew = T(() => teammates(state.recipients, state.teams, user), [
 		state.recipients,
@@ -13535,6 +13536,13 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
 		return threadOrder.current.get(a) - threadOrder.current.get(b);
 	}).map(([, msgs]) => msgs);
 	const hasOwnerThread = groups.has(ownerThread);
+	const peerThreads = threads.filter((msgs) => pairKey(msgs[0].sender, msgs[0].recipient) !== ownerThread);
+	const peerChatsId = `agent-chats-${encodeURIComponent(user)}`;
+	const renderThread = (msgs) => {
+		const [a, b] = pairKey(msgs[0].sender, msgs[0].recipient).split(" ");
+		return m$1`<${Thread} key=${pairKey(a, b)} a=${a} b=${b} msgs=${msgs} page=${user} agents=${registered}
+      freshIds=${freshIds} now=${state.now} refresh=${refresh} />`;
+	};
 	return m$1`<div>
     <div class="focus-top">
       <button type="button" class="focus-back" onClick=${() => {
@@ -13562,21 +13570,20 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
     <${Doing} summaries=${r.summaries || []} now=${state.now} />
     <${OwnerNote} key=${user} agent=${r} refresh=${refresh} />
     <${Scope} key=${user} user=${user} refresh=${refresh} />
-    <h2>conversations ${threads.length > 0 && m$1`<span class="count">· ${threads.length}</span>`}</h2>
+    <h2>conversations ${hasOwnerThread && m$1`<span class="count">· 1</span>`}</h2>
     ${history.error && m$1`<p role="status">${history.error}</p>`}
     ${!history.loaded && !history.error && m$1`<p role="status">Loading conversation history…</p>`}
     ${history.more && m$1`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
       ${history.busy ? "Loading older messages…" : "Load older messages"}</button>`}
-    ${threads.length === 0 ? m$1`<div class="thread">${history.loaded && m$1`<div class="empty">Nothing yet. Start a conversation with ${user} below.</div>`}
-          <${MessageComposer} recipient=${user} refresh=${refresh} autoFocus /></div>` : threads.map((msgs) => {
-		const [a, b] = pairKey(msgs[0].sender, msgs[0].recipient).split(" ");
-		return m$1`<${Thread} key=${pairKey(a, b)} a=${a} b=${b} msgs=${msgs} page=${user} agents=${registered}
-            freshIds=${freshIds} now=${state.now} refresh=${refresh} />`;
-	})}
-    ${threads.length > 0 && !hasOwnerThread && m$1`<div class="thread" style="margin-top:14px">
-      <div class="bar">${disp("owner")} <span class="swap">⇄</span> ${user}</div>
-      <${MessageComposer} recipient=${user} refresh=${refresh} autoFocus />
-    </div>`}
+    ${hasOwnerThread ? renderThread(groups.get(ownerThread)) : m$1`<div class="thread">
+      ${threads.length > 0 ? m$1`<div class="bar">${disp("owner")} <span class="swap">⇄</span> ${user}</div>` : history.loaded && m$1`<div class="empty">Nothing yet. Start a conversation with ${user} below.</div>`}
+      <${MessageComposer} recipient=${user} refresh=${refresh} autoFocus /></div>`}
+    ${peerThreads.length > 0 && m$1`<button type="button" class="mini agent-chats-toggle"
+      aria-label=${showAgentChats ? "Hide agent chats" : "Show agent chats"}
+      aria-expanded=${showAgentChats} aria-controls=${peerChatsId}
+      onClick=${() => setShowAgentChats((v) => !v)}>${showAgentChats ? "hide agent chats" : "show agent chats"}
+      <span class="count"> · ${peerThreads.length}</span></button>
+      <div id=${peerChatsId} hidden=${!showAgentChats}>${showAgentChats && peerThreads.map(renderThread)}</div>`}
     <h2 style="margin-top:26px">tasks ${myTasks.length > 0 && m$1`<span class="count">· ${myTasks.length}</span>`}
       ${myTasks.length > 0 && m$1`<a class="h2-link" href=${historyHash({ agent: user })}>search ${user}'s history →</a>`}</h2>
     <${TaskComposer} key=${user} user=${user} state=${state} refresh=${refresh} folded />
