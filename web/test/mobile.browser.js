@@ -562,6 +562,9 @@ for (const width of [390, 1500]) {
     });
     try {
       await page.goto(base + '#/');
+      // The first assertion reads the nav as soon as it exists; without this
+      // wait a loaded machine can read it a beat before the tabs render.
+      await page.waitForSelector('nav.views a[href="#/tab/usage"]');
       assert.deepEqual(await page.locator('nav.views a').allTextContents(), ['overview', 'chats', 'task history', 'usage', 'prs']);
       for (const name of ['usage', 'prs']) {
         await page.locator(`nav.views a[href="#/tab/${name}"]`).click();
