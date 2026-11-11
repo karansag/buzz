@@ -9342,8 +9342,8 @@ function Bee({ node, flavor, size = "", working = false }) {
     ${working && m$1`<g class="bee-working-halo" style=${`--working:${WORKING_HALO.color}`}>
       <circle cx="27" cy="21" r="28" fill=${WORKING_HALO.fill} stroke=${WORKING_HALO.color} stroke-width="2.5" />
     </g>`}
-    <ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(-25 23 10)" />
-    <ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(25 23 32)" />
+    <ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(25 23 10)" />
+    <ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(-25 23 32)" />
     <ellipse cx="26" cy="21" rx="19" ry="10" fill=${machineColor(node)} />
     <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7" />
     <path d="M19 12v18M29 11v20" stroke=${harness.color} stroke-width="4" />
@@ -10508,10 +10508,10 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				const flap = still ? 0 : Math.sin(now / 1e3 * (dancing ? 60 : busy ? 44 : 30)) * .35;
 				ctx.fillStyle = "rgba(240,230,210,.5)";
 				ctx.beginPath();
-				ctx.ellipse(-2, -7, 6, 3, -.45 - flap, 0, Math.PI * 2);
+				ctx.ellipse(-2, -7, 6, 3, .45 + flap, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.beginPath();
-				ctx.ellipse(-2, 7, 6, 3, .45 + flap, 0, Math.PI * 2);
+				ctx.ellipse(-2, 7, 6, 3, -.45 - flap, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.fillStyle = machineColor(r.node);
 				ctx.beginPath();

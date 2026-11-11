@@ -512,9 +512,11 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
           ctx.restore();
         }
         const flap = still ? 0 : Math.sin(now / 1000 * (dancing ? 60 : busy ? 44 : 30)) * .35;
+        // Local +x is forward, so the wings tilt their outer ends back over the
+        // abdomen (up-and-back for the top wing, down-and-back for the bottom).
         ctx.fillStyle = "rgba(240,230,210,.5)";
-        ctx.beginPath(); ctx.ellipse(-2, -7, 6, 3, -.45 - flap, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(-2, 7, 6, 3, .45 + flap, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-2, -7, 6, 3, .45 + flap, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-2, 7, 6, 3, -.45 - flap, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = machineColor(r.node);
         ctx.beginPath(); ctx.ellipse(0, 0, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = "#16120c";

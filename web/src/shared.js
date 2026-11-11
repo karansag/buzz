@@ -126,6 +126,8 @@ export function MachineBadge({ node }) {
   return html`<span class="machine-badge" style=${`--machine:${machineColor(node)}`} title=${`Machine: ${machineName(node)}`}><span class="machine-mark" aria-hidden="true"></span>${machineName(node)}</span>`;
 }
 
+// The bee flies to the right: head at x=44, tail at x=7. Both wings are drawn
+// tilted back over the abdomen, so their outer ends point away from the head.
 export function Bee({ node, flavor, size = "", working = false }) {
   const harness = harnessStyle(flavor);
   return html`<svg class=${`agent-bee ${size}`} style=${`--machine:${machineColor(node)}`} viewBox="0 0 56 42" role="img" aria-label=${`${machineName(node)} machine, ${harness.label} harness${working ? ", working" : ""}`}>
@@ -133,8 +135,8 @@ export function Bee({ node, flavor, size = "", working = false }) {
     ${working && html`<g class="bee-working-halo" style=${`--working:${WORKING_HALO.color}`}>
       <circle cx="27" cy="21" r="28" fill=${WORKING_HALO.fill} stroke=${WORKING_HALO.color} stroke-width="2.5" />
     </g>`}
-    <ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(-25 23 10)" />
-    <ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(25 23 32)" />
+    <ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(25 23 10)" />
+    <ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(-25 23 32)" />
     <ellipse cx="26" cy="21" rx="19" ry="10" fill=${machineColor(node)} />
     <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7" />
     <path d="M19 12v18M29 11v20" stroke=${harness.color} stroke-width="4" />
