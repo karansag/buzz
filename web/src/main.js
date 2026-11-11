@@ -629,25 +629,41 @@ function readJSON(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 }
 
-// A team's ♛ button opens this: pick the queen from its running members
-// (with an optional objective for her).
+// A team's ♛ button opens its name and queen settings.
 function TeamManage({ team, members, refresh, onDone }) {
+  const [name, setName] = useState(team.name);
   const [queen, setQueen] = useState(team.queen || "");
   const [objective, setObjective] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const save = async (e) => {
     e.preventDefault();
-    if (queen === (team.queen || "")) { onDone(); return; }
+    if (busy) return;
+    const trimmed = name.trim();
+    if (!trimmed) { setError("Team name cannot be empty."); return; }
+    const body = {};
+    if (trimmed !== team.name) body.name = trimmed;
+    if (queen !== (team.queen || "")) {
+      body.queen = queen || null;
+      if (queen) body.objective = objective.trim() || null;
+    }
+    if (!Object.keys(body).length) { onDone(); return; }
+    setError("");
     setBusy(true);
-    const body = queen ? { queen, objective: objective.trim() || null } : { queen: null };
     const res = await fetch(`/teams/${team.id}`, { method: "PATCH", headers: JSONH, body: JSON.stringify(body) }).catch(() => null);
+    if (!res?.ok) {
+      setError(res ? await failure(res) : "Could not save team: the hub did not answer.");
+      setBusy(false);
+      return;
+    }
     setBusy(false);
-    if (!res?.ok) { await showNotice(`Could not change the queen of ${team.name}.`); return; }
     onDone();
     refresh();
   };
   const offlineQueen = team.queen && !members.some(r => r.user_id === team.queen);
   return html`<form class="team-manage" onSubmit=${save}>
+    <label>name <input type="text" aria-label="Team name" value=${name} disabled=${busy}
+      onInput=${e => { setName(e.target.value); setError(""); }} /></label>
     <label>queen <select aria-label=${`Queen of ${team.name}`} value=${queen} disabled=${busy} onChange=${e => setQueen(e.target.value)}>
       <option value="">no queen</option>
       ${members.map(r => html`<option key=${r.user_id} value=${r.user_id}>${r.user_id}</option>`)}
@@ -655,6 +671,7 @@ function TeamManage({ team, members, refresh, onDone }) {
     </select></label>
     ${queen && queen !== team.queen && html`<input type="text" aria-label="Objective for the queen" placeholder="objective (optional)"
       value=${objective} disabled=${busy} onInput=${e => setObjective(e.target.value)} />`}
+    ${error && html`<p class="team-manage-error" role="alert">${error}</p>`}
     <div class="team-manage-actions">
       <button class="act" disabled=${busy}>${busy ? "saving…" : "save"}</button>
       <button type="button" class="mini" onClick=${onDone}>cancel</button>
@@ -675,7 +692,7 @@ async function removeTeam(team, refresh) {
 // agent is one small chip that opens its page (which has "stop agent", the
 // way to stop one on a touch screen). Chips drag between groups to change
 // team, or onto the stop zone that shows during a drag. Each team's ♛
-// button picks its queen, and its ✕ removes the team. Offline agents can be retired.
+// button manages its name and queen, and its ✕ removes the team. Offline agents can be retired.
 // New teams and spawning sit at the bottom.
 function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUser = null }) {
   const [dragging, setDragging] = useState(null);
@@ -735,7 +752,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       <summary><span class="team-bees-name">${g.name}</span>
         <span class="team-bees-counts">${g.members.length}${busy ? html` · <span class="working">${busy} working</span>` : ""}${attention ? html` · <span class="attn">${attention} need you</span>` : ""}</span>
         ${team && html`<button type="button" class="team-bees-manage" aria-pressed=${managing === g.key}
-          aria-label=${`Pick queen for ${g.name}`} title=${team.queen ? `queen: ${team.queen} · change queen` : "pick a queen"}
+          aria-label=${`Manage team ${g.name}`} title=${team.queen ? `manage team · queen: ${team.queen}` : "manage team"}
           onClick=${e => { e.preventDefault(); e.stopPropagation(); setManaging(m => m === g.key ? null : g.key); }}>♛</button>`}
         ${team && html`<button type="button" class="team-bees-manage team-bees-remove"
           aria-label=${`Remove team ${g.name}`} title="remove team (its agents keep running)"

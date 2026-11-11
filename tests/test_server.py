@@ -441,7 +441,7 @@ def test_portal_team_contract(client):
     assert "<${NewTeam} refresh=${refresh} />" in portal
     assert "application/x-agent-swarm-agent" in portal
     assert "/team`" in portal
-    assert "{ queen, objective: objective.trim() || null }" in portal
+    assert 'aria-label="Team name"' in portal
     assert "teamBoxesRef" in portal
     assert "assign #${dragTaskRef.current} to team ${targetBox.name}" in portal
     assert "move ${dragBeeRef.current} to team ${targetBox.name}" in portal

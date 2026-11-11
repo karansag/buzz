@@ -786,8 +786,22 @@ def update_task(
         return get_task(conn, task_id)
 
 
+class TeamNameConflict(ValueError):
+    """A different team already uses this name."""
+
+
+def _team_name(conn: sqlite3.Connection, name: str, team_id: int = -1) -> str:
+    name = name.strip()
+    if not name:
+        raise ValueError("Team name cannot be empty.")
+    if conn.execute("SELECT 1 FROM teams WHERE name=? AND id!=?", (name, team_id)).fetchone():
+        raise TeamNameConflict(f'A team named "{name}" already exists.')
+    return name
+
+
 @_serialized
 def create_team(conn: sqlite3.Connection, name: str) -> dict:
+    name = _team_name(conn, name)
     cur = conn.execute(
         "INSERT INTO teams(name, queen, created_at) VALUES(?,?,?)",
         (name, None, time.time()),
@@ -829,7 +843,7 @@ def update_team(
     if team is None:
         return None
     if name is not None:
-        team["name"] = name
+        team["name"] = _team_name(conn, name, team_id)
     if queen is not _UNSET:
         if queen is not None and queen not in team["members"]:
             raise ValueError(f"{queen} is not a member of team {team['name']}")

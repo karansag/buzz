@@ -813,7 +813,7 @@ test('team view: the crown button picks a queen and the ✕ removes the team', a
   try {
     await page.goto(base + '#/');
     const team = page.locator('#agent-sidebar .team-bees-group', { has: page.locator('.team-bees-name', { hasText: /^agent-swarm$/ }) });
-    await team.getByRole('button', { name: 'Pick queen for agent-swarm' }).click();
+    await team.getByRole('button', { name: 'Manage team agent-swarm' }).click();
     const pick = team.getByRole('combobox', { name: 'Queen of agent-swarm' });
     assert.equal(await pick.inputValue(), 'stoat');
     const other = (await pick.locator('option').allTextContents()).find(o => o !== 'no queen' && o !== 'stoat');
@@ -830,6 +830,84 @@ test('team view: the crown button picks a queen and the ✕ removes the team', a
     await team.waitFor({ state: 'detached' });
     assert.deepEqual(deletes, [1]);
     assert.match(question, /Remove team agent-swarm\? Its agents keep running\./);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+
+for (const width of [390, 1500]) {
+  test(`team rename at ${width}px refreshes sidebar, canvas, switcher and task picker`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    const patches = [];
+    await page.addInitScript(() => {
+      window.teamLabels = [];
+      const draw = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function(text, ...args) {
+        if (String(text).includes('renamed crew') && !window.teamLabels.includes(text)) window.teamLabels.push(text);
+        return draw.call(this, text, ...args);
+      };
+    });
+    await page.route('**/teams/1', async route => {
+      const body = route.request().postDataJSON();
+      patches.push(body);
+      Object.assign(state.teams[0], body);
+      await route.fulfill({ json: { ok: true, team: state.teams[0] } });
+    });
+    try {
+      await page.goto(base + '#/');
+      const team = page.locator(width < 500 ? '.hive-panel .team-bees-group' : '#agent-sidebar .team-bees-group').first();
+      await team.getByRole('button', { name: 'Manage team agent-swarm' }).click();
+      await team.getByRole('textbox', { name: 'Team name', exact: true }).fill('  renamed crew  ');
+      await team.getByRole('button', { name: 'save', exact: true }).click();
+      await team.locator('form.team-manage').waitFor({ state: 'detached' });
+      await team.getByRole('button', { name: 'Manage team renamed crew', exact: true }).waitFor();
+      assert.deepEqual(patches, [{ name: 'renamed crew' }]);
+      assert.equal(state.teams[0].queen, 'stoat');
+      if (width >= 500) await page.waitForFunction(() => window.teamLabels.some(t => t.startsWith('renamed crew')));
+      await page.getByRole('button', { name: /^teams .*K/ }).click();
+      const dialog = page.getByRole('dialog', { name: 'Switch team' });
+      assert.match(await dialog.getByRole('option').first().textContent(), /renamed crew/);
+      await page.keyboard.press('Escape');
+      await page.locator('.hive-task-picker select').selectOption('73');
+      assert.equal(await page.locator('.hive-task-detail').getByRole('combobox', { name: 'Assign task #73' }).locator('option[value="t:1"]').textContent(), 'renamed crew');
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
+test('team rename refuses an empty name without sending', async () => {
+  const { page, errors } = await setup(1500, 900, false);
+  const patches = [];
+  await page.route('**/teams/1', async route => {
+    patches.push(route.request().postDataJSON());
+    await route.fulfill({ json: { ok: true } });
+  });
+  try {
+    await page.goto(base + '#/');
+    await page.getByRole('button', { name: 'Manage team agent-swarm' }).click();
+    const form = page.locator('#agent-sidebar .team-manage');
+    await form.getByRole('textbox', { name: 'Team name', exact: true }).fill('   ');
+    await form.getByRole('button', { name: 'save', exact: true }).click();
+    assert.equal(await form.getByRole('alert').textContent(), 'Team name cannot be empty.');
+    assert.deepEqual(patches, []);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('team rename keeps the draft and shows the duplicate-name error inline', async () => {
+  const { page, errors } = await setup(1500, 900, false);
+  await page.route('**/teams/1', route => route.fulfill({ status: 409, json: { detail: { error: 'A team named "spare" already exists.' } } }));
+  try {
+    await page.goto(base + '#/');
+    await page.getByRole('button', { name: 'Manage team agent-swarm' }).click();
+    const form = page.locator('#agent-sidebar .team-manage');
+    const name = form.getByRole('textbox', { name: 'Team name', exact: true });
+    await name.fill('spare');
+    await form.getByRole('button', { name: 'save', exact: true }).click();
+    await form.getByRole('alert').waitFor();
+    assert.equal(await form.getByRole('alert').textContent(), 'A team named "spare" already exists.');
+    assert.equal(await name.inputValue(), 'spare');
+    assert.equal(await form.getByRole('button', { name: 'save', exact: true }).isEnabled(), true);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });

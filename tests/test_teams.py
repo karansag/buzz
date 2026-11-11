@@ -17,6 +17,51 @@ def _make_team(client, name="hivemind"):
     return r.json()["team"]
 
 
+def test_rename_team_preserves_identity_members_queen_and_tasks(client):
+    user = _register(client)
+    team = _make_team(client)
+    client.post(f"/agents/{user}/team", json={"team_id": team["id"]})
+    client.patch(f"/teams/{team['id']}", json={"queen": user})
+    task = client.post("/tasks", json={"title": "team work", "team_id": team["id"]}).json()["task"]
+    calls_before = len(client._calls)
+    response = client.patch(f"/teams/{team['id']}", json={"name": "  new name  "})
+    assert response.status_code == 200
+    renamed = response.json()["team"]
+    assert (renamed["id"], renamed["name"], renamed["queen"], renamed["members"]) == (
+        team["id"], "new name", user, [user]
+    )
+    assert len(client._calls) == calls_before  # renaming must not promote the queen again
+    state = client.get("/api/state").json()
+    assert state["teams"][0]["name"] == "new name"
+    assert next(t for t in state["tasks"] if t["id"] == task["id"])["team_id"] == team["id"]
+    assert client.patch(f"/teams/{team['id']}", json={"name": "new name"}).status_code == 200
+
+
+def test_duplicate_team_name_returns_conflict_without_mutation(client):
+    first = _make_team(client, "first")
+    second = _make_team(client, "second")
+    user = _register(client)
+    client.post(f"/agents/{user}/team", json={"team_id": second["id"]})
+    calls_before = len(client._calls)
+    response = client.patch(f"/teams/{second['id']}", json={"name": " first ", "queen": user})
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"] == 'A team named "first" already exists.'
+    teams = client.get("/teams").json()["teams"]
+    assert [(t["id"], t["name"], t["queen"]) for t in teams] == [
+        (first["id"], "first", None), (second["id"], "second", None)
+    ]
+    assert len(client._calls) == calls_before
+    assert client.post("/teams", json={"name": " first "}).status_code == 409
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_empty_team_name_is_refused(client, name):
+    team = _make_team(client)
+    assert client.patch(f"/teams/{team['id']}", json={"name": name}).status_code == 422
+    assert client.post("/teams", json={"name": name}).status_code == 422
+    assert client.get("/teams").json()["teams"][0]["name"] == team["name"]
+
+
 def test_team_crud_and_membership(client):
     a = _register(client, "0:0.0")
     b = _register(client, "0:1.0")

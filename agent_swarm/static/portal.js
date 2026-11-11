@@ -12358,35 +12358,52 @@ function readJSON(key, fallback) {
 	}
 }
 function TeamManage({ team, members, refresh, onDone }) {
+	const [name, setName] = d(team.name);
 	const [queen, setQueen] = d(team.queen || "");
 	const [objective, setObjective] = d("");
 	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
 	const save = async (e) => {
 		e.preventDefault();
-		if (queen === (team.queen || "")) {
+		if (busy) return;
+		const trimmed = name.trim();
+		if (!trimmed) {
+			setError("Team name cannot be empty.");
+			return;
+		}
+		const body = {};
+		if (trimmed !== team.name) body.name = trimmed;
+		if (queen !== (team.queen || "")) {
+			body.queen = queen || null;
+			if (queen) body.objective = objective.trim() || null;
+		}
+		if (!Object.keys(body).length) {
 			onDone();
 			return;
 		}
+		setError("");
 		setBusy(true);
-		const body = queen ? {
-			queen,
-			objective: objective.trim() || null
-		} : { queen: null };
 		const res = await fetch(`/teams/${team.id}`, {
 			method: "PATCH",
 			headers: JSONH,
 			body: JSON.stringify(body)
 		}).catch(() => null);
-		setBusy(false);
 		if (!res?.ok) {
-			await showNotice(`Could not change the queen of ${team.name}.`);
+			setError(res ? await failure(res) : "Could not save team: the hub did not answer.");
+			setBusy(false);
 			return;
 		}
+		setBusy(false);
 		onDone();
 		refresh();
 	};
 	const offlineQueen = team.queen && !members.some((r) => r.user_id === team.queen);
 	return m$1`<form class="team-manage" onSubmit=${save}>
+    <label>name <input type="text" aria-label="Team name" value=${name} disabled=${busy}
+      onInput=${(e) => {
+		setName(e.target.value);
+		setError("");
+	}} /></label>
     <label>queen <select aria-label=${`Queen of ${team.name}`} value=${queen} disabled=${busy} onChange=${(e) => setQueen(e.target.value)}>
       <option value="">no queen</option>
       ${members.map((r) => m$1`<option key=${r.user_id} value=${r.user_id}>${r.user_id}</option>`)}
@@ -12394,6 +12411,7 @@ function TeamManage({ team, members, refresh, onDone }) {
     </select></label>
     ${queen && queen !== team.queen && m$1`<input type="text" aria-label="Objective for the queen" placeholder="objective (optional)"
       value=${objective} disabled=${busy} onInput=${(e) => setObjective(e.target.value)} />`}
+    ${error && m$1`<p class="team-manage-error" role="alert">${error}</p>`}
     <div class="team-manage-actions">
       <button class="act" disabled=${busy}>${busy ? "saving…" : "save"}</button>
       <button type="button" class="mini" onClick=${onDone}>cancel</button>
@@ -12468,7 +12486,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       <summary><span class="team-bees-name">${g.name}</span>
         <span class="team-bees-counts">${g.members.length}${busy ? m$1` · <span class="working">${busy} working</span>` : ""}${attention ? m$1` · <span class="attn">${attention} need you</span>` : ""}</span>
         ${team && m$1`<button type="button" class="team-bees-manage" aria-pressed=${managing === g.key}
-          aria-label=${`Pick queen for ${g.name}`} title=${team.queen ? `queen: ${team.queen} · change queen` : "pick a queen"}
+          aria-label=${`Manage team ${g.name}`} title=${team.queen ? `manage team · queen: ${team.queen}` : "manage team"}
           onClick=${(e) => {
 			e.preventDefault();
 			e.stopPropagation();

@@ -2049,17 +2049,27 @@ def create_app(
 
     @app.post("/teams")
     def teams_create(req: TeamCreateReq, _: None = Depends(_require_owner)):
-        return {"ok": True, "team": db.create_team(conn, req.name.strip())}
+        try:
+            team = db.create_team(conn, req.name)
+        except db.TeamNameConflict as exc:
+            raise HTTPException(status_code=409, detail={"error": str(exc)}) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"error": str(exc)}) from exc
+        return {"ok": True, "team": team}
 
     @app.patch("/teams/{team_id}")
     def teams_update(team_id: int, req: TeamUpdateReq, _: None = Depends(_require_owner)):
         kwargs = {}
         if req.name is not None:
             kwargs["name"] = req.name.strip()
+            if not kwargs["name"]:
+                raise HTTPException(status_code=422, detail={"error": "Team name cannot be empty."})
         if "queen" in req.model_fields_set:
             kwargs["queen"] = req.queen or None
         try:
             team = db.update_team(conn, team_id, **kwargs)
+        except db.TeamNameConflict as exc:
+            raise HTTPException(status_code=409, detail={"error": str(exc)}) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail={"error": str(exc)})
         if team is None:
