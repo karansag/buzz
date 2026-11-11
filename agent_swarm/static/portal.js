@@ -13324,17 +13324,21 @@ function marked(text, words) {
 	return text.split(re).map((part, i) => i % 2 ? m$1`<mark>${part}</mark>` : part);
 }
 function ChatsView({ state, unreadFor }) {
-	const [view, setView] = d(() => chatsParams().get("view") === "agents" ? "agents" : "you");
+	const [view, setView] = d(() => {
+		const selected = chatsParams().get("view");
+		return ["agents", "queens"].includes(selected) ? selected : "you";
+	});
 	const pick = (v) => {
 		setView(v);
-		history.replaceState(null, "", v === "agents" ? `${CHATS_ROUTE}?view=agents` : CHATS_ROUTE);
+		history.replaceState(null, "", v === "you" ? CHATS_ROUTE : `${CHATS_ROUTE}?view=${v}`);
 	};
 	return m$1`<div class="chats">
     <div class="agents-view-switch chats-switch" role="group" aria-label="Which chats">
       <button type="button" aria-pressed=${view === "you"} onClick=${() => pick("you")}>with you</button>
+      <button type="button" aria-pressed=${view === "queens"} onClick=${() => pick("queens")}>you and queens</button>
       <button type="button" aria-pressed=${view === "agents"} onClick=${() => pick("agents")}>between agents</button>
     </div>
-    ${view === "agents" ? m$1`<${AgentTalk} state=${state} />` : m$1`<${OwnerChats} state=${state} unreadFor=${unreadFor} />`}
+    ${view === "agents" ? m$1`<${AgentTalk} state=${state} />` : m$1`<${OwnerChats} key=${view} state=${state} unreadFor=${unreadFor} queensOnly=${view === "queens"} />`}
   </div>`;
 }
 var clock = (ts) => (/* @__PURE__ */ new Date(ts * 1e3)).toLocaleTimeString([], {
@@ -13419,7 +13423,7 @@ function TalkThread({ t, words }) {
     </div>`)}</div>`}
   </details>`;
 }
-function OwnerChats({ state, unreadFor }) {
+function OwnerChats({ state, unreadFor, queensOnly = false }) {
 	const [full, setFull] = d(null);
 	const [query, setQuery] = d(chatsQuery);
 	h(() => {
@@ -13435,27 +13439,37 @@ function OwnerChats({ state, unreadFor }) {
 	}, []);
 	const update = (q) => {
 		setQuery(q);
-		history.replaceState(null, "", q ? `${CHATS_ROUTE}?q=${encodeURIComponent(q)}` : CHATS_ROUTE);
+		const params = new URLSearchParams();
+		if (queensOnly) params.set("view", "queens");
+		if (q) params.set("q", q);
+		history.replaceState(null, "", params.size ? `${CHATS_ROUTE}?${params}` : CHATS_ROUTE);
 	};
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-	const chats = T(() => ownerChats([...state.messages, ...full || []], query), [
+	const chats = T(() => {
+		const all = ownerChats([...state.messages, ...full || []], query);
+		if (!queensOnly) return all;
+		const queens = new Set((state.teams || []).map((t) => t.queen).filter(Boolean));
+		return all.filter((c) => queens.has(c.agent));
+	}, [
 		state.messages,
 		full,
-		query
+		query,
+		queensOnly,
+		state.teams
 	]);
 	const byId = new Map(state.recipients.map((r) => [r.user_id, r]));
 	return m$1`
-    <h2>with you <span class="count">· ${chats.length}${full === null ? " · loading full history…" : ""}</span></h2>
+    <h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· ${chats.length}${full === null ? " · loading full history…" : ""}</span></h2>
     <input type="text" class="h-search chats-search" value=${query} autofocus
-      placeholder="search your conversations: who did I ask about…"
-      aria-label="Search your conversations" onInput=${(e) => update(e.target.value)}
+      placeholder=${queensOnly ? "search your conversations with queens…" : "search your conversations: who did I ask about…"}
+      aria-label=${queensOnly ? "Search your conversations with queens" : "Search your conversations"} onInput=${(e) => update(e.target.value)}
       onKeyDown=${(e) => {
 		if (e.key === "Escape" && query) {
 			e.stopPropagation();
 			update("");
 		}
 	}} />
-    ${chats.length === 0 ? m$1`<div class="empty">${query ? m$1`No conversation mentions "<b>${query}</b>".` : "No conversations yet."}</div>` : m$1`<div class="chat-list">${chats.map((c) => {
+    ${chats.length === 0 ? m$1`<div class="empty">${query ? m$1`No conversation mentions "<b>${query}</b>".` : queensOnly ? "No conversations with current team queens yet." : "No conversations yet."}</div>` : m$1`<div class="chat-list">${chats.map((c) => {
 		const r = byId.get(c.agent);
 		const st = STATE[r ? agentStatus(r) : "unknown"] || STATE.unknown;
 		const m = c.match || c.last;

@@ -718,6 +718,72 @@ test('chats tab lists owner conversations newest first and searches them', async
   } finally { await page.close(); }
 });
 
+
+for (const width of [320, 1500]) {
+  test(`queen chats at ${width}px filter current leads, search history, and survive reload`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    state.teams.push(
+      { id: 2, name: 'research', queen: 'tapir', members: ['tapir'] },
+      { id: 3, name: 'another team', queen: 'stoat', members: ['stoat'] },
+      { id: 4, name: 'leaderless', queen: null, members: ['ferret'] });
+    state.recipients.find(a => a.user_id === 'tapir').pane_alive = false;
+    state.messages.push({ id: 80, sender: 'owner', recipient: 'ferret', content: 'member conversation', ts: state.now + 10, status: 'delivered', attachments: [] });
+    const history = { id: 81, sender: 'tapir', recipient: 'owner', content: 'Zephyr research report', ts: state.now - 100, status: 'delivered', attachments: [] };
+    await page.route('**/messages?user=owner&limit=*', route => route.fulfill({ json: { messages: [history] } }));
+    const who = () => page.locator('.chat-who').evaluateAll(els => els.map(e => e.childNodes[0].textContent.trim()));
+    try {
+      await page.goto(base + '#/chats');
+      const switches = page.getByRole('group', { name: 'Which chats' });
+      assert.deepEqual(await switches.getByRole('button').allTextContents(), ['with you', 'you and queens', 'between agents']);
+      const buttons = await switches.getByRole('button').evaluateAll(bs => bs.map(b => {
+        const r = b.getBoundingClientRect(); return { x: r.x, y: r.y, height: r.height };
+      }));
+      assert.ok(buttons.every(b => b.y === buttons[0].y));
+      assert.ok(buttons[0].x < buttons[1].x && buttons[1].x < buttons[2].x);
+      if (width < 500) assert.ok(buttons.every(b => b.height >= 44));
+      await switches.getByRole('button', { name: 'you and queens', exact: true }).click();
+      await page.waitForFunction(() => document.querySelectorAll('.chat-row').length === 2);
+      assert.deepEqual(await who(), ['stoat', 'tapir']);
+      assert.equal(await page.locator('.chat-row').nth(1).getAttribute('href'), '#/agent/tapir');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      await page.getByRole('textbox', { name: 'Search your conversations with queens', exact: true }).fill('Zephyr');
+      await page.waitForFunction(() => document.querySelectorAll('.chat-row').length === 1);
+      assert.deepEqual(await who(), ['tapir']);
+      assert.equal(await page.evaluate(() => location.hash), '#/chats?view=queens&q=Zephyr');
+      await page.reload();
+      await page.waitForSelector('.chat-row');
+      assert.deepEqual(await who(), ['tapir']);
+      assert.equal(await page.getByRole('button', { name: 'you and queens', exact: true }).getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.locator('.chats-search').inputValue(), 'Zephyr');
+      await page.locator('.chats-search').press('Escape');
+      assert.equal(await page.evaluate(() => location.hash), '#/chats?view=queens');
+      // A new queen replaces the old one on the ordinary state poll, even with history loaded.
+      state.teams[1].queen = 'ferret';
+      await page.waitForFunction(() => [...document.querySelectorAll('.chat-who')].some(e => e.textContent.includes('ferret')));
+      assert.deepEqual(await who(), ['ferret', 'stoat']);
+      await switches.getByRole('button', { name: 'with you', exact: true }).click();
+      await page.waitForFunction(() => document.querySelectorAll('.chat-row').length === 3);
+      assert.deepEqual(await who(), ['ferret', 'stoat', 'tapir']);
+      assert.equal(await page.evaluate(() => location.hash), '#/chats');
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
+test('queen chats show an empty state when no team has a queen', async () => {
+  const { page, state, errors } = await setup(390, 844);
+  state.teams[0].queen = null;
+  try {
+    await page.goto(base + '#/chats?view=queens');
+    await page.getByText('No conversations with current team queens yet.', { exact: true }).waitFor();
+    assert.equal(await page.locator('.chat-row').count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'you and queens', exact: true }).getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: 'with you', exact: true }).click();
+    await page.waitForSelector('.chat-row');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 test('chats tab: between agents groups talk into bursts and broadcasts, filters by team', async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   const t = state.now;

@@ -1530,9 +1530,10 @@ function TeamStrip({ crew, user, unreadFor }) {
   </nav>`;
 }
 
-// Two views. "with you": every conversation the owner has had, one row per
+// "with you": every conversation the owner has had, one row per
 // agent, newest first, to find whom you asked about something that never
-// became a task. "between agents": the agents' talk with each other, as
+// became a task. "you and queens" narrows those to the current team leads.
+// "between agents": the agents' talk with each other, as
 // bursts per pair and broadcasts (see agentThreads), newest first under day
 // headings. Each view's history loads once when it opens; new messages come
 // from the poll.
@@ -1557,19 +1558,23 @@ function marked(text, words) {
 }
 
 function ChatsView({ state, unreadFor }) {
-  const [view, setView] = useState(() => (chatsParams().get("view") === "agents" ? "agents" : "you"));
+  const [view, setView] = useState(() => {
+    const selected = chatsParams().get("view");
+    return ["agents", "queens"].includes(selected) ? selected : "you";
+  });
   const pick = (v) => {
     setView(v);
-    history.replaceState(null, "", v === "agents" ? `${CHATS_ROUTE}?view=agents` : CHATS_ROUTE);
+    history.replaceState(null, "", v === "you" ? CHATS_ROUTE : `${CHATS_ROUTE}?view=${v}`);
   };
   return html`<div class="chats">
     <div class="agents-view-switch chats-switch" role="group" aria-label="Which chats">
       <button type="button" aria-pressed=${view === "you"} onClick=${() => pick("you")}>with you</button>
+      <button type="button" aria-pressed=${view === "queens"} onClick=${() => pick("queens")}>you and queens</button>
       <button type="button" aria-pressed=${view === "agents"} onClick=${() => pick("agents")}>between agents</button>
     </div>
     ${view === "agents"
       ? html`<${AgentTalk} state=${state} />`
-      : html`<${OwnerChats} state=${state} unreadFor=${unreadFor} />`}
+      : html`<${OwnerChats} key=${view} state=${state} unreadFor=${unreadFor} queensOnly=${view === "queens"} />`}
   </div>`;
 }
 
@@ -1648,7 +1653,7 @@ function TalkThread({ t, words }) {
   </details>`;
 }
 
-function OwnerChats({ state, unreadFor }) {
+function OwnerChats({ state, unreadFor, queensOnly = false }) {
   const [full, setFull] = useState(null);
   const [query, setQuery] = useState(chatsQuery);
   useEffect(() => {
@@ -1661,22 +1666,30 @@ function OwnerChats({ state, unreadFor }) {
   }, []);
   const update = (q) => {
     setQuery(q);
-    history.replaceState(null, "", q ? `${CHATS_ROUTE}?q=${encodeURIComponent(q)}` : CHATS_ROUTE);
+    const params = new URLSearchParams();
+    if (queensOnly) params.set("view", "queens");
+    if (q) params.set("q", q);
+    history.replaceState(null, "", params.size ? `${CHATS_ROUTE}?${params}` : CHATS_ROUTE);
   };
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const chats = useMemo(
-    () => ownerChats([...state.messages, ...(full || [])], query),
-    [state.messages, full, query],
+    () => {
+      const all = ownerChats([...state.messages, ...(full || [])], query);
+      if (!queensOnly) return all;
+      const queens = new Set((state.teams || []).map(t => t.queen).filter(Boolean));
+      return all.filter(c => queens.has(c.agent));
+    },
+    [state.messages, full, query, queensOnly, state.teams],
   );
   const byId = new Map(state.recipients.map(r => [r.user_id, r]));
   return html`
-    <h2>with you <span class="count">· ${chats.length}${full === null ? " · loading full history…" : ""}</span></h2>
+    <h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· ${chats.length}${full === null ? " · loading full history…" : ""}</span></h2>
     <input type="text" class="h-search chats-search" value=${query} autofocus
-      placeholder="search your conversations: who did I ask about…"
-      aria-label="Search your conversations" onInput=${e => update(e.target.value)}
+      placeholder=${queensOnly ? "search your conversations with queens…" : "search your conversations: who did I ask about…"}
+      aria-label=${queensOnly ? "Search your conversations with queens" : "Search your conversations"} onInput=${e => update(e.target.value)}
       onKeyDown=${e => { if (e.key === "Escape" && query) { e.stopPropagation(); update(""); } }} />
     ${chats.length === 0
-      ? html`<div class="empty">${query ? html`No conversation mentions "<b>${query}</b>".` : "No conversations yet."}</div>`
+      ? html`<div class="empty">${query ? html`No conversation mentions "<b>${query}</b>".` : queensOnly ? "No conversations with current team queens yet." : "No conversations yet."}</div>`
       : html`<div class="chat-list">${chats.map(c => {
           const r = byId.get(c.agent);
           const st = STATE[r ? agentStatus(r) : "unknown"] || STATE.unknown;

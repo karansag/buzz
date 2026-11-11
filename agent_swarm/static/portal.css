@@ -386,6 +386,10 @@
   .chat-line mark { background: rgba(242,169,59,.3); color: var(--cream); border-radius: 2px; }
   /* chats › between agents: bursts per pair, under day headings */
   .chats-switch { margin-bottom: 14px; }
+  @media (max-width: 480px) {
+    .chats .chats-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .chats .chats-switch button { padding: 4px 6px; }
+  }
   .agent-talk-filters { display: flex; gap: 8px; align-items: flex-start; }
   .agent-talk-filters .chats-search { flex: 1; min-width: 0; }
   .agent-talk-filters select { flex: none; max-width: 40%; }
