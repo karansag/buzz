@@ -2,6 +2,7 @@ import { agentPreview } from "./agent-preview.js";
 import { html } from "htm/preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Bee } from "./shared.js";
+import { Crown } from "./queen.js";
 
 export function switchOptions(state, mode, query) {
   if (!state) return [];
@@ -16,7 +17,7 @@ export function switchOptions(state, mode, query) {
         || a.user_id.localeCompare(b.user_id));
       const target = members[0];
       return { id: `team-${team.id}`, name: team.name, target,
-        detail: target ? `${members.filter(a => a.pane_alive).length} live · opens ${target.user_id}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
+        detail: target ? `${members.filter(a => a.pane_alive).length} live · opens ${target.user_id}${target.user_id === team.queen ? " · ♛ queen" : ""}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
         search: [team.name, ...members.map(a => a.user_id)].join(" ") };
     });
   } else {
@@ -102,7 +103,7 @@ export function QuickSwitcher({ state, navigate }) {
           aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
           onClick=${() => choose(o)}>
           ${o.target && html`<${Bee} node=${o.target.node} flavor=${o.target.flavor} size="small" working=${o.target.activity?.status === "working"} />`}
-          <span><b>${o.name}</b><small>${o.detail}</small>
+          <span><b>${o.name}</b><${Crown} teams=${state.teams} user=${o.target?.user_id} word=${true} /><small>${o.detail}</small>
             ${o.summary && html`<small class="quick-switch-summary" title=${o.summary}>${o.summary}</small>`}</span>
         </div>`)}
         ${!options.length && html`<p class="empty">No matches.</p>`}

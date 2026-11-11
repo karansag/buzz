@@ -142,8 +142,12 @@
   button.stop-agent:hover { color: var(--alert); border-color: var(--alert); }
   button.stop-agent:disabled { opacity: .5; cursor: wait; }
 
-  .crown { color: var(--honey); font-size: 11px; margin-left: 3px; }
+  /* Every list that shows agents marks a team's queen with this crown. */
+  .crown { color: var(--honey); font-size: 12px; margin-left: 3px; white-space: nowrap; }
+  .crown .crown-word { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; margin-left: 3px; vertical-align: 1px; }
   .crown.supervisor { color: var(--moss, var(--honey)); }
+  .fhead .nm .crown { font-size: 15px; }
+  .bee-name .crown, .chat-who .crown { font-size: 13px; }
   form.newteam { display: flex; gap: 6px; margin: 2px 0 14px; }
   form.newteam input { flex: 1; min-width: 0; }
   form.spawn { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 20px; }
@@ -784,12 +788,16 @@ button.harness-key[aria-pressed=true] { border-color: var(--honey-dim); color: v
 .team-bees { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .team-bees-group { border: 1px solid var(--honey-dim); border-radius: 10px; padding: 0 8px; background: rgba(242,169,59,.03); }
 .team-bees-group.loose { border-style: dashed; border-color: var(--line); background: none; }
-.team-bees-group > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; list-style: none; }
+.team-bees-group > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; cursor: pointer; list-style: none; }
 .team-bees-group > summary::-webkit-details-marker { display: none; }
 .team-bees-group > summary::before { content: "▾"; color: var(--honey-dim); font-size: 11px; }
 .team-bees-group:not([open]) > summary::before { content: "▸"; }
 .team-bees-name { color: var(--honey); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 .team-bees-group.loose .team-bees-name { color: var(--cream-dim); }
+.team-bees-title { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.team-bees-queen { color: var(--honey); font-size: 11px; overflow-wrap: anywhere; }
+.team-bees-queen.none { color: var(--cream-dim); opacity: .7; font-style: italic; }
+.team-bees-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .team-bees-counts { margin-left: auto; color: var(--cream-dim); font-size: 11px; }
 .team-bees-counts .working { color: var(--moss); }
 .team-bees-counts .attn { color: var(--honey); }

@@ -9402,6 +9402,25 @@ function OwnerNote({ agent, refresh }) {
   </div>`;
 }
 //#endregion
+//#region web/src/queen.js
+function queenTeam(teams, user) {
+	if (!user) return null;
+	return (Array.isArray(teams) ? teams : [teams]).find((t) => t && t.queen === user) || null;
+}
+function isQueen(teams, user) {
+	return queenTeam(teams, user) !== null;
+}
+function queenSuffix(teams, user) {
+	return isQueen(teams, user) ? " · ♛ queen" : "";
+}
+function Crown({ teams, user, word = false, teamName = false }) {
+	const team = queenTeam(teams, user);
+	if (!team) return null;
+	const said = `queen of ${team.name}`;
+	const shown = teamName ? said : word ? "queen" : null;
+	return m$1`<span class="crown" title=${said}><span aria-hidden="true">♛</span>${shown && m$1`<span class="crown-word" aria-hidden="true">${shown}</span>`}<span class="sr-only">${said}</span></span>`;
+}
+//#endregion
 //#region web/src/quick-switch.js
 function switchOptions(state, mode, query) {
 	if (!state) return [];
@@ -9415,7 +9434,7 @@ function switchOptions(state, mode, query) {
 			id: `team-${team.id}`,
 			name: team.name,
 			target,
-			detail: target ? `${members.filter((a) => a.pane_alive).length} live · opens ${target.user_id}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
+			detail: target ? `${members.filter((a) => a.pane_alive).length} live · opens ${target.user_id}${target.user_id === team.queen ? " · ♛ queen" : ""}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
 			search: [team.name, ...members.map((a) => a.user_id)].join(" ")
 		};
 	});
@@ -9529,7 +9548,7 @@ function QuickSwitcher({ state, navigate }) {
           aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
           onClick=${() => choose(o)}>
           ${o.target && m$1`<${Bee} node=${o.target.node} flavor=${o.target.flavor} size="small" working=${o.target.activity?.status === "working"} />`}
-          <span><b>${o.name}</b><small>${o.detail}</small>
+          <span><b>${o.name}</b><${Crown} teams=${state.teams} user=${o.target?.user_id} word=${true} /><small>${o.detail}</small>
             ${o.summary && m$1`<small class="quick-switch-summary" title=${o.summary}>${o.summary}</small>`}</span>
         </div>`)}
         ${!options.length && m$1`<p class="empty">No matches.</p>`}
@@ -9958,7 +9977,7 @@ function CompactBees({ state, machine, harness = null }) {
 			agentPreview(r)
 		].filter(Boolean).join(" · ")} style=${`--machine:${machineColor(r.node)}`}>
         <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
-        <span class="bee-name">${r.user_id}</span>
+        <span class="bee-name">${r.user_id}<${Crown} teams=${state.teams} user=${r.user_id} /></span>
         <span class="bee-machine">${machineName(r.node)}</span>
         <span class="bee-state"><span class=${`status ${st.cls}`} aria-hidden="true"></span>${st.word} · ${harness.mark} ${harness.label}</span>
       </a>`;
@@ -9990,7 +10009,7 @@ function HiveTaskDetail({ task, state, refresh, onClose }) {
 	return m$1`<section class="hive-task-detail" aria-label=${`Task #${task.id} details`}>
     <header><h3>#${task.id} · ${task.title}</h3>
       <button type="button" class="mini" onClick=${onClose}>Collapse</button></header>
-    <p>${task.status.replaceAll("_", " ")} · ${task.assignee || "unassigned"}${task.team_id ? ` · team ${(state.teams || []).find((t) => t.id === task.team_id)?.name || task.team_id}` : ""}</p>
+    <p>${task.status.replaceAll("_", " ")} · ${task.assignee || "unassigned"}${queenSuffix(state.teams, task.assignee)}${task.team_id ? ` · team ${(state.teams || []).find((t) => t.id === task.team_id)?.name || task.team_id}` : ""}</p>
     ${task.description && m$1`<p class="task-description">${task.description}</p>`}
     ${task.depends_on?.length > 0 && m$1`<p>Depends on ${task.depends_on.map((id) => `#${id}`).join(", ")}</p>`}
     ${task.worktree && m$1`<p>Worktree: ${task.worktree_node || ""} ${task.worktree}</p>`}
@@ -10000,7 +10019,7 @@ function HiveTaskDetail({ task, state, refresh, onClose }) {
       <select aria-label=${`Assign task #${task.id}`} value=${task.team_id ? `t:${task.team_id}` : task.assignee || ""} disabled=${busy || task.status === "done"} onChange=${assign}>
         <option value="">unassigned</option>
         <optgroup label="Teams">${(state.teams || []).map((t) => m$1`<option value=${`t:${t.id}`}>${t.name}</option>`)}</optgroup>
-        <optgroup label="Agents">${agents.map((a) => m$1`<option value=${a}>${a}</option>`)}</optgroup>
+        <optgroup label="Agents">${agents.map((a) => m$1`<option value=${a}>${a}${queenSuffix(state.teams, a)}</option>`)}</optgroup>
       </select>
     </label>
     ${error && m$1`<p role="alert">${error}</p>`}
@@ -10548,10 +10567,10 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				const myTeam = r.team_id && teamById.get(r.team_id) || null;
 				if (myTeam && myTeam.queen === name) {
 					ctx.fillStyle = "#f2a93b";
-					ctx.font = "11px ui-monospace, monospace";
+					ctx.font = "bold 13px ui-monospace, monospace";
 					ctx.textAlign = "center";
 					ctx.textBaseline = "alphabetic";
-					ctx.fillText("♛", x, y - (attention ? 26 : 14));
+					ctx.fillText("♛", x, y - (attention ? 27 : 15));
 				}
 				ctx.restore();
 			}
@@ -11332,7 +11351,7 @@ function TaskEdit({ task, refresh, done }) {
     </div>
   </form>`;
 }
-function TaskTile({ rec, re, now, filterAgent, refresh }) {
+function TaskTile({ rec, re, now, teams, filterAgent, refresh }) {
 	const t = rec.src;
 	const f = rec.fields;
 	const [editing, setEditing] = d(false);
@@ -11344,7 +11363,7 @@ function TaskTile({ rec, re, now, filterAgent, refresh }) {
     <div class="h-who">
       ${t.assignee ? m$1`<${Avatar} name=${t.assignee} size="tiny" />
           <a class="agent-link h-agent" href=${focusHash(t.assignee)}
-            title=${`Open ${t.assignee} and message it`}>${hl(t.assignee, re)}</a>
+            title=${`Open ${t.assignee} and message it`}>${hl(t.assignee, re)}</a><${Crown} teams=${teams} user=${t.assignee} />
           <button type="button" class="h-only" onClick=${() => filterAgent(t.assignee)}
             title=${`Show only ${t.assignee}'s tasks`} aria-label=${`Show only ${t.assignee}'s tasks`}>⌕</button>` : m$1`<span class="h-noagent">unassigned</span>`}
       <span class=${`pill ${t.status}`}>${t.status.replace("_", " ")}</span>
@@ -11367,13 +11386,13 @@ function TaskTile({ rec, re, now, filterAgent, refresh }) {
     </div>
   </article>`;
 }
-function StatusTile({ rec, re, now, filterAgent }) {
+function StatusTile({ rec, re, now, teams, filterAgent }) {
 	const s = rec.src;
 	return m$1`<article class="htile status-line">
     <div class="h-who">
       <${Avatar} name=${s.user_id} size="tiny" />
       <a class="agent-link h-agent" href=${focusHash(s.user_id)}
-        title=${`Open ${s.user_id} and message it`}>${hl(s.user_id, re)}</a>
+        title=${`Open ${s.user_id} and message it`}>${hl(s.user_id, re)}</a><${Crown} teams=${teams} user=${s.user_id} />
       <button type="button" class="h-only" onClick=${() => filterAgent(s.user_id)}
         title=${`Show only ${s.user_id}`} aria-label=${`Show only ${s.user_id}`}>⌕</button>
       <span class="pill statusline">${s.current ? "status now" : "status"}</span>
@@ -11471,7 +11490,7 @@ function HistoryView({ state, refresh }) {
             class=${`h-agentchip ${s.agent === a ? "on" : ""}`} aria-pressed=${s.agent === a}
             style=${`--hue: hsl(${hue(a)} 42% 58%)`}
             title=${s.agent === a ? "Clear the agent filter" : `Show only ${a}'s tasks`}
-            onClick=${() => filterAgent(a)}>${a} <span class="n">${n}</span></button>`)}
+            onClick=${() => filterAgent(a)}>${a}<${Crown} teams=${state.teams} user=${a} /> <span class="n">${n}</span></button>`)}
       ${(s.q || s.status || s.agent) && m$1`<button type="button" class="mini" onClick=${() => update({
 		q: "",
 		status: "",
@@ -11480,7 +11499,8 @@ function HistoryView({ state, refresh }) {
     </div>
     ${shown.length === 0 ? m$1`<div class="empty">No tasks match${s.q ? m$1` "<b>${s.q}</b>"` : ""}.</div>` : m$1`<div class="h-grid">
           ${shown.map((r) => {
-		return m$1`<${TILE[r.kind]} key=${r.key} rec=${r} re=${re} now=${state.now} filterAgent=${filterAgent} refresh=${refresh} />`;
+		return m$1`<${TILE[r.kind]} key=${r.key} rec=${r} re=${re} now=${state.now} teams=${state.teams}
+              filterAgent=${filterAgent} refresh=${refresh} />`;
 	})}
         </div>`}
   </div>`;
@@ -12207,7 +12227,7 @@ function TaskCard({ t, agentIds, teams, blockers, refresh }) {
     ${blocked && m$1`<div class="meta blocked-tag" title="dependencies not yet done">blocked by ${blockers.map((d) => `#${d}`).join(" ")}</div>`}
     <${AttachmentList} files=${t.attachments} />
     ${t.assignee && m$1`<div class="meta">${t.status === "open" ? "assigned to" : t.status === "done" ? "done by" : "picked up by"} <a class="agent-link" href=${focusHash(t.assignee)}
-        title=${`Open ${t.assignee} and message it`}>${t.assignee}</a></div>`}
+        title=${`Open ${t.assignee} and message it`}>${t.assignee}</a><${Crown} teams=${teams} user=${t.assignee} /></div>`}
     ${t.note && m$1`<div class="tnote">
       <button type="button" class="tnote-toggle" onClick=${() => setShowNote(!showNote)}
         title="How to verify this work">${showNote ? "▾" : "▸"} how to verify</button>
@@ -12223,7 +12243,7 @@ function TaskCard({ t, agentIds, teams, blockers, refresh }) {
         ${teams.length > 0 && m$1`<optgroup label="teams">
           ${teams.map((x) => m$1`<option key=${`t:${x.id}`} value=${`t:${x.id}`}>team ${x.name}</option>`)}
         </optgroup>`}
-        ${ids.map((a) => m$1`<option key=${a} value=${a}>${a}${agentIds.includes(a) ? "" : " (stopped)"}</option>`)}
+        ${ids.map((a) => m$1`<option key=${a} value=${a}>${a}${queenSuffix(teams, a)}${agentIds.includes(a) ? "" : " (stopped)"}</option>`)}
       </select>
       <${TaskStatusActions} task=${t} refresh=${refresh} />
     </div>
@@ -12312,7 +12332,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
       <option value="">Unassigned</option>
       ${!targetExists && m$1`<option value=${assignee} disabled>${assignee} (unavailable)</option>`}
       ${teams.length > 0 && m$1`<optgroup label="Teams">${teams.map((t) => m$1`<option value=${`t:${t.id}`}>${t.name}</option>`)}</optgroup>`}
-      <optgroup label="Agents">${agents.map((r) => m$1`<option value=${r.user_id}>${r.user_id} · ${machineName(r.node)}${r.pane_alive ? "" : " (offline)"}</option>`)}</optgroup>
+      <optgroup label="Agents">${agents.map((r) => m$1`<option value=${r.user_id}>${r.user_id}${queenSuffix(teams, r.user_id)} · ${machineName(r.node)}${r.pane_alive ? "" : " (offline)"}</option>`)}</optgroup>
     </select></label><button class="act" disabled=${busy || attachments.uploading > 0 || !title.trim() || !targetExists}>${busy ? "Creating…" : "create task"}</button></div>
     ${!targetExists && m$1`<p class="task-compose-status">The selected assignee is unavailable. Choose another destination.</p>`}
     ${status && m$1`<p class="task-compose-status" role="status">${status}</p>`}
@@ -12411,7 +12431,7 @@ function TeamManage({ team, members, refresh, onDone }) {
 		setName(e.target.value);
 		setError("");
 	}} /></label>
-    <label>queen <select aria-label=${`Queen of ${team.name}`} value=${queen} disabled=${busy} onChange=${(e) => setQueen(e.target.value)}>
+    <label><span class="crown" aria-hidden="true">♛</span> queen <select aria-label=${`Queen of ${team.name}`} value=${queen} disabled=${busy} onChange=${(e) => setQueen(e.target.value)}>
       <option value="">no queen</option>
       ${members.map((r) => m$1`<option key=${r.user_id} value=${r.user_id}>${r.user_id}</option>`)}
       ${offlineQueen && m$1`<option value=${team.queen}>${team.queen} (offline)</option>`}
@@ -12490,22 +12510,23 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 		const empty = !g.members.length && !g.gone.length;
 		return m$1`<details key=${g.key} class=${`team-bees-group ${g.key === "none" ? "loose" : ""} ${empty && !dragging ? "empty" : ""} ${over === g.key ? "over" : ""}`}
         open=${!collapsed.has(g.key) || managing === g.key} onToggle=${(e) => toggle(g.key, e.currentTarget.open)} ...${drop}>
-      <summary><span class="team-bees-name">${g.name}</span>
-        <span class="team-bees-counts">${g.members.length}${busy ? m$1` · <span class="working">${busy} working</span>` : ""}${attention ? m$1` · <span class="attn">${attention} need you</span>` : ""}</span>
+      <summary><span class="team-bees-title"><span class="team-bees-name">${g.name}</span>
+        ${team && (team.queen ? m$1`<span class="team-bees-queen" title=${`queen of ${team.name}: ${team.queen}`}>♛ ${team.queen}</span>` : m$1`<span class="team-bees-queen none" title="this team has no queen">no queen</span>`)}</span>
+        <span class="team-bees-actions"><span class="team-bees-counts">${g.members.length}${busy ? m$1` · <span class="working">${busy} working</span>` : ""}${attention ? m$1` · <span class="attn">${attention} need you</span>` : ""}</span>
         ${team && m$1`<button type="button" class="team-bees-manage" aria-pressed=${managing === g.key}
           aria-label=${`Manage team ${g.name}`} title=${team.queen ? `manage team · queen: ${team.queen}` : "manage team"}
           onClick=${(e) => {
 			e.preventDefault();
 			e.stopPropagation();
 			setManaging((m) => m === g.key ? null : g.key);
-		}}>♛</button>`}
+		}}>✎</button>`}
         ${team && m$1`<button type="button" class="team-bees-manage team-bees-remove"
           aria-label=${`Remove team ${g.name}`} title="remove team (its agents keep running)"
           onClick=${(e) => {
 			e.preventDefault();
 			e.stopPropagation();
 			removeTeam(team, refresh);
-		}}>✕</button>`}</summary>
+		}}>✕</button>`}</span></summary>
       ${managing === g.key && team && m$1`<${TeamManage} key=${`${g.key}:${team.queen}`} team=${team} members=${g.members} refresh=${refresh} onDone=${() => setManaging(null)} />`}
       <div class="team-bees-chips">${empty && dragging && m$1`<span class="team-bees-empty">drop here</span>`}${g.members.map((r) => {
 			const st = STATE[agentStatus(r)] || STATE.unknown;
@@ -12528,13 +12549,13 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 			}}>
           <${Bee} node=${r.node} flavor=${r.flavor} size="small" working=${st.cls === "working"} />
           <span class="team-mate-name">${r.user_id}</span>
-          ${g.queen === r.user_id && m$1`<span class="crown" title="team queen">♛</span>`}
+          <${Crown} teams=${team} user=${r.user_id} />
           ${state.supervisor && state.supervisor.user_id === r.user_id && m$1`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
           <span class=${`status ${st.cls}`}></span>
           ${unreadFor(r.user_id) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
         </a>`;
 		})}</div>
-      ${g.gone.length > 0 && m$1`<div class="team-bees-offline"><span title=${g.gone.join(", ")}>${g.gone.length} offline: ${g.gone.join(", ")}</span>
+      ${g.gone.length > 0 && m$1`<div class="team-bees-offline"><span title=${g.gone.join(", ")}>${g.gone.length} offline: ${g.gone.map((id, i) => m$1`${i ? ", " : ""}${id}<${Crown} teams=${team} user=${id} />`)}</span>
         <${RetireButton} ids=${g.gone} refresh=${refresh} label=${g.gone.length > 1 ? `retire all ${g.gone.length}` : "retire"} /></div>`}
     </details>`;
 	})}
@@ -13290,7 +13311,7 @@ function Doing({ summaries, now }) {
     </ol></details>`}
   </div>`;
 }
-function AgentTaskRow({ t, taskIds, agentIds, refresh }) {
+function AgentTaskRow({ t, taskIds, agentIds, teams, refresh }) {
 	const [error, setError] = d("");
 	const assign = async (e) => {
 		const result = await patchTask(t.id, { assignee: e.target.value || null });
@@ -13310,7 +13331,7 @@ function AgentTaskRow({ t, taskIds, agentIds, refresh }) {
     <select title="assignee" aria-label=${`Assign task #${t.id}`} value=${t.assignee || ""}
       disabled=${t.status === "done"} onChange=${assign}>
       <option value="">unassigned</option>
-      ${taskIds.map((a) => m$1`<option key=${a} value=${a}>${a}${agentIds.includes(a) ? "" : " (stopped)"}</option>`)}
+      ${taskIds.map((a) => m$1`<option key=${a} value=${a}>${a}${queenSuffix(teams, a)}${agentIds.includes(a) ? "" : " (stopped)"}</option>`)}
     </select>
     <${TaskStatusActions} task=${t} refresh=${refresh} />
     ${error && m$1`<span class="task-action-error" role="alert">${error}</span>`}
@@ -13351,7 +13372,7 @@ function TeamStrip({ crew, user, unreadFor }) {
         title=${`${m.user_id} · ${st.word}`}>
         <${Bee} node=${m.node} flavor=${m.flavor} size="small" working=${st.cls === "working"} />
         <span class="team-mate-name">${m.user_id}</span>
-        ${crew.team.queen === m.user_id && m$1`<span class="crown" title="team queen">♛</span>`}
+        <${Crown} teams=${crew.team} user=${m.user_id} />
         <span class=${`status ${st.cls}`}></span>
         ${unreadFor(m.user_id) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
       </a>`;
@@ -13528,7 +13549,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
 		return m$1`<a key=${c.agent} class="chat-row" href=${`#/agent/${encodeURIComponent(c.agent)}`}>
             ${r ? m$1`<${Bee} node=${r.node} flavor=${r.flavor} size="small" working=${st.cls === "working"} />` : m$1`<span class="chat-gone" aria-hidden="true">◌</span>`}
             <span class="chat-main">
-              <span class="chat-who">${c.agent}<span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
+              <span class="chat-who">${c.agent}<${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
                 <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
               <span class="chat-line"><b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
@@ -13598,7 +13619,7 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
     <div class="fhead">
       <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
       <div class="who">
-        <div class="nm">${user}<span class=${`status ${st.cls}`} title=${st.word}></span></div>
+        <div class="nm">${user}<${Crown} teams=${state.teams} user=${user} word=${true} teamName=${true} /><span class=${`status ${st.cls}`} title=${st.word}></span></div>
         <div class="meta">
           <span class="chip">${FLAVOR_ICON[flavor] || FLAVOR_ICON.generic} ${flavor}</span>
           <${ModelLabel} r=${r} refresh=${refresh} /> · <${MachineBadge} node=${r.node} /> · pane <b>${r.pane_label}</b>${r.pane_alive ? "" : " (stopped)"}
@@ -13634,7 +13655,7 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
       ${myTasks.length > 0 && m$1`<a class="h2-link" href=${historyHash({ agent: user })}>search ${user}'s history →</a>`}</h2>
     <${TaskComposer} key=${user} user=${user} state=${state} refresh=${refresh} folded />
     ${myTasks.length === 0 ? m$1`<div class="empty">No tasks assigned to ${user} yet.</div>` : myTasks.map((t) => m$1`<${AgentTaskRow} key=${t.id} t=${t} taskIds=${taskIds}
-          agentIds=${agentIds} refresh=${refresh} />`)}
+          agentIds=${agentIds} teams=${state.teams} refresh=${refresh} />`)}
   </div>`;
 }
 var STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;

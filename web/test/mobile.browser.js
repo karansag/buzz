@@ -970,6 +970,130 @@ test('queen chats show an empty state when no team has a queen', async () => {
   } finally { await page.close(); }
 });
 
+// The crown is the one marker for a team queen. It belongs wherever an agent
+// is listed or picked, and it reads from team data rather than from sort
+// order, so a promotion or a cleared queen shows up on the next poll.
+for (const width of [390, 1500]) {
+  test(`a team queen wears a crown in every list and picker: ${width}`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    const roster = width < 500 ? '.hive-panel' : '#agent-sidebar';
+    const numbat = 'numbat-claude-opus-karansmbp';
+    // A second team with no queen: the roster says so instead of staying silent.
+    state.teams.push({ id: 2, name: 'leaderless', queen: null, members: ['jerboa'] });
+    state.recipients.find(r => r.user_id === 'jerboa').team_id = 2;
+    const crownCount = (scope) => page.locator(`${scope} .crown:not(.supervisor)`).count();
+    const label = (name) => 'stoat · ♛ queen';
+    try {
+      await page.goto(base + '#/');
+      await page.waitForSelector(`${roster} .team-bees`);
+      // The roster chip and the team's own header both name the queen.
+      assert.equal(await crownCount(`${roster} .team-mate[href="#/agent/stoat"]`), 1);
+      assert.equal(await crownCount(`${roster} .team-mate[href="#/agent/${numbat}"]`), 0);
+      assert.equal(await page.locator(`${roster} .team-bees-queen`).first().innerText(), '♛ stoat');
+      assert.equal(await page.locator(`${roster} .team-bees-queen.none`).innerText(), 'no queen');
+
+      // The tile grid.
+      await page.locator(`${roster} .agents-view-switch button`, { hasText: 'tiles' }).click();
+      await page.waitForSelector('.bee-tile');
+      assert.equal(await crownCount('.bee-tile[href="#/agent/stoat"]'), 1);
+      assert.equal(await crownCount(`.bee-tile[href="#/agent/${numbat}"]`), 0);
+      await page.locator(`${roster} .agents-view-switch button`, { hasText: 'teams' }).click();
+
+      // The agent switcher, in both its modes.
+      await page.locator('.quick-switch-launchers > button').last().click();
+      const dialog = page.getByRole('dialog', { name: 'Switch agent' });
+      await dialog.waitFor();
+      assert.equal(await crownCount('#switch-agent-stoat'), 1);
+      assert.match(await dialog.locator('#switch-agent-stoat .crown-word').innerText(), /^queen$/i);
+      assert.equal(await crownCount(`#switch-agent-${numbat}`), 0);
+      await dialog.getByRole('button', { name: 'close' }).click();
+      await page.locator('.quick-switch-launchers > button').first().click();
+      const teamsDialog = page.getByRole('dialog', { name: 'Switch team' });
+      await teamsDialog.waitFor();
+      assert.equal(await crownCount('#switch-team-1'), 1);
+      assert.match(await teamsDialog.locator('#switch-team-1 small').first().innerText(), /♛ queen/);
+      await teamsDialog.getByRole('button', { name: 'close' }).click();
+
+      // Chat rows: a crown, plus the word "queen" where the row is not already
+      // inside the "you and queens" list.
+      await page.goto(base + '#/chats');
+      await page.waitForSelector('.chat-row');
+      assert.equal(await crownCount('.chat-row[href="#/agent/stoat"]'), 1);
+      assert.match(await page.locator('.chat-row[href="#/agent/stoat"] .crown-word').innerText(), /^queen$/i);
+      await page.getByRole('button', { name: 'you and queens', exact: true }).click();
+      await page.waitForSelector('.chat-row');
+      assert.equal(await crownCount('.chat-row[href="#/agent/stoat"]'), 1);
+      assert.equal(await page.locator('.chat-row .crown-word').count(), 0);
+
+      // The task board: the assignee line and the assignee menus.
+      await page.goto(base + '#/');
+      const card = page.locator('.col.picked_up .tcard').first();
+      await card.waitFor();
+      assert.equal(await crownCount('.col.picked_up .tcard .meta'), 1);
+      assert.ok((await card.getByRole('combobox', { name: 'Assign task #73' }).locator('option').allTextContents()).includes(label()));
+      assert.ok((await page.locator('.task-composer select[aria-label="Task assignee"] option').allTextContents()).some(t => t.startsWith(label())));
+
+      // The hive task detail: the summary line and the agent picker.
+      await page.locator('.hive-task-picker select').selectOption('73');
+      const detail = page.locator('.hive-task-detail');
+      await detail.waitFor();
+      assert.match(await detail.locator('p').first().innerText(), /stoat · ♛ queen/);
+      assert.ok((await detail.getByRole('combobox', { name: 'Assign task #73' }).locator('option').allTextContents()).includes(label()));
+
+      // The agent's own page: the header, the teammate strip and its task rows.
+      await page.goto(base + '#/agent/stoat');
+      await page.waitForSelector('.fhead .nm .crown');
+      assert.match(await page.locator('.fhead .nm .crown-word').innerText(), /^queen of agent-swarm$/i);
+      assert.equal(await crownCount('.team-strip .team-mate[href="#/agent/stoat"]'), 1);
+      assert.equal(await crownCount(`.team-strip .team-mate[href="#/agent/${numbat}"]`), 0);
+      assert.ok((await page.locator('.trow select').first().locator('option').allTextContents()).includes(label()));
+
+      // Task history: the tiles and the agent filter chips.
+      await page.goto(base + '#/tasks');
+      await page.waitForSelector('.htile');
+      assert.equal(await crownCount('.htile'), 1);
+      assert.equal(await crownCount('.h-agentchip'), 1);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
+for (const width of [390, 1500]) {
+  test(`the crown follows team data: promotion, clearing and an offline queen: ${width}`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    const numbat = 'numbat-claude-opus-karansmbp';
+    const crownCount = (scope) => page.locator(`${scope} .crown:not(.supervisor)`).count();
+    try {
+      await page.goto(base + '#/agent/stoat');
+      await page.waitForSelector('.fhead .nm .crown');
+      // A name that merely starts with the queen's name is not a queen.
+      assert.equal(await crownCount(`.team-strip .team-mate[href="#/agent/${numbat}"]`), 0);
+
+      // Promoted: the crown moves on the ordinary poll, without a reload.
+      state.teams[0].queen = numbat;
+      await page.waitForFunction(name => !!document.querySelector(`.team-strip .team-mate[href="#/agent/${name}"] .crown:not(.supervisor)`), numbat);
+      assert.equal(await crownCount('.fhead .nm'), 0);
+
+      // Cleared: every crown goes with it.
+      state.teams[0].queen = null;
+      await page.waitForFunction(() => !document.querySelector('.crown:not(.supervisor)'));
+      assert.equal(await crownCount('body'), 0);
+
+      // An offline queen keeps the crown: her team header still names her, and
+      // she moves to the offline line rather than losing the role.
+      state.teams[0].queen = 'stoat';
+      state.recipients.find(r => r.user_id === 'stoat').pane_alive = false;
+      await page.goto(base + '#/');
+      await page.waitForFunction(() => !!document.querySelector('[title="queen of agent-swarm: stoat"]'));
+      assert.equal(await page.locator('.team-bees-offline', { hasText: 'stoat' }).count(), 1);
+      await page.goto(base + '#/agent/stoat');
+      await page.waitForSelector('.fhead .nm .crown');
+      assert.match(await page.locator('.fhead .nm .crown-word').innerText(), /^queen of agent-swarm$/i);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
 test('chats tab: between agents groups talk into bursts and broadcasts, filters by team', async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   const t = state.now;

@@ -6,6 +6,7 @@ import { Avatar, SUMMARY_SOURCE, focusHash, hue, patchTask, rel } from "./shared
 import { agentChips } from "./agent-chips.js";
 import { TaskStatusActions } from "./task-status.js";
 import { TaskTrash } from "./task-trash.js";
+import { Crown } from "./queen.js";
 
 /* The history view: every task as a tile, newest first, with a live text
    search. Its main job is to answer "who was working on X".
@@ -172,7 +173,7 @@ function TaskEdit({ task, refresh, done }) {
   </form>`;
 }
 
-function TaskTile({ rec, re, now, filterAgent, refresh }) {
+function TaskTile({ rec, re, now, teams, filterAgent, refresh }) {
   const t = rec.src;
   const f = rec.fields;
   const [editing, setEditing] = useState(false);
@@ -187,7 +188,7 @@ function TaskTile({ rec, re, now, filterAgent, refresh }) {
       ${t.assignee
         ? html`<${Avatar} name=${t.assignee} size="tiny" />
           <a class="agent-link h-agent" href=${focusHash(t.assignee)}
-            title=${`Open ${t.assignee} and message it`}>${hl(t.assignee, re)}</a>
+            title=${`Open ${t.assignee} and message it`}>${hl(t.assignee, re)}</a><${Crown} teams=${teams} user=${t.assignee} />
           <button type="button" class="h-only" onClick=${() => filterAgent(t.assignee)}
             title=${`Show only ${t.assignee}'s tasks`} aria-label=${`Show only ${t.assignee}'s tasks`}>⌕</button>`
         : html`<span class="h-noagent">unassigned</span>`}
@@ -214,13 +215,13 @@ function TaskTile({ rec, re, now, filterAgent, refresh }) {
   </article>`;
 }
 
-function StatusTile({ rec, re, now, filterAgent }) {
+function StatusTile({ rec, re, now, teams, filterAgent }) {
   const s = rec.src;
   return html`<article class="htile status-line">
     <div class="h-who">
       <${Avatar} name=${s.user_id} size="tiny" />
       <a class="agent-link h-agent" href=${focusHash(s.user_id)}
-        title=${`Open ${s.user_id} and message it`}>${hl(s.user_id, re)}</a>
+        title=${`Open ${s.user_id} and message it`}>${hl(s.user_id, re)}</a><${Crown} teams=${teams} user=${s.user_id} />
       <button type="button" class="h-only" onClick=${() => filterAgent(s.user_id)}
         title=${`Show only ${s.user_id}`} aria-label=${`Show only ${s.user_id}`}>⌕</button>
       <span class="pill statusline">${s.current ? "status now" : "status"}</span>
@@ -317,7 +318,7 @@ export function HistoryView({ state, refresh }) {
             class=${`h-agentchip ${s.agent === a ? "on" : ""}`} aria-pressed=${s.agent === a}
             style=${`--hue: hsl(${hue(a)} 42% 58%)`}
             title=${s.agent === a ? "Clear the agent filter" : `Show only ${a}'s tasks`}
-            onClick=${() => filterAgent(a)}>${a} <span class="n">${n}</span></button>`)}
+            onClick=${() => filterAgent(a)}>${a}<${Crown} teams=${state.teams} user=${a} /> <span class="n">${n}</span></button>`)}
       ${(s.q || s.status || s.agent) && html`<button type="button" class="mini" onClick=${() => update({ q: "", status: "", agent: "" })}>clear filters</button>`}
     </div>
     ${shown.length === 0
@@ -325,7 +326,8 @@ export function HistoryView({ state, refresh }) {
       : html`<div class="h-grid">
           ${shown.map(r => {
             const Tile = TILE[r.kind];
-            return html`<${Tile} key=${r.key} rec=${r} re=${re} now=${state.now} filterAgent=${filterAgent} refresh=${refresh} />`;
+            return html`<${Tile} key=${r.key} rec=${r} re=${re} now=${state.now} teams=${state.teams}
+              filterAgent=${filterAgent} refresh=${refresh} />`;
           })}
         </div>`}
   </div>`;

@@ -11,6 +11,7 @@ import { Bee, JSONH, STATE, WORKING_HALO, agentShown, agentStatus, focusHash, ha
 import { COMPACT_LAYOUT, useMedia } from "./use-media.js";
 
 import { machineColor, machineName } from "./machines.js";
+import { Crown, queenSuffix } from "./queen.js";
 
 const TASK_CELL_RADIUS = 18;
 const TASK_CELL_CLEARANCE = TASK_CELL_RADIUS + 4;
@@ -71,7 +72,7 @@ export function CompactBees({ state, machine, harness = null }) {
       return html`<a key=${r.user_id} class="bee-tile" href=${focusHash(r.user_id)}
         title=${[r.user_id, machineName(r.node), st.word, agentPreview(r)].filter(Boolean).join(" · ")} style=${`--machine:${machineColor(r.node)}`}>
         <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
-        <span class="bee-name">${r.user_id}</span>
+        <span class="bee-name">${r.user_id}<${Crown} teams=${state.teams} user=${r.user_id} /></span>
         <span class="bee-machine">${machineName(r.node)}</span>
         <span class="bee-state"><span class=${`status ${st.cls}`} aria-hidden="true"></span>${st.word} · ${harness.mark} ${harness.label}</span>
       </a>`;
@@ -99,7 +100,7 @@ function HiveTaskDetail({ task, state, refresh, onClose }) {
   return html`<section class="hive-task-detail" aria-label=${`Task #${task.id} details`}>
     <header><h3>#${task.id} · ${task.title}</h3>
       <button type="button" class="mini" onClick=${onClose}>Collapse</button></header>
-    <p>${task.status.replaceAll("_", " ")} · ${task.assignee || "unassigned"}${task.team_id ? ` · team ${(state.teams || []).find(t => t.id === task.team_id)?.name || task.team_id}` : ""}</p>
+    <p>${task.status.replaceAll("_", " ")} · ${task.assignee || "unassigned"}${queenSuffix(state.teams, task.assignee)}${task.team_id ? ` · team ${(state.teams || []).find(t => t.id === task.team_id)?.name || task.team_id}` : ""}</p>
     ${task.description && html`<p class="task-description">${task.description}</p>`}
     ${task.depends_on?.length > 0 && html`<p>Depends on ${task.depends_on.map(id => `#${id}`).join(", ")}</p>`}
     ${task.worktree && html`<p>Worktree: ${task.worktree_node || ""} ${task.worktree}</p>`}
@@ -109,7 +110,7 @@ function HiveTaskDetail({ task, state, refresh, onClose }) {
       <select aria-label=${`Assign task #${task.id}`} value=${task.team_id ? `t:${task.team_id}` : task.assignee || ""} disabled=${busy || task.status === "done"} onChange=${assign}>
         <option value="">unassigned</option>
         <optgroup label="Teams">${(state.teams || []).map(t => html`<option value=${`t:${t.id}`}>${t.name}</option>`)}</optgroup>
-        <optgroup label="Agents">${agents.map(a => html`<option value=${a}>${a}</option>`)}</optgroup>
+        <optgroup label="Agents">${agents.map(a => html`<option value=${a}>${a}${queenSuffix(state.teams, a)}</option>`)}</optgroup>
       </select>
     </label>
     ${error && html`<p role="alert">${error}</p>`}
@@ -558,9 +559,9 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
         }
         const myTeam = (r.team_id && teamById.get(r.team_id)) || null;
         if (myTeam && myTeam.queen === name) {
-          ctx.fillStyle = "#f2a93b"; ctx.font = "11px ui-monospace, monospace";
+          ctx.fillStyle = "#f2a93b"; ctx.font = "bold 13px ui-monospace, monospace";
           ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-          ctx.fillText("♛", x, y - (attention ? 26 : 14));
+          ctx.fillText("♛", x, y - (attention ? 27 : 15));
         }
         ctx.restore();
       }

@@ -235,7 +235,8 @@ The sidebar lists agents in two views: **teams** (the default) and
 - Each agent is a chip that opens its page. Drag a chip onto another team
   to move it, or onto the "drop here to stop" zone that shows during a drag
   to stop it. On a touch screen, stop an agent from its page.
-- Each team's ♛ button picks the queen (with an optional objective), and
+- The team's header names its queen; a team with none says so.
+- Each team's ✎ button picks the queen (with an optional objective), and
   its ✕ button removes the team. Its agents keep running, outside any team.
 - New teams and spawning sit at the bottom.
 
@@ -429,10 +430,17 @@ their own copy.
 ## Teams and the supervisor
 
 A team is a named group of agents. Create one at the bottom of the sidebar's
-teams view and drag agents in. The team's ♛ button makes a member the queen: it gets the
+teams view and drag agents in. The team's ✎ button makes a member the queen: it gets the
 team's objective and a prompt to split it into tasks, hand them out, and
 follow up. The queen has no special powers on the server; it is a role
 given by prompt.
+
+Every list that shows agents marks the queen with ♛: the sidebar chips and
+tile grid, each team's header, the agent switcher, your chat list, the task
+board, the history view, the teammate strip and the hive, where the crown
+also flies above her bee. Assignee menus spell the role out, "stoat · ♛
+queen". The marker comes from the team data on each poll, so changing the
+queen moves the crown with no reload.
 
 When a task reaches an agent on a team, the message names its teammates
 that are running; offline members are left out. To clear out agents that
