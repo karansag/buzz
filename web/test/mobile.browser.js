@@ -2586,10 +2586,13 @@ for (const width of [390, 1500]) {
           close() { this.closed = true; }
         };
       });
+      // The hub sends notify: 0 on ordinary messages; that must not render as "0".
+      for (const m of state.messages) m.notify = 0;
       state.messages[1].notify = 1; // Existing history: draw the bell, no system alert.
       state.messages[1].ts += 1;
       await page.goto(`${base}#/agent/${names[0]}`);
       await page.locator('.thread .notification-mark').waitFor();
+      assert.deepEqual((await page.locator('.thread .tag').allInnerTexts()).filter(t => /^0/.test(t.trim())), []);
       assert.equal(await page.evaluate(() => window.notificationRequests), 0);
       assert.equal(await page.evaluate(() => window.notices.length), 0);
       await page.getByRole('button', {name: 'enable notifications', exact: true}).click();
@@ -2597,6 +2600,7 @@ for (const width of [390, 1500]) {
       assert.equal(await page.evaluate(() => window.notificationRequests), 1);
       await page.goto(`${base}#/chats`);
       await page.locator('.chat-line .notification-mark').waitFor();
+      assert.deepEqual((await page.locator('.chat-line').allInnerTexts()).filter(t => /^0/.test(t.trim())), []);
       // Wait for the initial snapshot before adding a new notification.
       await page.evaluate(() => { window.testHidden = true; });
       state.messages.push({id: 9001, sender: names[0], recipient: 'owner', content: 'Fake long job finished',

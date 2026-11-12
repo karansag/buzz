@@ -1468,7 +1468,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}${m.attachments?.length > 0 && html`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map(name => html`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
-          <div class="tag">${m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}${disp(m.sender)}${m.context && html` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && html` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && html` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && html` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && html` <button type="button" class="msg-reply"
+          <div class="tag">${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}${disp(m.sender)}${m.context && html` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && html` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && html` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && html` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && html` <button type="button" class="msg-reply"
             title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}</div>
         </div>`)}
       ${recipient && html`<div class="jump-dock">${awayFrom !== null && html`<button type="button" class="jump-bottom" onClick=${jumpToBottom}
@@ -1764,7 +1764,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
               <span class="chat-who">${c.agent}<${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && html`<span class="team-mate-unread" title="new reply">●</span>`}
                 <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
-              <span class="chat-line">${m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
+              <span class="chat-line">${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
             </span>
           </a>`;
         })}</div>`}`;
