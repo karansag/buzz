@@ -18,6 +18,16 @@ export function messageParam(query) {
   return value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null;
 }
 
+// Open a conversation at one message from code: the address bar gets the route
+// and the app re-renders and jumps, whether or not the message is loaded yet.
+// In-page search uses this for its next/previous matches; replacing the entry
+// keeps one address bar entry per conversation rather than one per match.
+export function showAgentMessage(user, messageId) {
+  history.replaceState(null, "", agentHash(user, messageId));
+  const event = typeof HashChangeEvent === "function" ? new HashChangeEvent("hashchange") : new Event("hashchange");
+  dispatchEvent(event);
+}
+
 // { user, messageId } for an agent route, or null for any other hash.
 export function parseAgentRoute(hash = "") {
   if (!hash.startsWith(AGENT_ROUTE)) return null;
