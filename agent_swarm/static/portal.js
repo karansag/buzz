@@ -9149,6 +9149,32 @@ function machineList(nodes = [], recipients = []) {
 	}).sort((a, b) => Number(!!b.local) - Number(!!a.local) || a.name.localeCompare(b.name));
 }
 //#endregion
+//#region web/src/agent-route.js
+var AGENT_ROUTE = "#/agent/";
+function agentHash(user, messageId = null) {
+	const base = `${AGENT_ROUTE}${encodeURIComponent(user)}`;
+	return messageId ? `${base}?m=${messageId}` : base;
+}
+function messageParam(query) {
+	const value = new URLSearchParams(query).get("m");
+	return value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null;
+}
+function parseAgentRoute(hash = "") {
+	if (!hash.startsWith("#/agent/")) return null;
+	const rest = hash.slice(8);
+	const cut = rest.indexOf("?");
+	const raw = cut < 0 ? rest : rest.slice(0, cut);
+	let user = raw;
+	try {
+		user = decodeURIComponent(raw);
+	} catch {}
+	if (!user) return null;
+	return {
+		user,
+		messageId: cut < 0 ? null : messageParam(rest.slice(cut + 1))
+	};
+}
+//#endregion
 //#region web/src/shared.js
 var POLL_MS = 2e3;
 var PEEK_MS = 2e3;
@@ -9305,7 +9331,7 @@ function pairKey(a, b) {
 	return [a, b].sort().join(" ");
 }
 var disp = (u) => u === "owner" ? m$1`<span class="owner-name">owner</span>` : u;
-var focusHash = (u) => `#/agent/${encodeURIComponent(u)}`;
+var focusHash = (u) => agentHash(u);
 async function patchTask(id, patch) {
 	try {
 		const r = await fetch(`/tasks/${id}`, {
@@ -9558,20 +9584,70 @@ function QuickSwitcher({ state, navigate }) {
   </div>`;
 }
 //#endregion
+//#region web/src/history-spans.js
+function addSpan(spans, lo, hi) {
+	const merged = [];
+	for (const span of [...spans, {
+		lo,
+		hi
+	}].sort((a, b) => a.lo - b.lo)) {
+		const last = merged[merged.length - 1];
+		if (last && span.lo <= last.hi + 1) last.hi = Math.max(last.hi, span.hi);
+		else merged.push({ ...span });
+	}
+	return merged;
+}
+function spanOf(ids) {
+	return ids.length ? {
+		lo: Math.min(...ids),
+		hi: Math.max(...ids)
+	} : null;
+}
+function gapsOf(spans) {
+	return spans.slice(1).map((span, i) => ({
+		after: spans[i].hi,
+		before: span.lo
+	}));
+}
+//#endregion
 //#region web/src/agent-history.js
+var PAGE = 300;
+var FILL_PAGES = 10;
 function useAgentHistory(user) {
 	const [history, setHistory] = d({
 		messages: [],
 		loaded: false,
 		more: false,
 		busy: false,
-		error: ""
+		error: "",
+		gaps: []
 	});
-	const older = A(() => {});
+	const [lookup, setLookup] = d({
+		id: null,
+		status: "idle"
+	});
+	const commands = A({
+		older: () => {},
+		around: () => {},
+		gap: () => {}
+	});
 	h(() => {
-		let active = true, polling = false, loadingOlder = false;
-		let newest = null, oldest = null;
+		let active = true, polling = false, busy = false;
+		let spans = [];
+		let newest = null;
 		const abort = new AbortController();
+		setHistory({
+			messages: [],
+			loaded: false,
+			more: false,
+			busy: false,
+			error: "",
+			gaps: []
+		});
+		setLookup({
+			id: null,
+			status: "idle"
+		});
 		const read = async (query) => {
 			const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages?${query}`, { signal: abort.signal });
 			if (!response.ok) throw Error("History unavailable");
@@ -9579,57 +9655,159 @@ function useAgentHistory(user) {
 			if (!Array.isArray(page.messages) || typeof page.has_more !== "boolean") throw Error("Invalid history");
 			return page;
 		};
-		const merge = (page, initial = false, isOlder = false) => {
+		const oldest = () => spans.length ? spans[0].lo : null;
+		const merge = (page, more) => {
 			if (!active) return;
 			const ids = page.messages.map((m) => m.id);
-			if (ids.length) {
+			const span = spanOf(ids);
+			if (span) {
+				spans = addSpan(spans, span.lo, span.hi);
 				newest = Math.max(newest ?? 0, ...ids);
-				oldest = Math.min(oldest ?? Infinity, ...ids);
-			} else if (initial) newest = 0;
+			} else if (newest === null) newest = 0;
 			setHistory((prev) => ({
 				...prev,
 				loaded: true,
 				error: "",
-				more: initial || isOlder ? page.has_more : prev.more,
+				more: more === void 0 ? prev.more : more,
 				messages: [...new Map([...prev.messages, ...page.messages].map((m) => [m.id, m])).values()]
 			}));
+			checkGaps();
+		};
+		const fail = (message) => {
+			if (active) setHistory((prev) => ({
+				...prev,
+				error: message
+			}));
+		};
+		const counts = /* @__PURE__ */ new Map();
+		const showGap = (gap, count) => setHistory((prev) => prev.gaps.some((g) => g.after === gap.after && g.before === gap.before) ? prev : {
+			...prev,
+			gaps: [...prev.gaps, {
+				...gap,
+				count
+			}].sort((a, b) => a.after - b.after)
+		});
+		const pruneGaps = (candidates) => setHistory((prev) => ({
+			...prev,
+			gaps: prev.gaps.filter((gap) => candidates.some((c) => c.after === gap.after && c.before === gap.before))
+		}));
+		const verify = async (gap) => {
+			const key = `${gap.after}:${gap.before}`;
+			if (counts.has(key)) {
+				const known = counts.get(key);
+				if (known) showGap(gap, known);
+				return;
+			}
+			counts.set(key, 0);
+			try {
+				const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages/count?after=${gap.after}&before=${gap.before}`, { signal: abort.signal });
+				if (!response.ok) throw Error("count unavailable");
+				const { count } = await response.json();
+				if (!active) return;
+				counts.set(key, count);
+				if (count) showGap(gap, count);
+			} catch {
+				counts.delete(key);
+			}
+		};
+		const checkGaps = () => {
+			const candidates = gapsOf(spans);
+			pruneGaps(candidates);
+			for (const gap of candidates) verify(gap);
 		};
 		const poll = async () => {
 			if (polling) return;
 			polling = true;
 			try {
 				const initial = newest === null;
-				let page = await read(initial ? "limit=300" : `after=${newest}&limit=300`);
-				merge(page, initial);
+				let page = await read(initial ? `limit=${PAGE}` : `after=${newest}&limit=${PAGE}`);
+				merge(page, initial ? page.has_more : void 0);
 				while (active && !initial && page.has_more) {
-					page = await read(`after=${newest}&limit=300`);
+					page = await read(`after=${newest}&limit=${PAGE}`);
 					merge(page);
 				}
 			} catch {
-				if (active) setHistory((prev) => ({
-					...prev,
-					error: "Could not load conversation history. Retrying…"
-				}));
+				fail("Could not load conversation history. Retrying…");
 			} finally {
 				polling = false;
 			}
 		};
-		older.current = async () => {
-			if (loadingOlder || oldest === null) return;
-			loadingOlder = true;
+		commands.current.older = async () => {
+			const before = oldest();
+			if (busy || before === null) return;
+			busy = true;
 			setHistory((prev) => ({
 				...prev,
 				busy: true
 			}));
 			try {
-				merge(await read(`before=${oldest}&limit=300`), false, true);
+				const page = await read(`before=${before}&limit=${PAGE}`);
+				merge(page, page.has_more);
 			} catch {
+				fail("Could not load older messages. Please try again.");
+			} finally {
+				busy = false;
 				if (active) setHistory((prev) => ({
 					...prev,
-					error: "Could not load older messages. Please try again."
+					busy: false
 				}));
+			}
+		};
+		commands.current.around = async (mid) => {
+			if (busy) return;
+			busy = true;
+			setLookup({
+				id: mid,
+				status: "loading"
+			});
+			setHistory((prev) => ({
+				...prev,
+				busy: true
+			}));
+			try {
+				const page = await read(`around=${mid}&limit=${PAGE}`);
+				const found = page.messages.some((m) => m.id === mid);
+				const below = oldest();
+				const extendsBottom = page.messages.length > 0 && (below === null || Math.min(...page.messages.map((m) => m.id)) < below);
+				merge(page, extendsBottom ? page.has_more : void 0);
+				setLookup({
+					id: mid,
+					status: found ? "found" : "missing"
+				});
+			} catch {
+				setLookup({
+					id: mid,
+					status: "failed"
+				});
 			} finally {
-				loadingOlder = false;
+				busy = false;
+				if (active) setHistory((prev) => ({
+					...prev,
+					busy: false
+				}));
+			}
+		};
+		commands.current.gap = async (gap) => {
+			if (busy) return;
+			busy = true;
+			setHistory((prev) => ({
+				...prev,
+				busy: true
+			}));
+			try {
+				let from = gap.after;
+				for (let page = 0; page < FILL_PAGES && active && from < gap.before; page += 1) {
+					const body = await read(`after=${from}&limit=${PAGE}`);
+					const ids = body.messages.map((m) => m.id);
+					merge(body);
+					if (!ids.length) break;
+					from = Math.max(...ids);
+					if (!body.has_more) break;
+				}
+			} catch {
+				fail("Could not load the missing messages. Please try again.");
+			} finally {
+				busy = false;
 				if (active) setHistory((prev) => ({
 					...prev,
 					busy: false
@@ -9646,7 +9824,10 @@ function useAgentHistory(user) {
 	}, [user]);
 	return {
 		...history,
-		loadOlder: () => older.current()
+		lookup,
+		loadOlder: () => commands.current.older(),
+		loadAround: (mid) => commands.current.around(mid),
+		loadGap: (gap) => commands.current.gap(gap)
 	};
 }
 //#endregion
@@ -11739,6 +11920,9 @@ function createBottomFollower() {
 		follow(el) {
 			if (pinned) el.scrollTop = el.scrollHeight;
 			lastTop = Math.max(0, el.scrollTop);
+		},
+		unpin() {
+			pinned = false;
 		}
 	};
 }
@@ -13292,7 +13476,8 @@ function sentByViewer(sender, a, b, page) {
 	return sender !== a;
 }
 var JUMP_SHOW_PX = 160;
-function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null }) {
+var gapLabel = ({ count, after, before }) => `${count} message${count === 1 ? "" : "s"} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
+function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null }) {
 	_(() => {
 		if (search?.open) setExpanded(true);
 	}, [search?.open]);
@@ -13361,6 +13546,8 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		if (expanded && boxRef.current) boxRef.current.scrollTop = savedScroll.current;
 	}, [expanded]);
 	const lastId = msgs.length ? msgs[msgs.length - 1].id : null;
+	const gapAt = /* @__PURE__ */ new Map();
+	for (const gap of gaps) if (msgs.some((m) => m.id === gap.after) && msgs.some((m) => m.id === gap.before)) gapAt.set(gap.before, gap);
 	_(() => {
 		const el = boxRef.current;
 		if (!el || !expanded) return;
@@ -13385,6 +13572,31 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		lastId,
 		historyHeight,
 		expanded
+	]);
+	const jumpedTo = A(null);
+	_(() => {
+		if (!jumpTo || jumpedTo.current === jumpTo) return;
+		if (!expanded) {
+			setExpanded(true);
+			return;
+		}
+		const target = boxRef.current?.querySelector(`[data-message-id="${jumpTo}"]`);
+		if (!target) return;
+		follower.current.unpin();
+		previousHistory.current = null;
+		target.scrollIntoView({
+			block: "center",
+			behavior: "instant"
+		});
+		target.focus({ preventScroll: true });
+		target.classList.remove("reply-highlight");
+		target.offsetWidth;
+		target.classList.add("reply-highlight");
+		jumpedTo.current = jumpTo;
+	}, [
+		jumpTo,
+		expanded,
+		msgs.length
 	]);
 	const toggleFocus = () => {
 		setExpanded(true);
@@ -13515,7 +13727,9 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     ${search && m$1`<${ConversationSearchBar} search=${search} />`}
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
-      ${msgs.map((m) => m$1`
+      ${msgs.map((m) => m$1`${gapAt.has(m.id) && m$1`<div key=${`gap-${m.id}`} class="msg-gap" role="note">
+        <span>${gapLabel(gapAt.get(m.id))}</span>
+        ${loadGap && m$1`<button type="button" class="mini" onClick=${() => loadGap(gapAt.get(m.id))}>load them</button>`}</div>`}
         <div key=${m.id} data-message-id=${m.id} tabindex="-1" onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")} onContextMenu=${(e) => openMenu(e, m)} class=${[
 		"msg",
 		sentByViewer(m.sender, a, b, page) ? "right" : "",
@@ -13610,7 +13824,7 @@ function useTeammateKeys(members) {
 		const onKey = (e) => {
 			if (!e.altKey || e.ctrlKey || e.metaKey || document.querySelector(".quick-switch[open]")) return;
 			const members = current.current;
-			const here = location.hash.startsWith("#/agent/") ? decodeURIComponent(location.hash.slice(8)) : null;
+			const here = parseAgentRoute(location.hash)?.user ?? null;
 			const by = e.code === "BracketRight" ? 1 : e.code === "BracketLeft" ? -1 : 0;
 			const known = members && members.some((m) => m.user_id === here);
 			const next = by && known && stepTeammate(members, here, by);
@@ -13811,7 +14025,8 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
 		const r = byId.get(c.agent);
 		const st = STATE[r ? agentStatus(r) : "unknown"] || STATE.unknown;
 		const m = c.match || c.last;
-		return m$1`<a key=${c.agent} class="chat-row" href=${`#/agent/${encodeURIComponent(c.agent)}`}>
+		const matchId = c.match?.id ?? null;
+		return m$1`<a key=${c.agent} class="chat-row" href=${agentHash(c.agent, matchId)}>
             ${r ? m$1`<${Bee} node=${r.node} flavor=${r.flavor} size="small" working=${st.cls === "working"} />` : m$1`<span class="chat-gone" aria-hidden="true">◌</span>`}
             <span class="chat-main">
               <span class="chat-who">${c.agent}<${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
@@ -13822,11 +14037,24 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
           </a>`;
 	})}</div>`}`;
 }
-function FocusView({ user, state, refresh, freshIds, unreadFor }) {
+function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor }) {
 	const history = useAgentHistory(user);
 	const conversationSearch = useConversationSearch(user);
 	const [showAgentChats, setShowAgentChats] = d(false);
 	const messages = [...new Map([...history.messages, ...state.messages].filter((m) => m.sender === user || m.recipient === user).map((m) => [m.id, m])).values()].sort((a, b) => a.ts - b.ts || a.id - b.id);
+	const jumpId = messageId && messages.some((m) => m.id === messageId) ? messageId : null;
+	const look = history.lookup;
+	h(() => {
+		if (!messageId || jumpId || !history.loaded) return;
+		if (look.id === messageId && look.status !== "failed") return;
+		history.loadAround(messageId);
+	}, [
+		messageId,
+		jumpId,
+		history.loaded,
+		look.id,
+		look.status
+	]);
 	const crew = T(() => teammates(state.recipients, state.teams, user), [
 		state.recipients,
 		state.teams,
@@ -13869,11 +14097,20 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
 	}).map(([, msgs]) => msgs);
 	const hasOwnerThread = groups.has(ownerThread);
 	const peerThreads = threads.filter((msgs) => pairKey(msgs[0].sender, msgs[0].recipient) !== ownerThread);
+	const jumpThread = jumpId && threads.find((msgs) => msgs.some((m) => m.id === jumpId));
+	const looseGaps = history.gaps.filter((gap) => !threads.some((msgs) => msgs.some((m) => m.id === gap.after) && msgs.some((m) => m.id === gap.before)));
+	const jumpIsPeer = !!jumpThread && pairKey(jumpThread[0].sender, jumpThread[0].recipient) !== ownerThread;
+	h(() => {
+		if (jumpIsPeer) setShowAgentChats(true);
+	}, [jumpIsPeer]);
 	const peerChatsId = `agent-chats-${encodeURIComponent(user)}`;
 	const renderThread = (msgs) => {
 		const [a, b] = pairKey(msgs[0].sender, msgs[0].recipient).split(" ");
 		return m$1`<${Thread} key=${pairKey(a, b)} a=${a} b=${b} msgs=${msgs} page=${user} agents=${registered}
-      freshIds=${freshIds} now=${state.now} refresh=${refresh} search=${a === "owner" || b === "owner" ? conversationSearch : null} />`;
+      freshIds=${freshIds} now=${state.now} refresh=${refresh}
+      search=${a === "owner" || b === "owner" ? conversationSearch : null}
+      jumpTo=${msgs === jumpThread ? jumpId : null}
+      gaps=${history.gaps} loadGap=${history.loadGap} />`;
 	};
 	return m$1`<div>
     <div class="focus-top">
@@ -13906,6 +14143,16 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
     <h2>conversations ${hasOwnerThread && m$1`<span class="count">· 1</span>`}</h2>
     ${history.error && m$1`<p role="status">${history.error}</p>`}
     ${!history.loaded && !history.error && m$1`<p role="status">Loading conversation history…</p>`}
+    ${messageId && look.id === messageId && look.status === "loading" && m$1`<p role="status">Loading the message you followed…</p>`}
+    ${messageId && look.id === messageId && look.status === "missing" && m$1`<p class="jump-missing" role="status">
+      Message #${messageId} is not part of this conversation.</p>`}
+    ${messageId && look.id === messageId && look.status === "failed" && m$1`<p role="status">
+      Could not load message #${messageId}.
+      <button type="button" class="mini" onClick=${() => history.loadAround(messageId)}>try again</button></p>`}
+    ${looseGaps.map((gap) => m$1`<p class="history-gap" role="status">
+      ${`${gapLabel(gap)}.`}
+      <button type="button" class="mini" disabled=${history.busy} onClick=${() => history.loadGap(gap)}>
+        ${history.busy ? "Loading…" : "load the missing messages"}</button></p>`)}
     ${history.more && m$1`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
       ${history.busy ? "Loading older messages…" : "Load older messages"}</button>`}
     ${hasOwnerThread ? renderThread(groups.get(ownerThread)) : m$1`<div class="thread">
@@ -14018,7 +14265,8 @@ function App() {
 			pendingSends.removeEventListener("settle", settle);
 		};
 	}, []);
-	const focusUser = route.startsWith("#/agent/") ? decodeURIComponent(route.slice(8)) : null;
+	const agentRoute = parseAgentRoute(route);
+	const focusUser = agentRoute?.user ?? null;
 	const onHistory = route.startsWith(HISTORY_ROUTE);
 	const onChats = route.startsWith(CHATS_ROUTE);
 	const onTab = route.startsWith("#/tab/") ? decodeURIComponent(route.slice(TAB_ROUTE.length)) : null;
@@ -14065,7 +14313,8 @@ function App() {
 					if (!st.first && fresh.length) setFreshIds(new Set(fresh.map((m) => m.id)));
 					for (const rec of s.recipients) if (st.first || !(rec.user_id in st.byAgent)) st.byAgent[rec.user_id] = maxId;
 					st.maxId = maxId;
-					if (st.first && location.hash.startsWith("#/agent/") && !s.recipients.some((r) => r.user_id === decodeURIComponent(location.hash.slice(8)))) location.replace("#/");
+					const opened = parseAgentRoute(location.hash);
+					if (st.first && opened && !s.recipients.some((r) => r.user_id === opened.user)) location.replace("#/");
 					st.first = false;
 					setState(s);
 					setConnected(true);
@@ -14169,7 +14418,8 @@ function App() {
       ${rosterOpen ? "Agents ›" : "‹ Agents"} · ${state.recipients.filter((r) => r.pane_alive).length} · ${rosterShortcut}
     </button>`}
     <div class="stage">
-      ${focusUser ? m$1`<${FocusView} key=${focusUser} user=${focusUser} state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor} />` : onHistory ? m$1`<${HistoryView} state=${state} refresh=${poll} />` : onChats ? m$1`<${ChatsView} state=${state} unreadFor=${unreadFor} />` : onTab !== null ? m$1`<${TabView} name=${onTab} tabs=${state.tabs || []} />` : m$1`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
+      ${focusUser ? m$1`<${FocusView} key=${focusUser} user=${focusUser} messageId=${agentRoute?.messageId ?? null}
+            state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor} />` : onHistory ? m$1`<${HistoryView} state=${state} refresh=${poll} />` : onChats ? m$1`<${ChatsView} state=${state} unreadFor=${unreadFor} />` : onTab !== null ? m$1`<${TabView} name=${onTab} tabs=${state.tabs || []} />` : m$1`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
     </div>
     </div>
     ${!compact && m$1`<div id="agent-sidebar" class=${`roster-drawer ${rosterOpen ? "is-open" : ""}`} inert=${!rosterOpen} aria-hidden=${!rosterOpen}>

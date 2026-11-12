@@ -1,5 +1,6 @@
 import { html } from "htm/preact";
 import { machineColor, machineName } from "./machines.js";
+import { agentHash } from "./agent-route.js";
 
 export const POLL_MS = 2000;
 export const PEEK_MS = 2000;
@@ -101,7 +102,7 @@ export function currentTask(tasks, user) {
 }
 export function pairKey(a, b) { return [a, b].sort().join(" "); }
 export const disp = (u) => u === "owner" ? html`<span class="owner-name">owner</span>` : u;
-export const focusHash = (u) => `#/agent/${encodeURIComponent(u)}`;
+export const focusHash = (u) => agentHash(u);
 
 export async function patchTask(id, patch) {
   try {

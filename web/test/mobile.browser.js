@@ -805,8 +805,10 @@ test('chats tab lists owner conversations newest first and searches them', async
     await page.waitForFunction(() => document.querySelectorAll('.chat-row').length === 1);
     assert.deepEqual(await who(), ['tapir']);
     assert.equal(await page.evaluate(() => location.hash), '#/chats?q=Zephyr');
+    // A search match opens the conversation at that message; the plain row
+    // opens the end of it.
     await page.locator('.chat-row').click();
-    await page.waitForFunction(() => location.hash === '#/agent/tapir');
+    await page.waitForFunction(() => location.hash === '#/agent/tapir?m=80');
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
@@ -961,6 +963,127 @@ test('unknown delivery still requires confirmation before sending again', async 
     await page.waitForFunction(() => document.querySelector('[data-message-id="80"] .resend').textContent === 'sent');
     assert.equal(requests.length, 1);
     assert.equal(requests[0].content, 'possibly already sent');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+// Chats search finds a message by its text. Opening the match has to land on
+// that message, not at the end of a conversation that may be hundreds of
+// messages long, so the page loads the history around it.
+for (const width of [390, 1500]) {
+  test(`a chats search match opens at that message with older history loaded: ${width}`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    // A long conversation: the newest history page holds 300 messages, so the
+    // match near the start of it is nowhere near the end.
+    const hit = { id: 1020, sender: 'stoat', recipient: 'owner', content: 'plover migration census needle', ts: state.now - 6800, status: 'delivered', attachments: [] };
+    state.history = Array.from({ length: 700 }, (_, i) => {
+      const id = 1000 + i;
+      return id === hit.id ? hit : {
+        id, sender: id % 2 ? 'owner' : 'stoat', recipient: id % 2 ? 'stoat' : 'owner',
+        content: `message ${id}`, ts: state.now - 7000 + i, status: 'delivered', attachments: [],
+      };
+    });
+    await page.route('**/messages?user=owner&limit=*', route =>
+      route.fulfill({ json: { messages: state.history.filter(m => m.sender === 'owner' || m.recipient === 'owner') } }));
+    try {
+      await page.goto(base + '#/chats');
+      // Without a search a row still opens the end of the conversation.
+      await page.locator('.chat-row[href="#/agent/stoat"]').waitFor();
+      await page.getByRole('textbox', { name: 'Search your conversations', exact: true }).fill('plover migration');
+      const row = page.locator(`.chat-row[href="#/agent/stoat?m=${hit.id}"]`);
+      await row.waitFor();
+      await row.click();
+      await page.waitForFunction(id => location.hash === `#/agent/stoat?m=${id}`, hit.id);
+      const target = page.locator(`[data-message-id="${hit.id}"]`);
+      await target.waitFor();
+      // Flashed with the same highlight a reply quote uses, so the eye lands on
+      // it even in a thread of hundreds of bubbles.
+      await page.waitForFunction(id => document.querySelector(`[data-message-id="${id}"]`)?.classList.contains('reply-highlight'), hit.id);
+      const view = await page.locator('.msgs').first().evaluate(el => ({
+        top: el.scrollTop, height: el.clientHeight, scroll: el.scrollHeight,
+        box: el.getBoundingClientRect().toJSON(),
+      }));
+      const bubble = await target.boundingBox();
+      assert.ok(view.top > 0, 'the thread did not stay at the newest message');
+      assert.ok(view.top + view.height < view.scroll - 20, 'the thread is showing its end, not the match');
+      assert.ok(bubble.y >= view.box.y - 1 && bubble.y + bubble.height <= view.box.y + view.box.height + 1,
+        'the matched message is inside the visible part of the thread');
+      assert.ok(Math.abs((bubble.y + bubble.height / 2) - (view.box.y + view.box.height / 2)) < view.box.height / 2,
+        'the matched message is scrolled into the middle');
+      // The window loaded around the match does not reach the newest page, so
+      // the hole is marked where it falls in the thread rather than showing a
+      // conversation with its middle quietly gone, and it can be fetched.
+      const gap = page.locator('.msg-gap');
+      await gap.waitFor();
+      assert.match(await gap.innerText(), /229 messages between #1170 and #1400 are not loaded/);
+      assert.equal(await page.locator('.history-gap').count(), 0, 'one marker, not two, when the hole is inside a thread');
+      await gap.getByRole('button', { name: 'load them' }).click();
+      await page.waitForFunction(() => !document.querySelector('.msg-gap'));
+      assert.equal(await page.locator('[data-message-id="1200"]').count(), 1);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
+test('a hole whose edges sit in different conversations is reported above them', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  // The newest page is agent-to-agent talk and the window around the match is
+  // the owner thread, so neither thread holds both edges of the hole.
+  const hit = { id: 1020, sender: 'stoat', recipient: 'owner', content: 'plover migration census needle', ts: state.now - 6800, status: 'delivered', attachments: [] };
+  state.history = Array.from({ length: 700 }, (_, i) => {
+    const id = 1000 + i;
+    if (id === hit.id) return hit;
+    const peer = id >= 1400;
+    return {
+      id, sender: peer ? (id % 2 ? 'stoat' : 'numbat-claude-opus-karansmbp') : (id % 2 ? 'owner' : 'stoat'),
+      recipient: peer ? (id % 2 ? 'numbat-claude-opus-karansmbp' : 'stoat') : (id % 2 ? 'stoat' : 'owner'),
+      content: `message ${id}`, ts: state.now - 7000 + i, status: 'delivered', attachments: [],
+    };
+  });
+  try {
+    await page.goto(base + `#/agent/stoat?m=${hit.id}`);
+    await page.locator(`[data-message-id="${hit.id}"].reply-highlight`).waitFor();
+    const gap = page.locator('.history-gap');
+    await gap.waitFor();
+    assert.match(await gap.innerText(), /229 messages between #1170 and #1400 are not loaded/);
+    await gap.getByRole('button', { name: /load the missing messages/ }).click();
+    await page.waitForFunction(() => !document.querySelector('.history-gap'));
+    // Filling the hole joins the two stretches, so there is nothing left to mark.
+    assert.equal(await page.locator('.msg-gap').count(), 0);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('changing the message id in the route jumps again in place', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  // Both ids are inside the window the first jump loads, so the second one is a
+  // re-jump in the same rendered thread, the way a search's next-match button
+  // would drive it.
+  const hit = { id: 1020, sender: 'stoat', recipient: 'owner', content: 'first needle', ts: state.now - 6800, status: 'delivered', attachments: [] };
+  state.history = Array.from({ length: 700 }, (_, i) => {
+    const id = 1000 + i;
+    return id === hit.id ? hit : { id, sender: id % 2 ? 'owner' : 'stoat', recipient: id % 2 ? 'stoat' : 'owner',
+      content: `message ${id}`, ts: state.now - 7000 + i, status: 'delivered', attachments: [] };
+  });
+  try {
+    await page.goto(base + `#/agent/stoat?m=${hit.id}`);
+    await page.locator(`[data-message-id="${hit.id}"].reply-highlight`).waitFor();
+    await page.evaluate(() => { location.hash = '#/agent/stoat?m=1100'; });
+    await page.locator('[data-message-id="1100"].reply-highlight').waitFor();
+    const box = await page.locator('.msgs').first().boundingBox();
+    const bubble = await page.locator('[data-message-id="1100"]').boundingBox();
+    assert.ok(bubble.y >= box.y && bubble.y + bubble.height <= box.y + box.height);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('a link to a message this conversation does not have says so', async () => {
+  const { page, errors } = await setup(1500, 900, false);
+  try {
+    await page.goto(base + '#/agent/stoat?m=999999');
+    await page.getByText('Message #999999 is not part of this conversation.').waitFor();
+    // The page still works: the conversation is there, just without that jump.
+    await page.waitForSelector('.thread .msgs .msg');
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });

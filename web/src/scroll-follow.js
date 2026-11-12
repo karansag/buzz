@@ -15,5 +15,10 @@ export function createBottomFollower() {
       if (pinned) el.scrollTop = el.scrollHeight;
       lastTop = Math.max(0, el.scrollTop);
     },
+    // A deliberate jump somewhere else in the thread: stop following the
+    // newest message until the reader scrolls back to the bottom.
+    unpin() {
+      pinned = false;
+    },
   };
 }

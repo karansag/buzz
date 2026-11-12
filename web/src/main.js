@@ -50,6 +50,7 @@ import { stepTeammate, teammates } from "./teammates.js";
 import { Crown, queenSuffix } from "./queen.js";
 import { shellNewlines } from "./newlines.js";
 import { agentThreads, ownerChats } from "./chats.js";
+import { agentHash, parseAgentRoute } from "./agent-route.js";
 
 /* ---------- agent controls ---------- */
 
@@ -1248,7 +1249,12 @@ function sentByViewer(sender, a, b, page) {
 // button shows: a little drift is not "scrolled up".
 const JUMP_SHOW_PX = 160;
 
-function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null }) {
+// How a hole in the loaded history is described, both inside a thread and
+// above the conversations.
+const gapLabel = ({ count, after, before }) =>
+  `${count} message${count === 1 ? "" : "s"} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
+
+function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null }) {
   useLayoutEffect(() => { if (search?.open) setExpanded(true); }, [search?.open]);
   const boxRef = useRef(null);
   const follower = useRef(null);
@@ -1318,6 +1324,13 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   // changes size (drag-resize, window resize, late font/layout), not only
   // when a message arrives.
   const lastId = msgs.length ? msgs[msgs.length - 1].id : null;
+  // A hole in the loaded history, marked where both of its edges are in this
+  // thread: otherwise the list would jump a few hundred messages in silence.
+  // When an edge belongs to another thread the page-level notice covers it.
+  const gapAt = new Map();
+  for (const gap of gaps) {
+    if (msgs.some(m => m.id === gap.after) && msgs.some(m => m.id === gap.before)) gapAt.set(gap.before, gap);
+  }
   useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el || !expanded) return;
@@ -1336,6 +1349,26 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     stick();
     return () => ro.disconnect();
   }, [msgs.length, lastId, historyHeight, expanded]);
+  // Open at one message: a link like #/agent/<handle>?m=<id>, from the chats
+  // search or another search UI. Scroll it to the middle and flash it with the
+  // same highlight a reply quote uses, once per request, after the follow
+  // effect above has had its turn so it cannot drag the view back to the end.
+  const jumpedTo = useRef(null);
+  useLayoutEffect(() => {
+    if (!jumpTo || jumpedTo.current === jumpTo) return;
+    if (!expanded) { setExpanded(true); return; }
+    const el = boxRef.current;
+    const target = el?.querySelector(`[data-message-id="${jumpTo}"]`);
+    if (!target) return;
+    follower.current.unpin();
+    previousHistory.current = null;
+    target.scrollIntoView({ block: "center", behavior: "instant" });
+    target.focus({ preventScroll: true });
+    target.classList.remove("reply-highlight");
+    void target.offsetWidth;
+    target.classList.add("reply-highlight");
+    jumpedTo.current = jumpTo;
+  }, [jumpTo, expanded, msgs.length]);
   const toggleFocus = () => {
     setExpanded(true);
     setFocused(v => !v);
@@ -1460,7 +1493,9 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     ${search && html`<${ConversationSearchBar} search=${search} />`}
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
-      ${msgs.map(m => html`
+      ${msgs.map(m => html`${gapAt.has(m.id) && html`<div key=${`gap-${m.id}`} class="msg-gap" role="note">
+        <span>${gapLabel(gapAt.get(m.id))}</span>
+        ${loadGap && html`<button type="button" class="mini" onClick=${() => loadGap(gapAt.get(m.id))}>load them</button>`}</div>`}
         <div key=${m.id} data-message-id=${m.id} tabindex="-1" onAnimationEnd=${e => e.currentTarget.classList.remove("reply-highlight")} onContextMenu=${e => openMenu(e, m)} class=${[
             "msg",
             sentByViewer(m.sender, a, b, page) ? "right" : "",
@@ -1560,8 +1595,7 @@ function useTeammateKeys(members) {
     const onKey = (e) => {
       if (!e.altKey || e.ctrlKey || e.metaKey || document.querySelector(".quick-switch[open]")) return;
       const members = current.current;
-      const here = location.hash.startsWith("#/agent/")
-        ? decodeURIComponent(location.hash.slice("#/agent/".length)) : null;
+      const here = parseAgentRoute(location.hash)?.user ?? null;
       const by = e.code === "BracketRight" ? 1 : e.code === "BracketLeft" ? -1 : 0;
       const known = members && members.some(m => m.user_id === here);
       const next = by && known && stepTeammate(members, here, by);
@@ -1762,7 +1796,10 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
           const r = byId.get(c.agent);
           const st = STATE[r ? agentStatus(r) : "unknown"] || STATE.unknown;
           const m = c.match || c.last;
-          return html`<a key=${c.agent} class="chat-row" href=${`#/agent/${encodeURIComponent(c.agent)}`}>
+          // A search match opens the conversation at that message; without a
+          // search the row opens the end of the conversation, as before.
+          const matchId = c.match?.id ?? null;
+          return html`<a key=${c.agent} class="chat-row" href=${agentHash(c.agent, matchId)}>
             ${r ? html`<${Bee} node=${r.node} flavor=${r.flavor} size="small" working=${st.cls === "working"} />`
               : html`<span class="chat-gone" aria-hidden="true">◌</span>`}
             <span class="chat-main">
@@ -1775,13 +1812,26 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
         })}</div>`}`;
 }
 
-function FocusView({ user, state, refresh, freshIds, unreadFor }) {
+function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor }) {
   const history = useAgentHistory(user);
   const conversationSearch = useConversationSearch(user);
   const [showAgentChats, setShowAgentChats] = useState(false);
   const messages = [...new Map([...history.messages, ...state.messages]
     .filter(m => m.sender === user || m.recipient === user).map(m => [m.id, m])).values()]
     .sort((a, b) => a.ts - b.ts || a.id - b.id);
+  // A link can ask for one message (#/agent/<handle>?m=<id>): the chats search
+  // and other search UIs use it. If it is not in the loaded history yet, load
+  // the page around it; `history.lookup` says whether it was found, absent
+  // from this conversation, or failed, so this never retries in a loop.
+  const jumpId = messageId && messages.some(m => m.id === messageId) ? messageId : null;
+  const look = history.lookup;
+  useEffect(() => {
+    if (!messageId || jumpId || !history.loaded) return;
+    if (look.id === messageId && look.status !== "failed") return;
+    history.loadAround(messageId);
+    // history.loadAround is a fresh closure each render; the lookup guard above
+    // is what stops a second request, so it is not a dependency.
+  }, [messageId, jumpId, history.loaded, look.id, look.status]);
   const crew = useMemo(() => teammates(state.recipients, state.teams, user), [state.recipients, state.teams, user]);
   const members = useMemo(() => crew && crew.members, [crew && crew.members.map(m => m.user_id).join(" ")]);
   useTeammateKeys(members);
@@ -1828,11 +1878,23 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
     .map(([, msgs]) => msgs);
   const hasOwnerThread = groups.has(ownerThread);
   const peerThreads = threads.filter(msgs => pairKey(msgs[0].sender, msgs[0].recipient) !== ownerThread);
+  // The thread that holds the message the link asked for, if it is loaded: only
+  // that thread scrolls there, and a peer thread is revealed to show it.
+  const jumpThread = jumpId && threads.find(msgs => msgs.some(m => m.id === jumpId));
+  // A hole whose two edges are in one thread is marked inside that thread; the
+  // notice above the conversations covers the holes that are not.
+  const looseGaps = history.gaps.filter(gap => !threads.some(msgs =>
+    msgs.some(m => m.id === gap.after) && msgs.some(m => m.id === gap.before)));
+  const jumpIsPeer = !!jumpThread && pairKey(jumpThread[0].sender, jumpThread[0].recipient) !== ownerThread;
+  useEffect(() => { if (jumpIsPeer) setShowAgentChats(true); }, [jumpIsPeer]);
   const peerChatsId = `agent-chats-${encodeURIComponent(user)}`;
   const renderThread = msgs => {
     const [a, b] = pairKey(msgs[0].sender, msgs[0].recipient).split(" ");
     return html`<${Thread} key=${pairKey(a, b)} a=${a} b=${b} msgs=${msgs} page=${user} agents=${registered}
-      freshIds=${freshIds} now=${state.now} refresh=${refresh} search=${a === "owner" || b === "owner" ? conversationSearch : null} />`;
+      freshIds=${freshIds} now=${state.now} refresh=${refresh}
+      search=${a === "owner" || b === "owner" ? conversationSearch : null}
+      jumpTo=${msgs === jumpThread ? jumpId : null}
+      gaps=${history.gaps} loadGap=${history.loadGap} />`;
   };
   return html`<div>
     <div class="focus-top">
@@ -1863,6 +1925,16 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
     <h2>conversations ${hasOwnerThread && html`<span class="count">· 1</span>`}</h2>
     ${history.error && html`<p role="status">${history.error}</p>`}
     ${!history.loaded && !history.error && html`<p role="status">Loading conversation history…</p>`}
+    ${messageId && look.id === messageId && look.status === "loading" && html`<p role="status">Loading the message you followed…</p>`}
+    ${messageId && look.id === messageId && look.status === "missing" && html`<p class="jump-missing" role="status">
+      Message #${messageId} is not part of this conversation.</p>`}
+    ${messageId && look.id === messageId && look.status === "failed" && html`<p role="status">
+      Could not load message #${messageId}.
+      <button type="button" class="mini" onClick=${() => history.loadAround(messageId)}>try again</button></p>`}
+    ${looseGaps.map(gap => html`<p class="history-gap" role="status">
+      ${`${gapLabel(gap)}.`}
+      <button type="button" class="mini" disabled=${history.busy} onClick=${() => history.loadGap(gap)}>
+        ${history.busy ? "Loading…" : "load the missing messages"}</button></p>`)}
     ${history.more && html`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
       ${history.busy ? "Loading older messages…" : "Load older messages"}</button>`}
     ${hasOwnerThread ? renderThread(groups.get(ownerThread)) : html`<div class="thread">
@@ -1972,8 +2044,9 @@ function App() {
     };
   }, []);
 
-  const focusUser = route.startsWith("#/agent/")
-    ? decodeURIComponent(route.slice("#/agent/".length)) : null;
+  // #/agent/<handle>?m=<message id> opens the page at one message.
+  const agentRoute = parseAgentRoute(route);
+  const focusUser = agentRoute?.user ?? null;
   const onHistory = route.startsWith(HISTORY_ROUTE);
   const onChats = route.startsWith(CHATS_ROUTE);
   const onTab = route.startsWith(TAB_ROUTE) ? decodeURIComponent(route.slice(TAB_ROUTE.length)) : null;
@@ -2022,8 +2095,8 @@ function App() {
           st.maxId = maxId;
           // A page opened straight onto an agent that has since gone (a
           // bookmark, or the Mac app reopening where it was) shows the overview.
-          if (st.first && location.hash.startsWith("#/agent/")
-              && !s.recipients.some(r => r.user_id === decodeURIComponent(location.hash.slice("#/agent/".length))))
+          const opened = parseAgentRoute(location.hash);
+          if (st.first && opened && !s.recipients.some(r => r.user_id === opened.user))
             location.replace("#/");
           st.first = false;
           setState(s);
@@ -2135,7 +2208,8 @@ function App() {
     </button>`}
     <div class="stage">
       ${focusUser
-        ? html`<${FocusView} key=${focusUser} user=${focusUser} state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor} />`
+        ? html`<${FocusView} key=${focusUser} user=${focusUser} messageId=${agentRoute?.messageId ?? null}
+            state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor} />`
         : onHistory
           ? html`<${HistoryView} state=${state} refresh=${poll} />`
           : onChats

@@ -1735,7 +1735,37 @@ def test_agent_history_is_independent_and_pages_without_gaps(client, tmp_path):
     newer = client.get(url, params={"limit": 3, "after": ids[0]}).json()
     assert [m["id"] for m in newer["messages"]] == ids[1:4]
     assert newer["has_more"]
+    # Opening at one message: the window is centred on it, oldest first, with
+    # has_more still meaning "older history exists below the window".
+    # Half the page lands at or before the id, half after it, so the target
+    # sits near the middle with context on both sides.
+    middle = client.get(url, params={"around": ids[3], "limit": 4}).json()
+    assert [m["id"] for m in middle["messages"]] == ids[2:6]
+    assert middle["has_more"]
+    start = client.get(url, params={"around": ids[0], "limit": 4}).json()
+    assert [m["id"] for m in start["messages"]] == ids[:3]
+    assert not start["has_more"]
+    end = client.get(url, params={"around": ids[-1], "limit": 4}).json()
+    assert [m["id"] for m in end["messages"]] == ids[-2:]
+    assert end["has_more"]
+    # A message that is not in this conversation comes back without that id,
+    # so the page can say so rather than silently landing somewhere else.
+    absent = client.get(url, params={"around": 999999, "limit": 4}).json()
+    assert absent["messages"] and not any(m["id"] == 999999 for m in absent["messages"])
+    # Ids are global, so two loaded pages far apart may have nothing between
+    # them: this count is what tells a jump apart from a real hole.
+    assert client.get(f"{url}/count", params={"after": ids[0], "before": ids[-1]}).json()["count"] == 5
+    assert client.get(f"{url}/count", params={"after": ids[-1], "before": ids[-1] + 1}).json()["count"] == 0
+    noise = max(m["id"] for m in client.get("/messages?limit=1").json()["messages"])
+    assert client.get("/api/agents/busy/messages/count", params={"after": ids[-1], "before": noise + 1}).json()["count"] == 301
+    assert client.get(f"{url}/count", params={"after": 5, "before": 5}).status_code == 422
+    assert client.get(f"{url}/count", params={"after": 1}).status_code == 422
+    assert client.get(f"{url}/count", params={"after": ids[0], "before": ids[-1]},
+                      headers={"X-Forwarded-For": "100.1.2.3"}).status_code == 401
     assert client.get(url, params={"before": 1, "after": 2}).status_code == 422
+    assert client.get(url, params={"around": ids[3], "after": ids[0]}).status_code == 422
+    assert client.get(url, params={"around": 0}).status_code == 422
+    assert client.get(url, params={"around": ids[3]}, headers={"X-Forwarded-For": "100.1.2.3"}).status_code == 401
     assert client.get(url, params={"limit": -1}).status_code == 422
     assert client.get(url, params={"limit": 501}).status_code == 422
     assert client.get(url, headers={"X-Forwarded-For": "100.1.2.3"}).status_code == 401

@@ -1117,9 +1117,29 @@ def search_agent_messages(conn: sqlite3.Connection, user: str, query: str,
 
 @_serialized
 def agent_messages_page(conn: sqlite3.Connection, user: str, limit: int = 300,
-                        before: int | None = None, after: int | None = None) -> dict:
-    """Page by immutable IDs so imports/timestamp ties cannot skip messages."""
-    clauses = ["(sender=? OR recipient=?)"]
+                        before: int | None = None, after: int | None = None,
+                        around: int | None = None) -> dict:
+    """Page by immutable IDs so imports/timestamp ties cannot skip messages.
+
+    `around` returns the window centred on one message id, for jumping to a
+    match deep in a conversation: half the page at or before the id, half
+    after it, oldest first. `has_more` keeps its meaning of "history exists
+    below the returned window".
+    """
+    where = "(sender=? OR recipient=?)"
+    if around is not None:
+        half = max(1, limit // 2)
+        older = conn.execute(
+            f"SELECT * FROM messages WHERE {where} AND id <= ? ORDER BY id DESC LIMIT ?",
+            (user, user, around, half + 1),
+        ).fetchall()
+        newer = conn.execute(
+            f"SELECT * FROM messages WHERE {where} AND id > ? ORDER BY id ASC LIMIT ?",
+            (user, user, around, half),
+        ).fetchall()
+        rows = [*reversed(older[:half]), *newer]
+        return {"messages": _messages(conn, rows), "has_more": len(older) > half}
+    clauses = [where]
     args = [user, user]
     if before is not None:
         clauses.append("id < ?")
@@ -1133,6 +1153,21 @@ def agent_messages_page(conn: sqlite3.Connection, user: str, limit: int = 300,
         (*args, limit + 1),
     ).fetchall()
     return {"messages": _messages(conn, rows[:limit]), "has_more": len(rows) > limit}
+
+
+@_serialized
+def count_agent_messages_between(conn: sqlite3.Connection, user: str, after: int, before: int) -> int:
+    """How many messages in one conversation sit strictly between two ids.
+
+    Message ids are global, so a conversation's own ids are sparse: two loaded
+    pages with a distance between them may have nothing in the middle. This
+    count is what decides whether a jump to a far back message left a real hole.
+    """
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM messages WHERE (sender=? OR recipient=?) AND id > ? AND id < ?",
+        (user, user, after, before),
+    ).fetchone()
+    return int(row["n"])
 
 
 @_serialized

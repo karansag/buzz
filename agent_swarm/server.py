@@ -1646,10 +1646,18 @@ def create_app(
     def agent_messages(user_id: str, limit: int = Query(300, ge=1, le=500),
                        before: int | None = Query(None, ge=1),
                        after: int | None = Query(None, ge=0),
+                       around: int | None = Query(None, ge=1),
                        _: None = Depends(_require_owner)):
-        if before is not None and after is not None:
-            raise HTTPException(status_code=422, detail="Use either before or after")
-        return db.agent_messages_page(conn, user_id, limit, before, after)
+        if sum(option is not None for option in (before, after, around)) > 1:
+            raise HTTPException(status_code=422, detail="Use only one of before, after or around")
+        return db.agent_messages_page(conn, user_id, limit, before, after, around)
+
+    @app.get("/api/agents/{user_id}/messages/count")
+    def agent_messages_count(user_id: str, after: int = Query(..., ge=0), before: int = Query(..., ge=1),
+                             _: None = Depends(_require_owner)):
+        if before <= after:
+            raise HTTPException(status_code=422, detail="before must be greater than after")
+        return {"count": db.count_agent_messages_between(conn, user_id, after, before)}
 
     @app.get("/api/agents/{user_id}/messages/search")
     def search_agent_messages(user_id: str, q: str = Query("", max_length=1000),

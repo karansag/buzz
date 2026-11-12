@@ -164,6 +164,17 @@
     color: var(--cream-dim); font-size: 13px;
   }
   .empty code { color: var(--honey); }
+  /* A hole in the loaded history, left by jumping to a message far back. */
+  .msg-gap {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0;
+    padding: 6px 10px; border: 1px dashed var(--honey-dim); border-radius: 8px;
+    color: var(--cream-dim); font-size: 11px;
+  }
+  .history-gap, .jump-missing {
+    margin: 2px 0 10px; padding: 8px 10px; border: 1px dashed var(--honey-dim);
+    border-radius: 8px; color: var(--cream-dim); font-size: 12px;
+  }
+  .jump-missing { border-color: var(--line); }
 
   /* ---------- forms ---------- */
   input[type="text"], select {
