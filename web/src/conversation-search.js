@@ -1,15 +1,7 @@
 import { html } from 'htm/preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 
-// #431 will replace this loaded-message fallback with its shared route jump.
-export function jumpToMessage(user, id) {
-  const target = document.querySelector(`.thread [data-message-id="${id}"]`);
-  if (!target) return;
-  target.scrollIntoView({block: 'center', behavior: 'instant'});
-  target.classList.remove('reply-highlight');
-  void target.offsetWidth;
-  target.classList.add('reply-highlight');
-}
+import { showAgentMessage } from './agent-route.js';
 
 const PAGE_SIZE = 100;
 export function useConversationSearch(user) {
@@ -63,7 +55,7 @@ export function useConversationSearch(user) {
         const current = await read(s, 0);
         if (session.current !== s || s.abort.signal.aborted) return;
         setResult({total: s.total, index: 0, busy: false, error: '', current});
-        if (current) jumpToMessage(user, current.id);
+        if (current) showAgentMessage(user, current.id);
       } catch (error) {
         if (!s.abort.signal.aborted) setResult({total: 0, index: 0, busy: false, error: error.message, current: null});
       }
@@ -81,7 +73,7 @@ export function useConversationSearch(user) {
       const current = await read(s, index);
       if (session.current !== s || sequence !== s.sequence || s.abort.signal.aborted) return;
       setResult({total: s.total, index, busy: false, error: '', current});
-      if (current) jumpToMessage(user, current.id);
+      if (current) showAgentMessage(user, current.id);
     } catch (error) {
       if (!s.abort.signal.aborted && sequence === s.sequence)
         setResult(prev => ({...prev, busy: false, error: error.message}));

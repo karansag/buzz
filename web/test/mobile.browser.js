@@ -2910,3 +2910,55 @@ test('conversation search pages matches, ignores a superseded query and reports 
     assert.deepEqual(errors, []);
   } finally { releaseSlow(); await page.close(); }
 });
+
+for (const width of [390, 1500]) {
+  test(`conversation search jumps through unloaded history and keeps typing focus at ${width}px`, async () => {
+    const {page, state, errors} = await setup(width, 900, width < 500);
+    const ids = [1599, 600, 20];
+    state.history = Array.from({length:1600}, (_,i) => ({id:i+1, sender:i%2 ? 'owner' : names[0],
+      recipient:i%2 ? names[0] : 'owner', content:ids.includes(i+1) ? `Needle result ${i+1}` : `Message ${i+1}`,
+      ts:state.now-1600+i, status:'delivered'}));
+    state.messages = state.history.slice(-2);
+    const around = [];
+    page.on('request', request => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith('/messages') && url.searchParams.has('around')) around.push(Number(url.searchParams.get('around')));
+    });
+    await page.route('**/api/agents/*/messages/search?*', route => route.fulfill({json:{total:3,
+      matches:ids.map(id => ({id,ts:state.history[id-1].ts,sender:state.history[id-1].sender,snippet:`Needle result ${id}`}))}}));
+    try {
+      await page.goto(`${base}#/agent/${names[0]}`);
+      await page.locator('[data-message-id="1599"]').waitFor();
+      assert.equal(await page.locator('[data-message-id="600"]').count(), 0);
+      assert.equal(await page.locator('[data-message-id="20"]').count(), 0);
+      const entries = await page.evaluate(() => history.length);
+      await page.keyboard.press(width === 390 ? 'Meta+f' : 'Control+f');
+      const input = page.getByRole('searchbox', {name:'Search conversation history'});
+      await input.fill('needle');
+      for (const [position,id] of ids.entries()) {
+        if (position) await input.press('Enter');
+        await page.getByRole('status').filter({hasText:`${position+1} of 3`}).waitFor();
+        const target = page.locator(`[data-message-id="${id}"].reply-highlight`);
+        await target.waitFor();
+        assert.equal(await page.evaluate(() => location.hash), `#/agent/${names[0]}?m=${id}`);
+        assert.equal(await input.evaluate(el => el === document.activeElement), true);
+        assert.equal(await target.locator('mark.conversation-match').count(), 1);
+        const visible = await target.evaluate(el => {
+          const message = el.getBoundingClientRect(), box = el.closest('.msgs').getBoundingClientRect();
+          return message.bottom > box.top && message.top < box.bottom;
+        });
+        assert.equal(visible, true);
+      }
+      await input.press('Shift+Enter');
+      await page.getByRole('status').filter({hasText:'2 of 3'}).waitFor();
+      await page.locator('[data-message-id="600"].reply-highlight').waitFor();
+      assert.equal(await input.evaluate(el => el === document.activeElement), true);
+      assert.deepEqual(around, [600,20]);
+      assert.equal(await page.evaluate(() => history.length), entries);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await input.press('Escape');
+      await input.waitFor({state:'detached'});
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}

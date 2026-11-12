@@ -9159,6 +9159,11 @@ function messageParam(query) {
 	const value = new URLSearchParams(query).get("m");
 	return value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null;
 }
+function showAgentMessage(user, messageId) {
+	history.replaceState(null, "", agentHash(user, messageId));
+	const event = typeof HashChangeEvent === "function" ? new HashChangeEvent("hashchange") : new Event("hashchange");
+	dispatchEvent(event);
+}
 function parseAgentRoute(hash = "") {
 	if (!hash.startsWith("#/agent/")) return null;
 	const rest = hash.slice(8);
@@ -9832,17 +9837,6 @@ function useAgentHistory(user) {
 }
 //#endregion
 //#region web/src/conversation-search.js
-function jumpToMessage(user, id) {
-	const target = document.querySelector(`.thread [data-message-id="${id}"]`);
-	if (!target) return;
-	target.scrollIntoView({
-		block: "center",
-		behavior: "instant"
-	});
-	target.classList.remove("reply-highlight");
-	target.offsetWidth;
-	target.classList.add("reply-highlight");
-}
 var PAGE_SIZE = 100;
 function useConversationSearch(user) {
 	const [open, setOpen] = d(false);
@@ -9931,7 +9925,7 @@ function useConversationSearch(user) {
 					error: "",
 					current
 				});
-				if (current) jumpToMessage(user, current.id);
+				if (current) showAgentMessage(user, current.id);
 			} catch (error) {
 				if (!s.abort.signal.aborted) setResult({
 					total: 0,
@@ -9973,7 +9967,7 @@ function useConversationSearch(user) {
 				error: "",
 				current
 			});
-			if (current) jumpToMessage(user, current.id);
+			if (current) showAgentMessage(user, current.id);
 		} catch (error) {
 			if (!s.abort.signal.aborted && sequence === s.sequence) setResult((prev) => ({
 				...prev,
