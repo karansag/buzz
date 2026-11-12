@@ -1976,6 +1976,42 @@ test('reply to one agent message by button or right-click', async () => {
   } finally { await page.close(); }
 });
 
+
+for (const width of [390, 1500]) {
+  test(`message emphasis, inline code and underlined links have distinct colors at ${width}px`, async () => {
+    const {page,state,errors}=await setup(width,900,width<500);
+    const content='**Important result**: run `buzz tasks` and read the [review notes](https://example.com/review).\n\n[**Bold link**](https://example.com/bold) and [`code link`](https://example.com/code).\n\n| Check | Result |\n|---|---|\n| API | Ready |\n\n```\nneutral fenced text\n```';
+    state.messages.push({id:420,sender:'stoat',recipient:'owner',content,ts:state.now,status:'delivered',attachments:[]});
+    try {
+      await page.goto(base+'#/agent/stoat');
+      const body=page.locator('[data-message-id="420"] .md');
+      await body.locator('strong').first().waitFor();
+      const colors=await body.evaluate(e=>{
+        const style=s=>getComputedStyle(e.querySelector(s));
+        return {strong:style('p > strong').color,weight:style('p > strong').fontWeight,
+          code:style('p > code').color,codeBg:style('p > code').backgroundColor,
+          link:style('a').color,decoration:style('a').textDecorationLine,
+          boldLink:style('a strong').color,codeLink:style('a code').color,
+          header:style('th').color,fence:style('pre code').color,
+          alert:getComputedStyle(document.documentElement).getPropertyValue('--alert').trim()};
+      });
+      assert.equal(new Set([colors.strong,colors.code,colors.link]).size,3);
+      assert.equal(colors.strong,'rgb(255, 135, 175)');
+      assert.equal(colors.code,'rgb(166, 227, 161)');
+      assert.ok(Number(colors.weight)>=650);
+      assert.notEqual(colors.codeBg,'rgba(0, 0, 0, 0)');
+      assert.ok(colors.decoration.includes('underline'));
+      assert.equal(colors.boldLink,colors.link);
+      assert.equal(colors.codeLink,colors.link);
+      assert.equal(colors.header,'rgb(255, 247, 230)');
+      assert.notEqual(colors.fence,colors.code);
+      assert.equal(colors.alert,'#e06c55');
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);
+      assert.deepEqual(errors,[]);
+    } finally {await page.close();}
+  });
+}
+
 test('the terminal view shows pane colors and chat colors code, diffs and Markdown', async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   const E = '\x1b';
@@ -2002,11 +2038,11 @@ test('the terminal view shows pane colors and chat colors code, diffs and Markdo
     assert.equal(await bubble.locator('.hljs-keyword').first().innerText(), 'def');
     // Inline code, bold and table headers are off honey (rgb(242, 169, 59)),
     // which marks the dashboard's own controls; fenced code keeps its colors.
-    assert.equal(await tint('p > code'), 'rgb(156, 200, 240)');
-    assert.equal(await tint('strong'), 'rgb(255, 247, 230)');
+    assert.equal(await tint('p > code'), 'rgb(166, 227, 161)');
+    assert.equal(await tint('strong'), 'rgb(255, 135, 175)');
     assert.equal(await tint('th'), 'rgb(255, 247, 230)');
     assert.equal(await bubble.locator('li').first().evaluate(e => getComputedStyle(e, '::marker').color), 'rgb(168, 152, 120)');
-    assert.notEqual(await tint('pre code'), 'rgb(156, 200, 240)');
+    assert.notEqual(await tint('pre code'), 'rgb(166, 227, 161)');
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
