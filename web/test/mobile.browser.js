@@ -1054,6 +1054,30 @@ test('a hole whose edges sit in different conversations is reported above them',
   } finally { await page.close(); }
 });
 
+test('a jump keeps the cursor in whatever the reader is typing in', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  // An in-page search steps through matches from its own input; the jump must
+  // not pull the cursor onto the message.
+  state.history = Array.from({ length: 320 }, (_, i) => {
+    const id = 1000 + i;
+    return { id, sender: id % 2 ? 'owner' : 'stoat', recipient: id % 2 ? 'stoat' : 'owner',
+      content: `message ${id}`, ts: state.now - 1000 + i, status: 'delivered', attachments: [] };
+  });
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const composer = page.locator('.thread .composer textarea').first();
+    await composer.click();
+    await page.evaluate(() => { location.hash = '#/agent/stoat?m=1010'; });
+    await page.locator('[data-message-id="1010"].reply-highlight').waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement?.closest('.thread .composer') !== null), true);
+    // A jump from a link with nothing focused still lands on the message itself.
+    await page.evaluate(() => document.activeElement.blur());
+    await page.evaluate(() => { location.hash = '#/agent/stoat?m=1030'; });
+    await page.waitForFunction(() => document.activeElement?.dataset?.messageId === '1030');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 test('changing the message id in the route jumps again in place', async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   // Both ids are inside the window the first jump loads, so the second one is a

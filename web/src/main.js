@@ -1353,6 +1353,9 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   // search or another search UI. Scroll it to the middle and flash it with the
   // same highlight a reply quote uses, once per request, after the follow
   // effect above has had its turn so it cannot drag the view back to the end.
+  // The message takes the focus so a keyboard reader lands on it, unless the
+  // reader is typing: an in-page search stepping through matches keeps its
+  // cursor in the search box.
   const jumpedTo = useRef(null);
   useLayoutEffect(() => {
     if (!jumpTo || jumpedTo.current === jumpTo) return;
@@ -1360,10 +1363,12 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     const el = boxRef.current;
     const target = el?.querySelector(`[data-message-id="${jumpTo}"]`);
     if (!target) return;
+    const typing = document.activeElement?.isContentEditable
+      || ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName);
     follower.current.unpin();
     previousHistory.current = null;
     target.scrollIntoView({ block: "center", behavior: "instant" });
-    target.focus({ preventScroll: true });
+    if (!typing) target.focus({ preventScroll: true });
     target.classList.remove("reply-highlight");
     void target.offsetWidth;
     target.classList.add("reply-highlight");

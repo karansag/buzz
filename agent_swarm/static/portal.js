@@ -13582,13 +13582,14 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		}
 		const target = boxRef.current?.querySelector(`[data-message-id="${jumpTo}"]`);
 		if (!target) return;
+		const typing = document.activeElement?.isContentEditable || ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName);
 		follower.current.unpin();
 		previousHistory.current = null;
 		target.scrollIntoView({
 			block: "center",
 			behavior: "instant"
 		});
-		target.focus({ preventScroll: true });
+		if (!typing) target.focus({ preventScroll: true });
 		target.classList.remove("reply-highlight");
 		target.offsetWidth;
 		target.classList.add("reply-highlight");
