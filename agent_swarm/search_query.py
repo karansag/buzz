@@ -71,7 +71,7 @@ def parse(text: str) -> Query:
         if key and not neg:
             k = key.lower()
             if k == "from" and value:
-                q.senders.append("owner" if value.lower() in OWNER_ALIASES else value)
+                q.senders.append("owner" if value.casefold() in OWNER_ALIASES else value)
                 continue
             if k in ("after", "before") and (ts := _date(value or "")) is not None:
                 if k == "after":
@@ -87,38 +87,39 @@ def parse(text: str) -> Query:
         if not value:
             pending_or = False
             continue
-        term = Term(value.lower(), phrase)
+        term = Term(value.casefold(), phrase)
         if neg:
             q.excluded.append(term)
             pending_or = False
         elif pending_or:
             q.clauses[-1].append(term)
             pending_or = False
-        else:
+        elif [term] not in q.clauses:
             q.clauses.append([term])
     return q
 
 
-def _like(text: str) -> str:
-    return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+TEXT = "casefold(content || ' ' || COALESCE(context, ''))"
 
 
-def to_sql(q: Query, content: str = "content", sender: str = "sender",
+def to_sql(q: Query, text: str = TEXT, sender: str = "sender",
            ts: str = "ts") -> tuple[str, list]:
     """A WHERE fragment (without the word WHERE) and its parameters.
 
-    Matching is case-insensitive substring matching; SQLite's LIKE folds
-    ASCII case only, so the column is lowered first.
+    Matching is literal, case-insensitive substring matching over the message
+    text and its context tag. The connection supplies Unicode casefold().
+    An empty query matches nothing.
     """
+    if q.empty():
+        return "0", []
     parts: list[str] = []
     params: list = []
-    col = f"lower({content})"
     for clause in q.clauses:
-        parts.append("(" + " OR ".join(f"{col} LIKE ? ESCAPE '\\'" for _ in clause) + ")")
-        params += [_like(t.text) for t in clause]
+        parts.append("(" + " OR ".join(f"instr({text}, ?) > 0" for _ in clause) + ")")
+        params += [t.text for t in clause]
     for t in q.excluded:
-        parts.append(f"{col} NOT LIKE ? ESCAPE '\\'")
-        params.append(_like(t.text))
+        parts.append(f"instr({text}, ?) = 0")
+        params.append(t.text)
     if q.senders:
         parts.append(f"{sender} IN ({','.join('?' for _ in q.senders)})")
         params += q.senders
@@ -128,12 +129,14 @@ def to_sql(q: Query, content: str = "content", sender: str = "sender",
     if q.before is not None:
         parts.append(f"{ts} < ?")
         params.append(q.before)
-    return (" AND ".join(parts) or "1"), params
+    return " AND ".join(parts), params
 
 
 def matches(q: Query, message: dict) -> bool:
     """The same rules in Python, for messages already in memory."""
-    text = (message.get("content") or "").lower()
+    if q.empty():
+        return False
+    text = f"{message.get('content') or ''} {message.get('context') or ''}".casefold()
     if any(not any(t.text in text for t in clause) for clause in q.clauses):
         return False
     if any(t.text in text for t in q.excluded):

@@ -8,6 +8,7 @@ export function useConversationSearch(user) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [result, setResult] = useState({total: 0, index: 0, busy: false, error: '', current: null});
+  const [terms, setTerms] = useState(null);
   const input = useRef(null), previousFocus = useRef(null), session = useRef(null);
   const show = () => {
     if (!open) previousFocus.current = document.activeElement;
@@ -41,6 +42,7 @@ export function useConversationSearch(user) {
       const page = await response.json();
       if (!Array.isArray(page.matches) || !Number.isInteger(page.total)) throw Error('Invalid search response.');
       s.total = page.total;
+      if (Array.isArray(page.terms) && session.current === s) setTerms(page.terms);
       s.pages.set(offset, page.matches);
     }
     return s.pages.get(offset)[index - offset] || null;
@@ -48,6 +50,7 @@ export function useConversationSearch(user) {
   useEffect(() => {
     const s = {query: query.trim(), pages: new Map(), abort: new AbortController(), index: 0, total: 0, sequence: 0};
     session.current = s;
+    setTerms(null);
     setResult({total: 0, index: 0, busy: open && !!s.query, error: '', current: null});
     if (!open || !s.query) return () => { s.abort.abort(); };
     const timer = setTimeout(async () => {
@@ -80,7 +83,8 @@ export function useConversationSearch(user) {
     }
   };
   return {open, query, setQuery, input, show, close, ...result, move,
-    words: open ? query.trim().split(/\s+/).filter(Boolean) : []};
+    // The hub's parsed terms: operators such as from: or -word are not highlighted.
+    words: open ? (terms ?? query.trim().split(/\s+/).filter(Boolean)) : []};
 }
 
 export function ConversationSearchBar({search}) {
@@ -88,7 +92,8 @@ export function ConversationSearchBar({search}) {
   return html`<div class="conversation-search" role="search" aria-label="Search this conversation">
     <div class="conversation-search-controls">
       <input ref=${search.input} type="search" value=${search.query} aria-label="Search conversation history"
-        placeholder="Search full conversation…" onInput=${e => search.setQuery(e.target.value)}
+        placeholder='Search… "phrase" -word a OR b from:me'
+        title='Words: all must match. "exact phrase". -word or -"phrase" leaves out. a OR b: either. from:me / from:agent. after:2026-11-01, before:2026-11-10.' onInput=${e => search.setQuery(e.target.value)}
         onKeyDown=${e => {
           if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); search.move(e.shiftKey ? -1 : 1); }
         }} />

@@ -21,8 +21,9 @@ MESSAGES = [
 def conn():
     c = sqlite3.connect(":memory:")
     c.row_factory = sqlite3.Row
-    c.execute("CREATE TABLE messages(id INTEGER, sender TEXT, content TEXT, ts REAL)")
-    c.executemany("INSERT INTO messages VALUES(:id,:sender,:content,:ts)", MESSAGES)
+    c.create_function("casefold", 1, lambda v: (v or "").casefold(), deterministic=True)
+    c.execute("CREATE TABLE messages(id INTEGER, sender TEXT, content TEXT, context TEXT, ts REAL)")
+    c.executemany("INSERT INTO messages VALUES(:id,:sender,:content,NULL,:ts)", MESSAGES)
     return c
 
 
@@ -36,7 +37,7 @@ def ids(conn, text):
 
 
 @pytest.mark.parametrize("text,expected", [
-    ("", [1, 2, 3, 4, 5]),
+    ("", []),  # an empty query matches nothing
     ("deploy fix", [1, 2, 4]),
     ("DEPLOY", [1, 2, 4]),
     ('"fix deploy"', [4]),
@@ -69,7 +70,7 @@ def test_queries(conn, text, expected):
 
 
 def test_unknown_operator_is_plain_text(conn):
-    conn.execute("INSERT INTO messages VALUES(6,'owner','see http://x',?)", (T0,))
+    conn.execute("INSERT INTO messages VALUES(6,'owner','see http://x',NULL,?)", (T0,))
     q = sq.parse("http://x")
     assert q.clauses == [[sq.Term("http://x")]]
     assert [r["id"] for r in conn.execute(
@@ -83,3 +84,10 @@ def test_highlight_lists_positive_terms_only():
 
 def test_lowercase_or_is_a_word(conn):
     assert sq.parse("gpu or tpu").clauses == [[sq.Term("gpu")], [sq.Term("or")], [sq.Term("tpu")]]
+
+
+def test_context_tag_is_searched(conn):
+    conn.execute("INSERT INTO messages VALUES(7,'owner','plain body','task #430',?)", (T0,))
+    where, params = sq.to_sql(sq.parse('"task #430"'))
+    assert [r["id"] for r in conn.execute(f"SELECT id FROM messages WHERE {where}", params)] == [7]
+    assert sq.matches(sq.parse('"task #430"'), {"content": "plain body", "context": "task #430", "ts": T0})

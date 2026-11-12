@@ -1097,6 +1097,7 @@ def search_agent_messages(conn: sqlite3.Connection, user: str, query: str,
                           limit: int = 100, offset: int = 0) -> dict:
     """Search the whole owner conversation, independently of history pages."""
     clause, params = search.matches(query)
+    terms = search.terms(query)
     scope = "((sender='owner' AND recipient=?) OR (sender=? AND recipient='owner'))"
     where = f"{scope} AND ({clause})"
     args = [user, user, *params]
@@ -1108,11 +1109,12 @@ def search_agent_messages(conn: sqlite3.Connection, user: str, query: str,
     def snippet(content):
         text = " ".join(content.split())
         # Center the short preview near the first literal search word when possible.
-        positions = [text.casefold().find(word) for word in query.casefold().split()]
+        positions = [text.casefold().find(word) for word in terms]
         start = max(0, min((p for p in positions if p >= 0), default=0) - 40)
         return ("…" if start else "") + text[start:start + 160] + ("…" if len(text) > start + 160 else "")
     return {"matches": [{"id": row["id"], "ts": row["ts"], "sender": row["sender"],
-                         "snippet": snippet(row["content"])} for row in rows], "total": total}
+                         "snippet": snippet(row["content"])} for row in rows], "total": total,
+            "terms": terms}
 
 
 @_serialized

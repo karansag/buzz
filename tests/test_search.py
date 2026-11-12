@@ -13,7 +13,7 @@ def test_plain_query_is_literal_unicode_casefolded_all_words(tmp_path):
     assert [m['id'] for m in db.search_agent_messages(conn, 'fake', 'STRASSE 50%_ deploy')['matches']] == [wanted]
     assert db.search_agent_messages(conn, 'fake', "' OR 1=1 --")['total'] == 0
     assert db.search_agent_messages(conn, 'fake', '50X_')['total'] == 0
-    assert db.search_agent_messages(conn, 'fake', '   ') == {'matches': [], 'total': 0}
+    assert db.search_agent_messages(conn, 'fake', '   ') == {'matches': [], 'total': 0, 'terms': []}
     clause, params = search.matches('one TWO one')
     assert clause.count('?') == 2 and params == ['one', 'two']
     conn.close()
@@ -42,7 +42,7 @@ def test_endpoint_searches_all_owner_history_not_loaded_pages(client, tmp_path):
     assert 'NEEDLE' in second['matches'][0]['snippet']
     assert client.get(f'/api/agents/{user}/messages/search', params={'q': 'never exists'}).json()['total'] == 0
     assert client.get(f'/api/agents/{user}/messages/search', params={'q': 'needle rare'}).json()['total'] == 1
-    assert client.get(f'/api/agents/{user}/messages/search').json() == {'matches': [], 'total': 0}
+    assert client.get(f'/api/agents/{user}/messages/search').json() == {'matches': [], 'total': 0, 'terms': []}
     for params in [{'limit': 0}, {'limit': 501}, {'offset': -1}, {'q': 'a' * 1001}]:
         assert client.get(f'/api/agents/{user}/messages/search', params=params).status_code == 422
 
