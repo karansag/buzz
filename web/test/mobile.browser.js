@@ -1054,6 +1054,47 @@ test('a hole whose edges sit in different conversations is reported above them',
   } finally { await page.close(); }
 });
 
+test('a jump asked for while another is loading still happens', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  // A search stepping quickly through matches asks for a second unloaded
+  // message before the first window has arrived. The slow response makes that
+  // overlap deterministic.
+  state.history = Array.from({ length: 700 }, (_, i) => {
+    const id = 1000 + i;
+    return { id, sender: id % 2 ? 'owner' : 'stoat', recipient: id % 2 ? 'stoat' : 'owner',
+      content: `message ${id}`, ts: state.now - 7000 + i, status: 'delivered', attachments: [] };
+  });
+  await page.route('**/api/agents/*/messages?*', async route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('around')) await new Promise(done => setTimeout(done, 400));
+    const user = decodeURIComponent(url.pathname.split('/')[3]);
+    const before = Number(url.searchParams.get('before') || Infinity);
+    const after = Number(url.searchParams.get('after') || 0);
+    const around = Number(url.searchParams.get('around') || 0);
+    const mine = state.history.filter(m => (m.sender === user || m.recipient === user)
+      && (around ? true : m.id < before && m.id > after)).sort((a, b) => a.id - b.id);
+    if (around) {
+      const older = mine.filter(m => m.id <= around).slice(-150);
+      const newer = mine.filter(m => m.id > around).slice(0, 150);
+      return route.fulfill({ json: { messages: [...older, ...newer], has_more: mine.filter(m => m.id <= around).length > 150 } });
+    }
+    const rows = after ? mine.slice(0, 300) : mine.slice(-300).reverse();
+    return route.fulfill({ json: { messages: rows, has_more: mine.length > 300 } });
+  });
+  try {
+    await page.goto(base + '#/agent/stoat?m=1020');
+    await page.locator('[data-message-id="1020"].reply-highlight').waitFor();
+    // Both ids are far below the newest page, so each jump needs its own window.
+    await page.evaluate(() => { location.hash = '#/agent/stoat?m=1100'; });
+    await page.evaluate(() => { location.hash = '#/agent/stoat?m=1200'; });
+    await page.locator('[data-message-id="1200"].reply-highlight').waitFor({ timeout: 10000 });
+    const box = await page.locator('.msgs').first().boundingBox();
+    const bubble = await page.locator('[data-message-id="1200"]').boundingBox();
+    assert.ok(bubble.y >= box.y && bubble.y + bubble.height <= box.y + box.height);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 test('a jump keeps the cursor in whatever the reader is typing in', async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   // An in-page search steps through matches from its own input; the jump must
