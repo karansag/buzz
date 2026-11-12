@@ -1958,8 +1958,6 @@ test('reply to one agent message by button or right-click', async () => {
   try {
     await page.goto(base + '#/agent/stoat');
     const box = page.locator('form.composer textarea').first();
-    // Only the agent's message offers a reply; the owner's own does not.
-    assert.equal(await page.getByRole('button', { name: 'Reply to message 1' }).count(), 0);
     await page.getByRole('button', { name: 'Reply to message 2' }).click();
     assert.match(await page.locator('.compose-reply').innerText(), /Replying to stoat: Testing phone and tablet navigation\./);
     // The composer takes focus after the render, so typing starts the reply.
@@ -1969,6 +1967,15 @@ test('reply to one agent message by button or right-click', async () => {
     await page.waitForFunction(() => !document.querySelector('.compose-reply'));
     assert.equal(sent[0].content, 'looks good');
     assert.equal(sent[0].reply_to, 2);
+
+    // The owner can reply to their own message too.
+    await page.getByRole('button', { name: 'Reply to message 1' }).click();
+    assert.match(await page.locator('.compose-reply').innerText(), /Replying to owner:/);
+    await box.fill('following up');
+    await box.press('Enter');
+    await page.waitForFunction(() => !document.querySelector('.compose-reply'));
+    assert.equal(sent[1].content, 'following up');
+    assert.equal(sent[1].reply_to, 1);
 
     await page.locator('[data-message-id="2"]').click({ button: 'right' });
     await page.getByRole('menuitem', { name: '↩ Reply' }).click();

@@ -13048,7 +13048,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	const [awayFrom, setAwayFrom] = d(null);
 	const [replyTo, setReplyTo] = d(null);
 	const [menu, setMenu] = d(null);
-	const canReply = (m) => !!recipient && !m.pending && typeof m.id === "number" && m.sender !== "owner";
+	const canReply = (m) => !!recipient && !m.pending && typeof m.id === "number";
 	const openMenu = (e, m) => {
 		if (e.shiftKey || !canReply(m)) return;
 		e.preventDefault();

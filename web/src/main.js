@@ -1257,11 +1257,12 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   // Scrolled up from the newest message: the id that was newest then, so the
   // jump button can count what arrived since. Null while at the bottom.
   const [awayFrom, setAwayFrom] = useState(null);
-  // Replying to one message: a ↩ button on each agent message, or right-click
+  // Replying to one message, the agent's or the owner's own: a ↩ button on
+  // each message, or right-click
   // (Shift + right-click keeps the browser's own menu).
   const [replyTo, setReplyTo] = useState(null);
   const [menu, setMenu] = useState(null);
-  const canReply = (m) => !!recipient && !m.pending && typeof m.id === "number" && m.sender !== "owner";
+  const canReply = (m) => !!recipient && !m.pending && typeof m.id === "number";
   const openMenu = (e, m) => {
     if (e.shiftKey || !canReply(m)) return;
     e.preventDefault();
