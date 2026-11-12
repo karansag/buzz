@@ -483,6 +483,9 @@ test('team strip and Alt+] / Alt+[ switch teammates, keeping the draft and the c
     await box.focus();
     await page.keyboard.press('Alt+BracketRight');
     await page.waitForFunction(() => location.hash === '#/agent/hoopoe-codex-gpt5-karanslinux');
+    // A changed URL can still have the previous agent's focused composer.
+    // Wait for the destination page before sending the next shortcut.
+    await page.waitForFunction(() => document.querySelector('.fhead .nm')?.textContent.startsWith('hoopoe-codex-gpt5-karanslinux'));
     await page.waitForFunction(() => !!document.activeElement?.closest('.thread .composer'));
     await page.keyboard.press('Alt+BracketLeft');
     await page.waitForFunction(() => location.hash === '#/agent/stoat');
