@@ -297,7 +297,7 @@ test('a conversation expands to fill the window and back (button, shortcut, Esc)
     const size = sel => page.locator(sel).first().evaluate(e => getComputedStyle(e).fontSize);
     assert.equal(await size('.thread .msg .bubble'), '14px');
     assert.equal(await size('.thread .composer textarea'), '14px');
-    await page.locator('.thread-focus').first().click();
+    await page.locator('.thread-focus-toggle').first().click();
     assert.equal(await page.locator('.thread.focused').count(), 1);
     assert.ok((await history.boundingBox()).height > before + 50);  // the default is already ~2/3 of the window
     const bubble = page.locator('.thread.focused .msg .bubble').first();
@@ -1454,7 +1454,7 @@ for (const rosterOpen of [true, false]) {
     try {
       await page.addInitScript(open => localStorage.setItem('swarm-roster-open', String(open)), rosterOpen);
       await page.goto(base + '#/agent/stoat');
-      await page.locator('.thread-focus').first().click();
+      await page.locator('.thread-focus-toggle').first().click();
       for (const width of [1800, 2400]) {
         await page.setViewportSize({ width, height: 1000 });
         const rect = await page.locator('.thread.focused').boundingBox();
@@ -1466,7 +1466,7 @@ for (const rosterOpen of [true, false]) {
       await page.waitForSelector('.thread.focused', { state: 'detached' });
       assert.equal(await page.locator('.roster-drawer.is-open').count(), Number(rosterOpen));
       assert.equal(await page.evaluate(() => location.hash), '#/agent/stoat');
-      await page.locator('.thread-focus').first().click();
+      await page.locator('.thread-focus-toggle').first().click();
       // Escape from the composer also closes only the conversation overlay.
       await page.locator('.thread.focused textarea').first().focus();
       await page.keyboard.press('Escape');
@@ -1629,7 +1629,7 @@ test('keyboard switchers search across teams and preserve focused chat on Escape
   state.recipients.find(a => a.user_id === 'hedgehog').team_id = 2;
   try {
     await page.goto(base + '#/agent/stoat');
-    await page.locator('.thread-focus').first().click();
+    await page.locator('.thread-focus-toggle').first().click();
     const composer = page.locator('.thread.focused textarea').first();
     await composer.fill('keep this draft');
     await page.keyboard.press('Control+k');
@@ -2617,3 +2617,108 @@ for (const width of [390, 1500]) {
     } finally { await page.close(); }
   });
 }
+
+for (const width of [390, 1500]) {
+  test(`conversation search at ${width}px: shortcut, full counts, next/previous, highlight and Escape`, async () => {
+    const {page, state, errors} = await setup(width, 900, width < 500);
+    const calls = [];
+    state.messages[1].content = 'Needle in **important** text with `needle` code and [a link](https://example.com/needle).';
+    state.messages.push({id:900, sender:'owner', recipient:names[0], content:'Newest needle in this conversation', ts:state.now + 1, status:'delivered'});
+    const found = [state.messages[2], state.messages[1], {id: 1, ts:state.now - 9999, sender:names[0], content:'Needle from full history'}];
+    await page.route('**/api/agents/*/messages/search?*', route => {
+      const url = new URL(route.request().url());
+      calls.push(url.searchParams.get('q'));
+      const query = url.searchParams.get('q').toLowerCase();
+      const matches = query === 'needle' ? found.map(m => ({id:m.id,ts:m.ts,sender:m.sender,snippet:m.content})) : [];
+      return route.fulfill({json:{matches,total:matches.length}});
+    });
+    try {
+      await page.goto(`${base}#/agent/${names[0]}`);
+      await page.locator('.thread .msg').first().waitFor();
+      await page.locator('.thread-toggle').first().click();
+      await page.keyboard.press('Control+f');
+      const input = page.getByRole('searchbox', {name:'Search conversation history'});
+      await input.waitFor();
+      assert.equal(await input.evaluate(el => el === document.activeElement), true);
+      await input.fill('needle');
+      await page.getByRole('status').filter({hasText:'1 of 3'}).waitFor();
+      assert.ok(calls.includes('needle'));
+      await page.locator('[data-message-id="900"].reply-highlight').waitFor();
+      assert.equal(await page.locator('[data-message-id="2"] mark.conversation-match').count(), 2);
+      assert.equal(await page.locator('[data-message-id="2"] .md a').getAttribute('href'), 'https://example.com/needle');
+      await input.press('Enter');
+      await page.getByRole('status').filter({hasText:'2 of 3'}).waitFor();
+      await page.locator('[data-message-id="2"].reply-highlight').waitFor();
+      await input.press('Shift+Enter');
+      await page.getByRole('status').filter({hasText:'1 of 3'}).waitFor();
+      await page.getByRole('button', {name:'Previous match',exact:true}).click();
+      await page.getByRole('status').filter({hasText:'3 of 3'}).waitFor();
+      await input.fill('not present');
+      await page.getByRole('status').filter({hasText:'No matches'}).waitFor();
+      await input.press('Escape');
+      await input.waitFor({state:'detached'});
+      assert.equal(await page.locator('mark.conversation-match').count(), 0);
+      await page.keyboard.press('Meta+f');
+      await input.waitFor();
+      await page.getByRole('button', {name:'Close conversation search'}).click();
+      await page.getByRole('button', {name:'Search conversation',exact:true}).click();
+      await input.waitFor();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await input.press('Escape');
+      await page.goto(`${base}#/`);
+      await page.locator('.fhead').waitFor({state:'detached'});
+      // Other views retain native browser find: no handler prevents the event.
+      assert.equal(await page.evaluate(() => {
+        const event = new KeyboardEvent('keydown', {key:'f',ctrlKey:true,bubbles:true,cancelable:true});
+        dispatchEvent(event); return event.defaultPrevented;
+      }), false);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
+test('conversation search pages matches, ignores a superseded query and reports failures', async () => {
+  const {page, state, errors} = await setup(1500, 900, false);
+  let releaseSlow;
+  const held = new Promise(resolve => { releaseSlow = resolve; });
+  const requests = [];
+  await page.route('**/api/agents/*/messages/search?*', async route => {
+    const params = new URL(route.request().url()).searchParams;
+    const query = params.get('q'), offset = Number(params.get('offset'));
+    requests.push([query, offset]);
+    if (query === 'slow') await held;
+    if (query === 'fail') return route.fulfill({status:503,json:{detail:'unavailable'}});
+    const total = query === 'slow' ? 99 : 201;
+    const matches = Array.from({length:Math.min(100,total-offset)}, (_,i) =>
+      ({id: 1000-offset-i, ts:state.now, sender:names[0], snippet:'A matching historical message'}));
+    await route.fulfill({json:{matches,total}}).catch(() => {}); // Canceled stale fetch is expected.
+  });
+  try {
+    await page.goto(`${base}#/agent/${names[0]}`);
+    await page.getByRole('button', {name:'Search conversation',exact:true}).click();
+    const input = page.getByRole('searchbox', {name:'Search conversation history'});
+    await input.fill('slow');
+    await page.waitForRequest(request => request.url().includes('/messages/search?') && request.url().includes('q=slow'));
+    await input.fill('needle');
+    await page.getByRole('status').filter({hasText:'1 of 201'}).waitFor();
+    releaseSlow();
+    await input.press('Shift+Enter');
+    await page.getByRole('status').filter({hasText:'201 of 201'}).waitFor();
+    assert.ok(requests.some(([query,offset]) => query === 'needle' && offset === 200));
+    await input.press('Enter');
+    await page.getByRole('status').filter({hasText:'1 of 201'}).waitFor();
+    await input.fill('fail');
+    await page.getByRole('alert').filter({hasText:'Could not search this conversation'}).waitFor();
+    await input.press('Escape');
+    await page.getByRole('button', {name:'Focus conversation',exact:true}).click();
+    await page.locator('.thread.focused').waitFor();
+    await page.keyboard.press('Control+f');
+    await input.waitFor();
+    await input.press('Escape');
+    assert.equal(await page.locator('.thread.focused').count(), 1);
+    await input.waitFor({state:'detached'});
+    await page.keyboard.press('Escape');
+    await page.locator('.thread.focused').waitFor({state:'detached'});
+    assert.deepEqual(errors, []);
+  } finally { releaseSlow(); await page.close(); }
+});

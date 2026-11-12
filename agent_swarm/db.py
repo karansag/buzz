@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import names, notifications
+from . import names, notifications, search
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recipients (
@@ -133,6 +133,7 @@ def connect(path: str | Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.create_function("casefold", 1, lambda value: (value or "").casefold(), deterministic=True)
     conn.executescript(SCHEMA)
     _ensure_columns(conn)
     return conn
@@ -1089,6 +1090,29 @@ def fetch_messages(
             "SELECT * FROM messages ORDER BY ts DESC LIMIT ?", (limit,)
         ).fetchall()
     return _messages(conn, rows)
+
+
+@_serialized
+def search_agent_messages(conn: sqlite3.Connection, user: str, query: str,
+                          limit: int = 100, offset: int = 0) -> dict:
+    """Search the whole owner conversation, independently of history pages."""
+    clause, params = search.matches(query)
+    scope = "((sender='owner' AND recipient=?) OR (sender=? AND recipient='owner'))"
+    where = f"{scope} AND ({clause})"
+    args = [user, user, *params]
+    total = conn.execute(f"SELECT COUNT(*) FROM messages WHERE {where}", args).fetchone()[0]
+    rows = conn.execute(
+        f"SELECT id, ts, sender, content FROM messages WHERE {where} "
+        "ORDER BY id DESC LIMIT ? OFFSET ?", (*args, limit, offset),
+    ).fetchall()
+    def snippet(content):
+        text = " ".join(content.split())
+        # Center the short preview near the first literal search word when possible.
+        positions = [text.casefold().find(word) for word in query.casefold().split()]
+        start = max(0, min((p for p in positions if p >= 0), default=0) - 40)
+        return ("…" if start else "") + text[start:start + 160] + ("…" if len(text) > start + 160 else "")
+    return {"matches": [{"id": row["id"], "ts": row["ts"], "sender": row["sender"],
+                         "snippet": snippet(row["content"])} for row in rows], "total": total}
 
 
 @_serialized

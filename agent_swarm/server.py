@@ -1651,6 +1651,13 @@ def create_app(
             raise HTTPException(status_code=422, detail="Use either before or after")
         return db.agent_messages_page(conn, user_id, limit, before, after)
 
+    @app.get("/api/agents/{user_id}/messages/search")
+    def search_agent_messages(user_id: str, q: str = Query("", max_length=1000),
+                              limit: int = Query(100, ge=1, le=500),
+                              offset: int = Query(0, ge=0),
+                              _: None = Depends(_require_owner)):
+        return db.search_agent_messages(conn, user_id, q, limit, offset)
+
     @app.post("/owner/send")
     def owner_send(req: OwnerSendReq, _: None = Depends(_require_owner)):
         content = req.content.strip()

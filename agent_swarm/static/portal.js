@@ -9650,6 +9650,225 @@ function useAgentHistory(user) {
 	};
 }
 //#endregion
+//#region web/src/conversation-search.js
+function jumpToMessage(user, id) {
+	const target = document.querySelector(`.thread [data-message-id="${id}"]`);
+	if (!target) return;
+	target.scrollIntoView({
+		block: "center",
+		behavior: "instant"
+	});
+	target.classList.remove("reply-highlight");
+	target.offsetWidth;
+	target.classList.add("reply-highlight");
+}
+var PAGE_SIZE = 100;
+function useConversationSearch(user) {
+	const [open, setOpen] = d(false);
+	const [query, setQuery] = d("");
+	const [result, setResult] = d({
+		total: 0,
+		index: 0,
+		busy: false,
+		error: "",
+		current: null
+	});
+	const input = A(null), previousFocus = A(null), session = A(null);
+	const show = () => {
+		if (!open) previousFocus.current = document.activeElement;
+		setOpen(true);
+		requestAnimationFrame(() => {
+			input.current?.focus();
+			input.current?.select();
+		});
+	};
+	const close = () => {
+		session.current?.abort.abort();
+		setOpen(false);
+		if (previousFocus.current?.isConnected) previousFocus.current.focus({ preventScroll: true });
+	};
+	_(() => {
+		const key = (event) => {
+			if (event.isComposing || document.querySelector(".quick-switch[open], dialog.page-dialog[open]")) return;
+			if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "f") {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				show();
+			} else if (open && event.key === "Escape") {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				close();
+			}
+		};
+		addEventListener("keydown", key, true);
+		return () => removeEventListener("keydown", key, true);
+	}, [open, user]);
+	const read = async (s, index) => {
+		const offset = Math.floor(index / PAGE_SIZE) * PAGE_SIZE;
+		if (!s.pages.has(offset)) {
+			const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages/search?${new URLSearchParams({
+				q: s.query,
+				limit: PAGE_SIZE,
+				offset
+			})}`, { signal: s.abort.signal });
+			if (!response.ok) throw Error("Could not search this conversation. Please try again.");
+			const page = await response.json();
+			if (!Array.isArray(page.matches) || !Number.isInteger(page.total)) throw Error("Invalid search response.");
+			s.total = page.total;
+			s.pages.set(offset, page.matches);
+		}
+		return s.pages.get(offset)[index - offset] || null;
+	};
+	h(() => {
+		const s = {
+			query: query.trim(),
+			pages: /* @__PURE__ */ new Map(),
+			abort: new AbortController(),
+			index: 0,
+			total: 0,
+			sequence: 0
+		};
+		session.current = s;
+		setResult({
+			total: 0,
+			index: 0,
+			busy: open && !!s.query,
+			error: "",
+			current: null
+		});
+		if (!open || !s.query) return () => {
+			s.abort.abort();
+		};
+		const timer = setTimeout(async () => {
+			try {
+				const current = await read(s, 0);
+				if (session.current !== s || s.abort.signal.aborted) return;
+				setResult({
+					total: s.total,
+					index: 0,
+					busy: false,
+					error: "",
+					current
+				});
+				if (current) jumpToMessage(user, current.id);
+			} catch (error) {
+				if (!s.abort.signal.aborted) setResult({
+					total: 0,
+					index: 0,
+					busy: false,
+					error: error.message,
+					current: null
+				});
+			}
+		}, 200);
+		return () => {
+			clearTimeout(timer);
+			s.abort.abort();
+		};
+	}, [
+		user,
+		query,
+		open
+	]);
+	const move = async (delta) => {
+		const s = session.current;
+		if (!s?.total || s.abort.signal.aborted) return;
+		const index = (s.index + delta + s.total) % s.total;
+		s.index = index;
+		const sequence = ++s.sequence;
+		setResult((prev) => ({
+			...prev,
+			index,
+			busy: true,
+			error: ""
+		}));
+		try {
+			const current = await read(s, index);
+			if (session.current !== s || sequence !== s.sequence || s.abort.signal.aborted) return;
+			setResult({
+				total: s.total,
+				index,
+				busy: false,
+				error: "",
+				current
+			});
+			if (current) jumpToMessage(user, current.id);
+		} catch (error) {
+			if (!s.abort.signal.aborted && sequence === s.sequence) setResult((prev) => ({
+				...prev,
+				busy: false,
+				error: error.message
+			}));
+		}
+	};
+	return {
+		open,
+		query,
+		setQuery,
+		input,
+		show,
+		close,
+		...result,
+		move,
+		words: open ? query.trim().split(/\s+/).filter(Boolean) : []
+	};
+}
+function ConversationSearchBar({ search }) {
+	if (!search.open) return null;
+	return m$1`<div class="conversation-search" role="search" aria-label="Search this conversation">
+    <div class="conversation-search-controls">
+      <input ref=${search.input} type="search" value=${search.query} aria-label="Search conversation history"
+        placeholder="Search full conversation…" onInput=${(e) => search.setQuery(e.target.value)}
+        onKeyDown=${(e) => {
+		if (e.key === "Enter" && !e.isComposing) {
+			e.preventDefault();
+			e.stopPropagation();
+			search.move(e.shiftKey ? -1 : 1);
+		}
+	}} />
+      <span class="conversation-search-count" role="status">${search.busy ? "Searching…" : search.error ? "Search unavailable" : search.total ? `${search.index + 1} of ${search.total}` : search.query.trim() ? "No matches" : "Full history"}</span>
+      <button type="button" aria-label="Previous match" title="Previous match (Shift+Enter)" disabled=${!search.total || search.busy} onClick=${() => search.move(-1)}>↑</button>
+      <button type="button" aria-label="Next match" title="Next match (Enter)" disabled=${!search.total || search.busy} onClick=${() => search.move(1)}>↓</button>
+      <button type="button" aria-label="Close conversation search" title="Close search (Esc)" onClick=${search.close}>✕</button>
+    </div>
+    ${search.error && m$1`<div role="alert">${search.error}</div>`}
+  </div>`;
+}
+var highlights = /* @__PURE__ */ new Map();
+function highlightSearch(html, words) {
+	if (!words.length) return html;
+	const key = JSON.stringify([html, words]);
+	if (highlights.has(key)) return highlights.get(key);
+	const expression = new RegExp(words.slice().sort((a, b) => b.length - a.length).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "giu");
+	const root = document.createElement("div");
+	root.innerHTML = html;
+	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+	const nodes = [];
+	while (walker.nextNode()) nodes.push(walker.currentNode);
+	for (const node of nodes) {
+		const text = node.textContent;
+		expression.lastIndex = 0;
+		const matches = [...text.matchAll(expression)];
+		if (!matches.length) continue;
+		const fragment = document.createDocumentFragment();
+		let offset = 0;
+		for (const match of matches) {
+			fragment.append(document.createTextNode(text.slice(offset, match.index)));
+			const mark = document.createElement("mark");
+			mark.className = "conversation-match";
+			mark.textContent = match[0];
+			fragment.append(mark);
+			offset = match.index + match[0].length;
+		}
+		fragment.append(document.createTextNode(text.slice(offset)));
+		node.replaceWith(fragment);
+	}
+	const out = root.innerHTML;
+	if (highlights.size >= 500) highlights.delete(highlights.keys().next().value);
+	highlights.set(key, out);
+	return out;
+}
+//#endregion
 //#region web/src/dialogs.js
 var queue = Promise.resolve();
 function openDialog(message, { confirmLabel, cancelLabel }) {
@@ -13073,7 +13292,10 @@ function sentByViewer(sender, a, b, page) {
 	return sender !== a;
 }
 var JUMP_SHOW_PX = 160;
-function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null }) {
+function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null }) {
+	_(() => {
+		if (search?.open) setExpanded(true);
+	}, [search?.open]);
 	const boxRef = A(null);
 	const follower = A(null);
 	if (!follower.current) follower.current = createBottomFollower();
@@ -13191,6 +13413,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	_(() => {
 		const onKey = (e) => {
 			if (e.isComposing || document.querySelector(".quick-switch[open], dialog.page-dialog[open]")) return;
+			if (e.key === "Escape" && search?.open) return;
 			if (e.key === "Escape" && focused) {
 				e.preventDefault();
 				e.stopImmediatePropagation();
@@ -13206,7 +13429,11 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		};
 		addEventListener("keydown", onKey, true);
 		return () => removeEventListener("keydown", onKey, true);
-	}, [focused, recipient]);
+	}, [
+		focused,
+		recipient,
+		search?.open
+	]);
 	const noteAway = (el) => {
 		const away = el.scrollHeight - el.scrollTop - el.clientHeight > JUMP_SHOW_PX;
 		const newest = msgs.findLast((m) => typeof m.id === "number")?.id ?? 0;
@@ -13271,6 +13498,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
         <span class="thread-participants">${disp(a)} <span class="swap">⇄</span> ${disp(b)}</span>
         <span class="n">${msgs.length} msg${msgs.length === 1 ? "" : "s"}</span>
       </button>
+      ${search && m$1`<button type="button" class="thread-focus" aria-label="Search conversation" title="Search conversation (Cmd/Ctrl+F)" onClick=${search.show}>⌕</button>`}
       ${focused && m$1`
         <button type="button" class="thread-focus" title="Smaller text" aria-label="Smaller text"
           disabled=${focusFont <= FOCUS_FONT.min} onClick=${() => stepFont(-FOCUS_FONT.step)}>A−</button>
@@ -13284,6 +13512,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
         <span aria-hidden="true">${focused ? "✕" : "⤢"}</span><span class="focus-label">${focused ? " close" : " focus"}</span>${recipient && m$1` <span class="focus-key-hint">${focusShortcut}</span>`}</button>
     </div>
     <div id=${bodyId} class="thread-body" hidden=${!expanded}>
+    ${search && m$1`<${ConversationSearchBar} search=${search} />`}
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
       ${msgs.map((m) => m$1`
@@ -13296,7 +13525,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		m.pending ? "pending" : ""
 	].join(" ")}>
           <div class="bubble"><${ReplyPreview} message=${m} messages=${msgs} />${m.content && m$1`<div class="md"
-            dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}${m.attachments?.length > 0 && m$1`<div class=${`msg-images ${m.content ? "" : "only"}`}>
+            dangerouslySetInnerHTML=${{ __html: highlightSearch(renderMarkdown(shellNewlines(m.content)), search?.words || []) }} />`}${m.attachments?.length > 0 && m$1`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
           <div class="tag">${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}${disp(m.sender)}${m.context && m$1` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && m$1` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && m$1` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && m$1` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && m$1` <button type="button" class="msg-reply"
@@ -13595,6 +13824,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
 }
 function FocusView({ user, state, refresh, freshIds, unreadFor }) {
 	const history = useAgentHistory(user);
+	const conversationSearch = useConversationSearch(user);
 	const [showAgentChats, setShowAgentChats] = d(false);
 	const messages = [...new Map([...history.messages, ...state.messages].filter((m) => m.sender === user || m.recipient === user).map((m) => [m.id, m])).values()].sort((a, b) => a.ts - b.ts || a.id - b.id);
 	const crew = T(() => teammates(state.recipients, state.teams, user), [
@@ -13643,7 +13873,7 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
 	const renderThread = (msgs) => {
 		const [a, b] = pairKey(msgs[0].sender, msgs[0].recipient).split(" ");
 		return m$1`<${Thread} key=${pairKey(a, b)} a=${a} b=${b} msgs=${msgs} page=${user} agents=${registered}
-      freshIds=${freshIds} now=${state.now} refresh=${refresh} />`;
+      freshIds=${freshIds} now=${state.now} refresh=${refresh} search=${a === "owner" || b === "owner" ? conversationSearch : null} />`;
 	};
 	return m$1`<div>
     <div class="focus-top">
@@ -13679,6 +13909,7 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
     ${history.more && m$1`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
       ${history.busy ? "Loading older messages…" : "Load older messages"}</button>`}
     ${hasOwnerThread ? renderThread(groups.get(ownerThread)) : m$1`<div class="thread">
+      <${ConversationSearchBar} search=${conversationSearch} />
       ${threads.length > 0 ? m$1`<div class="bar">${disp("owner")} <span class="swap">⇄</span> ${user}</div>` : history.loaded && m$1`<div class="empty">Nothing yet. Start a conversation with ${user} below.</div>`}
       <${MessageComposer} recipient=${user} refresh=${refresh} autoFocus /></div>`}
     ${peerThreads.length > 0 && m$1`<button type="button" class="mini agent-chats-toggle"

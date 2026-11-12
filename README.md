@@ -841,3 +841,18 @@ web push or delivery while the page/app is closed. The Mac app forwards explicit
 alerts through its native notifications; use its **Enable notifications…** menu
 and rebuild the app when installing the new handler. OS notification settings
 can suppress banners even after Buzz has submitted them.
+
+### Find in a conversation
+
+On an agent page, press **Cmd+F** (Mac) or **Ctrl+F**, or click the conversation's
+search button. Search uses the whole owner–agent history, including messages
+outside the loaded page. Every word must occur in the message text or context;
+matching ignores case and treats punctuation literally. The bar shows the full
+match count; **Enter** / **Shift+Enter** or the arrow buttons step through matches,
+wrapping at either end. **Esc** closes search and clears the highlights. Other
+pages keep the browser's usual Find command.
+
+The owner-only endpoint is `GET /api/agents/<id>/messages/search?q=...&limit=100&offset=0`.
+It returns `matches` (id, timestamp, sender, snippet) and `total`. Queries are capped
+at 1,000 characters and pages at 500 results. Query matching is compiled solely by
+`agent_swarm/search.py`; conversation scope and authorization stay outside it.

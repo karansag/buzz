@@ -4,6 +4,7 @@ import { ReplyPreview } from "./reply-preview.js";
 import { OwnerNote } from "./owner-note.js";
 import { QuickSwitcher } from "./quick-switch.js";
 import { useAgentHistory } from "./agent-history.js";
+import { useConversationSearch, ConversationSearchBar, highlightSearch } from "./conversation-search.js";
 import { TaskTrash } from "./task-trash.js";
 import { confirmDialog, showNotice } from "./dialogs.js";
 import { TaskStatusActions } from "./task-status.js";
@@ -1247,7 +1248,8 @@ function sentByViewer(sender, a, b, page) {
 // button shows: a little drift is not "scrolled up".
 const JUMP_SHOW_PX = 160;
 
-function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null }) {
+function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null }) {
+  useLayoutEffect(() => { if (search?.open) setExpanded(true); }, [search?.open]);
   const boxRef = useRef(null);
   const follower = useRef(null);
   if (!follower.current) follower.current = createBottomFollower();
@@ -1363,6 +1365,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   useLayoutEffect(() => {
     const onKey = (e) => {
       if (e.isComposing || document.querySelector(".quick-switch[open], dialog.page-dialog[open]")) return;
+      if (e.key === "Escape" && search?.open) return;
       if (e.key === "Escape" && focused) {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -1380,7 +1383,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     // Consume Escape before page-level shortcuts, regardless of listener order.
     addEventListener("keydown", onKey, true);
     return () => removeEventListener("keydown", onKey, true);
-  }, [focused, recipient]);
+  }, [focused, recipient, search?.open]);
   const noteAway = (el) => {
     const away = el.scrollHeight - el.scrollTop - el.clientHeight > JUMP_SHOW_PX;
     const newest = msgs.findLast(m => typeof m.id === "number")?.id ?? 0;
@@ -1440,6 +1443,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
         <span class="thread-participants">${disp(a)} <span class="swap">⇄</span> ${disp(b)}</span>
         <span class="n">${msgs.length} msg${msgs.length === 1 ? "" : "s"}</span>
       </button>
+      ${search && html`<button type="button" class="thread-focus" aria-label="Search conversation" title="Search conversation (Cmd/Ctrl+F)" onClick=${search.show}>⌕</button>`}
       ${focused && html`
         <button type="button" class="thread-focus" title="Smaller text" aria-label="Smaller text"
           disabled=${focusFont <= FOCUS_FONT.min} onClick=${() => stepFont(-FOCUS_FONT.step)}>A−</button>
@@ -1453,6 +1457,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
         <span aria-hidden="true">${focused ? "✕" : "⤢"}</span><span class="focus-label">${focused ? " close" : " focus"}</span>${recipient && html` <span class="focus-key-hint">${focusShortcut}</span>`}</button>
     </div>
     <div id=${bodyId} class="thread-body" hidden=${!expanded}>
+    ${search && html`<${ConversationSearchBar} search=${search} />`}
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
       ${msgs.map(m => html`
@@ -1465,7 +1470,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             m.pending ? "pending" : "",
           ].join(" ")}>
           <div class="bubble"><${ReplyPreview} message=${m} messages=${msgs} />${m.content && html`<div class="md"
-            dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}${m.attachments?.length > 0 && html`<div class=${`msg-images ${m.content ? "" : "only"}`}>
+            dangerouslySetInnerHTML=${{ __html: highlightSearch(renderMarkdown(shellNewlines(m.content)), search?.words || []) }} />`}${m.attachments?.length > 0 && html`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map(name => html`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
           <div class="tag">${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}${disp(m.sender)}${m.context && html` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && html` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && html` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && html` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && html` <button type="button" class="msg-reply"
@@ -1772,6 +1777,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
 
 function FocusView({ user, state, refresh, freshIds, unreadFor }) {
   const history = useAgentHistory(user);
+  const conversationSearch = useConversationSearch(user);
   const [showAgentChats, setShowAgentChats] = useState(false);
   const messages = [...new Map([...history.messages, ...state.messages]
     .filter(m => m.sender === user || m.recipient === user).map(m => [m.id, m])).values()]
@@ -1826,7 +1832,7 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
   const renderThread = msgs => {
     const [a, b] = pairKey(msgs[0].sender, msgs[0].recipient).split(" ");
     return html`<${Thread} key=${pairKey(a, b)} a=${a} b=${b} msgs=${msgs} page=${user} agents=${registered}
-      freshIds=${freshIds} now=${state.now} refresh=${refresh} />`;
+      freshIds=${freshIds} now=${state.now} refresh=${refresh} search=${a === "owner" || b === "owner" ? conversationSearch : null} />`;
   };
   return html`<div>
     <div class="focus-top">
@@ -1860,6 +1866,7 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
     ${history.more && html`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
       ${history.busy ? "Loading older messages…" : "Load older messages"}</button>`}
     ${hasOwnerThread ? renderThread(groups.get(ownerThread)) : html`<div class="thread">
+      <${ConversationSearchBar} search=${conversationSearch} />
       ${threads.length > 0
         ? html`<div class="bar">${disp("owner")} <span class="swap">⇄</span> ${user}</div>`
         : history.loaded && html`<div class="empty">Nothing yet. Start a conversation with ${user} below.</div>`}
