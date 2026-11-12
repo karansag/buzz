@@ -470,6 +470,16 @@ def cmd_send(args: argparse.Namespace) -> int:
     return 0 if r.is_success else 1
 
 
+def cmd_notify(args: argparse.Namespace) -> int:
+    who = caller(getattr(args, "pane", None))
+    if not _identify_or_explain(who):
+        return 2
+    r = httpx.post(f"{base_url()}/notify", json={**_identity_payload(who),
+                   "content": args.text, "context": args.context}, headers=_headers(), timeout=10)
+    print(r.text)
+    return 0 if r.is_success else 1
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     who = caller(getattr(args, "pane", None))
     if not _identify_or_explain(who):
@@ -1023,6 +1033,12 @@ def main(argv: list[str] | None = None) -> int:
     snd.add_argument("--reply-to", type=int, help="id of the message this responds to")
     snd.add_argument("--pane", help="the agent's tmux pane, when this process isn't in it")
     snd.set_defaults(func=cmd_send)
+
+    ntf = sub.add_parser("notify", help="Notify the owner about a result or blocking decision")
+    ntf.add_argument("text")
+    ntf.add_argument("--context")
+    ntf.add_argument("--pane")
+    ntf.set_defaults(func=cmd_notify)
 
     msg = sub.add_parser("messages")
     msg.add_argument("--user")

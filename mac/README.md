@@ -63,14 +63,21 @@ localhost for a test hub. It is saved in
 
 ## Security
 
-The hub page can call one app command, `attention`, and only from the exact
+The hub page can call `attention` and `agent_notification`, and only from the exact
 origin you saved (scheme, host and port):
 
 ```js
 window.__TAURI__.core.invoke('attention', { agents: ['otter', 'stoat'] });
+// New explicit notification messages, after the initial history snapshot:
+window.__TAURI__.core.invoke('agent_notification', { id: 42, agent: 'otter', body: 'Job done' });
 ```
 
-The page sends the full list on its first poll and then when it changes.
+The page sends the full attention list on its first poll and then when it changes.
+Explicit notifications (`buzz notify`) carry the agent name and message text.
+The app deduplicates message IDs across page reloads, validates the payload, and
+opens the agent conversation when clicked. Explicit messages use existing OS
+permission; they never request permission on delivery. Rebuild the Mac app to
+install this handler; an older app still shows notification messages in history.
 
 The setup commands work only on the bundled setup page. Links to other origins
 open in your browser, not in the app. Changing the URL restarts the app, which

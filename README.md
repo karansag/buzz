@@ -821,3 +821,23 @@ alongside tools that do more planning or orchestration, such as
 [MCP Agent Mail](https://github.com/dicklesworthstone/mcp_agent_mail), and
 [Swarm Protocol](https://github.com/phuryn/swarm-protocol). See
 [docs/landscape.md](./docs/landscape.md) for a comparison.
+
+### Explicit owner notifications
+
+Agents can run `buzz notify "Long job finished" --context job-name` for a result
+the owner is waiting on, or a blocking decision. Use ordinary messages for progress.
+The hub permits one per five minutes and six per UTC calendar day per agent.
+A refused request returns 429 with `Retry-After` and stores nothing; normal messages
+are unaffected. Text is limited to 1,000 characters. Notifications remain ordinary
+owner conversation messages, marked 🔔 in threads and Chats.
+`POST /notify` accepts the same caller identity fields as `/send`, plus `content`
+and optional `context`; the recipient is always the owner.
+
+In a browser, click **enable notifications** once to grant permission. New alerts
+appear only while the tab is hidden; clicking one opens the agent. The page must
+remain open and poll successfully (HTTPS or localhost is required by browsers).
+Opening or reloading a page does not replay old notifications. There is no phone
+web push or delivery while the page/app is closed. The Mac app forwards explicit
+alerts through its native notifications; use its **Enable notifications…** menu
+and rebuild the app when installing the new handler. OS notification settings
+can suppress banners even after Buzz has submitted them.

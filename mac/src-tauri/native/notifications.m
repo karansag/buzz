@@ -3,6 +3,7 @@
 #import <UserNotifications/UserNotifications.h>
 #import <dispatch/dispatch.h>
 #include <stdio.h>
+#include <stdint.h>
 
 // Retain the delegate for the app's lifetime; UNUserNotificationCenter.delegate
 // is weak. Rust copies the callback string before this method returns.
@@ -123,4 +124,29 @@ void swarm_notifications_send(const char *agent) {
 
 void swarm_notifications_test(void) {
     @autoreleasepool { sendNotification(nil); }
+}
+
+// Explicit messages never ask for permission as a side effect of delivery.
+// The app's Enable notifications menu controls authorization.
+void swarm_notifications_message(int64_t id, const char *agent, const char *body) {
+    @autoreleasepool {
+        if (!hasBundle() || !agent || !body) return;
+        NSString *name = [NSString stringWithUTF8String:agent];
+        NSString *text = [NSString stringWithUTF8String:body];
+        if (!name || !text) return;
+        [UNUserNotificationCenter.currentNotificationCenter getNotificationSettingsWithCompletionHandler:
+            ^(UNNotificationSettings *settings) {
+                if (settings.authorizationStatus != UNAuthorizationStatusAuthorized &&
+                    settings.authorizationStatus != UNAuthorizationStatusProvisional) return;
+                UNMutableNotificationContent *content = [UNMutableNotificationContent new];
+                content.title = name;
+                content.body = text;
+                content.sound = UNNotificationSound.defaultSound;
+                content.userInfo = @{@"agent": name};
+                UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:
+                    [NSString stringWithFormat:@"message-%lld", (long long)id] content:content trigger:nil];
+                [UNUserNotificationCenter.currentNotificationCenter addNotificationRequest:request
+                    withCompletionHandler:^(NSError *error) { if (error) logError("message delivery", error); }];
+            }];
+    }
 }

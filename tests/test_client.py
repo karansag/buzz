@@ -3,6 +3,7 @@ from __future__ import annotations
 from argparse import Namespace
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from agent_swarm import client, config, tmux
@@ -778,3 +779,28 @@ def test_send_passes_reply_reference(monkeypatch):
     assert client.main(['send','--to','owner','--message','answer','--reply-to','42']) == 0
     assert calls['post'][0]['reply_to'] == 42
     assert calls['post'][0]['content'] == 'answer'
+
+
+def test_notify_sends_text_context_and_registered_identity(monkeypatch):
+    monkeypatch.setattr(client, 'caller', lambda pane=None: {'pane': '%1'})
+    monkeypatch.setattr(client, '_identify_or_explain', lambda who: True)
+    monkeypatch.setattr(client, '_identity_payload', lambda who: {'tmux_pane': '%1'})
+    calls = _fake_server(monkeypatch, {})
+    assert client.main(['notify', 'Fake job done', '--context', 'fake-job']) == 0
+    assert calls['post'][0] == {'tmux_pane': '%1', 'content': 'Fake job done', 'context': 'fake-job'}
+
+
+def test_notify_reports_rate_limit_without_retrying(monkeypatch, capsys):
+    monkeypatch.setattr(client, 'caller', lambda pane=None: {})
+    monkeypatch.setattr(client, '_identify_or_explain', lambda who: True)
+    monkeypatch.setattr(client, '_identity_payload', lambda who: {'agent_id': 'fake-session'})
+    urls = []
+
+    def reject(url, **kwargs):
+        urls.append(url)
+        return httpx.Response(429, json={'detail': 'notification limit reached; send a normal message instead'})
+
+    monkeypatch.setattr(httpx, 'post', reject)
+    assert client.main(['notify', 'Fake result']) == 1
+    assert len(urls) == 1 and urls[0].endswith('/notify')
+    assert 'send a normal message instead' in capsys.readouterr().out

@@ -2569,3 +2569,47 @@ test('sidebar chip and tile tooltips prefer owner note and fall back to current 
     assert.deepEqual(errors,[]);
   } finally {await page.close();}
 });
+
+for (const width of [390, 1500]) {
+  test(`explicit notifications at ${width}px: permission needs a click, bells in thread and Chats, hidden alerts open agent`, async () => {
+    const {page, state, errors} = await setup(width, 900, width < 500);
+    try {
+      await page.addInitScript(() => {
+        window.notificationRequests = 0;
+        window.notices = [];
+        window.testHidden = false;
+        Object.defineProperty(document, 'hidden', {get: () => window.testHidden});
+        window.Notification = class {
+          static permission = 'default';
+          static async requestPermission() { window.notificationRequests++; this.permission = 'granted'; return 'granted'; }
+          constructor(title, options) { this.title = title; this.options = options; window.notices.push(this); }
+          close() { this.closed = true; }
+        };
+      });
+      state.messages[1].notify = 1; // Existing history: draw the bell, no system alert.
+      state.messages[1].ts += 1;
+      await page.goto(`${base}#/agent/${names[0]}`);
+      await page.locator('.thread .notification-mark').waitFor();
+      assert.equal(await page.evaluate(() => window.notificationRequests), 0);
+      assert.equal(await page.evaluate(() => window.notices.length), 0);
+      await page.getByRole('button', {name: 'enable notifications', exact: true}).click();
+      await page.getByRole('button', {name: 'enable notifications', exact: true}).waitFor({state:'detached'});
+      assert.equal(await page.evaluate(() => window.notificationRequests), 1);
+      await page.goto(`${base}#/chats`);
+      await page.locator('.chat-line .notification-mark').waitFor();
+      // Wait for the initial snapshot before adding a new notification.
+      await page.evaluate(() => { window.testHidden = true; });
+      state.messages.push({id: 9001, sender: names[0], recipient: 'owner', content: 'Fake long job finished',
+        ts: Date.now() / 1000, status: 'delivered', delivered: 1, notify: 1});
+      await page.waitForFunction(() => window.notices.length === 1);
+      assert.deepEqual(await page.evaluate(() => [window.notices[0].title, window.notices[0].options.body]),
+        [names[0], 'Fake long job finished']);
+      await page.evaluate(() => window.notices[0].onclick());
+      await page.waitForFunction(agent => location.hash === `#/agent/${agent}`, names[0]);
+      await page.locator('[data-message-id="9001"] .notification-mark').waitFor();
+      assert.equal(await page.evaluate(() => window.notices[0].closed), true);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}

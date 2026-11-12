@@ -11542,6 +11542,42 @@ function attentionReporter(invoke) {
 	};
 }
 //#endregion
+//#region web/src/notifications.js
+function notificationReporter({ invoke, Notification: Notice = globalThis.Notification, document: doc = globalThis.document, open = (agent) => {
+	globalThis.focus();
+	location.hash = `#/agent/${encodeURIComponent(agent)}`;
+} } = {}) {
+	let cursor = null;
+	const pending = /* @__PURE__ */ new Map();
+	return (messages) => {
+		const newest = Math.max(0, ...messages.map((m) => m.id));
+		if (cursor === null) {
+			cursor = newest;
+			return;
+		}
+		for (const m of messages) if (m.id > cursor && m.notify && m.recipient === "owner") pending.set(m.id, m);
+		cursor = Math.max(cursor, newest);
+		for (const [id, m] of pending) {
+			pending.delete(id);
+			if (invoke) Promise.resolve().then(() => invoke("agent_notification", {
+				id,
+				agent: m.sender,
+				body: m.content
+			})).catch(() => pending.set(id, m));
+			else if (doc?.hidden && Notice?.permission === "granted") try {
+				const notice = new Notice(m.sender, {
+					body: m.content,
+					tag: `buzz-message-${id}`
+				});
+				notice.onclick = () => {
+					notice.close();
+					open(m.sender);
+				};
+			} catch {}
+		}
+	};
+}
+//#endregion
 //#region web/src/ansi.js
 var BASIC = [
 	"#2b2419",
@@ -13263,7 +13299,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}${m.attachments?.length > 0 && m$1`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
-          <div class="tag">${disp(m.sender)}${m.context && m$1` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && m$1` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && m$1` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && m$1` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && m$1` <button type="button" class="msg-reply"
+          <div class="tag">${m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}${disp(m.sender)}${m.context && m$1` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && m$1` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && m$1` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && m$1` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && m$1` <button type="button" class="msg-reply"
             title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}</div>
         </div>`)}
       ${recipient && m$1`<div class="jump-dock">${awayFrom !== null && m$1`<button type="button" class="jump-bottom" onClick=${jumpToBottom}
@@ -13552,7 +13588,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
               <span class="chat-who">${c.agent}<${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
                 <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
-              <span class="chat-line"><b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
+              <span class="chat-line">${m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
             </span>
           </a>`;
 	})}</div>`}`;
@@ -13659,6 +13695,27 @@ function FocusView({ user, state, refresh, freshIds, unreadFor }) {
   </div>`;
 }
 var STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+function EnableNotifications() {
+	const [permission, setPermission] = d(globalThis.Notification?.permission);
+	const [error, setError] = d("");
+	const [asking, setAsking] = d(false);
+	if (globalThis.__TAURI__ || !globalThis.Notification || permission === "granted") return null;
+	return m$1`<span><button type="button" class="enable-notifications" disabled=${asking || permission === "denied"}
+    title=${permission === "denied" ? "Allow notifications in your browser's site settings" : "Notify you when Buzz is in the background"}
+    onClick=${async () => {
+		setAsking(true);
+		try {
+			setPermission(await Notification.requestPermission());
+			setError("");
+		} catch {
+			setError("Could not enable notifications");
+		} finally {
+			setAsking(false);
+		}
+	}}>${permission === "denied" ? "notifications blocked" : "enable notifications"}</button>
+    ${error && m$1`<span role="status">${error}</span>`}</span>`;
+}
+var reportNotifications = notificationReporter({ invoke: globalThis.__TAURI__?.core?.invoke });
 var reportAttention = attentionReporter(globalThis.__TAURI__?.core?.invoke);
 function App() {
 	const compact = useMedia(COMPACT_LAYOUT);
@@ -13782,6 +13839,7 @@ function App() {
 					setState(s);
 					setConnected(true);
 					reportAttention(s.recipients);
+					reportNotifications(s.messages);
 				} catch {
 					if (job.active && generation === job.generation) setConnected(false);
 				}
@@ -13858,6 +13916,7 @@ function App() {
 		location.hash = focusHash(user);
 	}} />
     <div class="right">
+      <${EnableNotifications} />
       <span><span class=${`beacon ${connected ? "" : "down"}`}></span>${connected ? "watching" : "server unreachable"}</span>
       <span>${clock}</span>
       ${STANDALONE && m$1`<button type="button" class="reload" title="Reload the dashboard"

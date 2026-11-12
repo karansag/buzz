@@ -11,6 +11,7 @@ unsafe extern "C" {
     fn swarm_notifications_init(open_agent: extern "C" fn(*const c_char));
     fn swarm_notifications_enable();
     fn swarm_notifications_send(agent: *const c_char);
+    fn swarm_notifications_message(id: i64, agent: *const c_char, body: *const c_char);
     fn swarm_notifications_test();
 }
 
@@ -51,6 +52,15 @@ pub fn send(name: &str) {
         // The bridge copies the name synchronously before scheduling work.
         unsafe {
             swarm_notifications_send(name.as_ptr());
+        }
+    }
+}
+
+pub fn send_message(id: i64, agent: &str, body: &str) {
+    if let (Ok(agent), Ok(body)) = (CString::new(agent), CString::new(body)) {
+        // Both strings are copied by the bridge before this call returns.
+        unsafe {
+            swarm_notifications_message(id, agent.as_ptr(), body.as_ptr());
         }
     }
 }

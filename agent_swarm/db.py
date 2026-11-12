@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from functools import wraps
 import json
+import math
 import re
 import sqlite3
 import threading
 import time
 from pathlib import Path
 
-from . import names
+from . import names, notifications
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recipients (
@@ -321,6 +322,8 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
                     conn.execute("UPDATE messages SET reply_to=?, content=? WHERE id=?",
                                  (int(match[1]), row["content"][:match.start()], row["id"]))
             conn.execute("RELEASE SAVEPOINT reply_backfill")
+    if "notify" not in msg_cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN notify INTEGER NOT NULL DEFAULT 0")
     if "attachments" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN attachments TEXT")
     if "status" not in msg_cols:
@@ -964,6 +967,33 @@ def record_message(
     )
     conn.commit()
     return int(cur.lastrowid)
+
+
+@_serialized
+def record_notification(conn: sqlite3.Connection, sender: str, content: str,
+                        context: str | None = None) -> int:
+    """Check limits and store together, including across hub connections."""
+    now = time.time()
+    day = now // 86400 * 86400
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT MAX(ts) AS latest, COUNT(CASE WHEN ts >= ? THEN 1 END) AS today "
+            "FROM messages WHERE sender=? AND recipient='owner' AND notify=1",
+            (day, sender),
+        ).fetchone()
+        waits = []
+        if row["latest"] is not None and now - row["latest"] < notifications.COOLDOWN_SECONDS:
+            waits.append(row["latest"] + notifications.COOLDOWN_SECONDS - now)
+        if row["today"] >= notifications.DAILY_LIMIT:
+            waits.append(day + 86400 - now)
+        if waits:
+            raise notifications.NotificationLimit(max(1, math.ceil(max(waits))))
+        cur = conn.execute(
+            "INSERT INTO messages(sender,recipient,context,content,ts,delivered,status,notify) "
+            "VALUES(?,'owner',?,?,?,1,'delivered',1)", (sender, context, content, now),
+        )
+        return int(cur.lastrowid)
 
 
 @_serialized

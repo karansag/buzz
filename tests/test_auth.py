@@ -273,3 +273,16 @@ def test_proxied_identity_still_works_when_loopback_trust_is_off(tmp_path, monke
     app = server.create_app(tmp_path / "db.sqlite", monitor=False, trust_loopback=False)
     assert owner(app).get("/api/state").status_code == 401
     assert proxied(app, "owner@example.com").get("/api/state").status_code == 200
+
+
+def test_notifications_require_auth_and_use_the_registered_node_identity(hub):
+    assert remote(hub).post('/notify', json={'content': 'Fake result'}).status_code == 401
+    node = remote(hub, enrol(hub, 'test-notifier'))
+    body = {'tmux_pane': '%1', 'node': 'test-notifier', 'content': 'Fake job finished'}
+    user = node.post('/register', json={'tmux_pane': '%1', 'node': 'test-notifier'}).json()['user_id']
+    assert node.post('/notify', json={**body, 'node': 'another-node'}).status_code == 403
+    assert node.post('/notify', json={**body, 'sender': 'owner'}).status_code == 422
+    assert node.post('/notify', json=body).status_code == 200
+    messages = owner(hub).get('/messages').json()['messages']
+    assert len(messages) == 1
+    assert (messages[0]['sender'], messages[0]['recipient'], messages[0]['notify']) == (user, 'owner', 1)

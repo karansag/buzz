@@ -15,6 +15,7 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "attention",
+            "agent_notification",
             "setup_info",
             "save_hub",
             "open_dashboard",

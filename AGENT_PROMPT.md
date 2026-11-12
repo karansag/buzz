@@ -335,3 +335,8 @@ know:
 4. When you see `[agent-msg from X · Y] ...` in your prompt, reply to X
    through the API. X may be `owner` (the human operator) or another agent.
 5. To send: `buzz send --to <handle> --message "..."`.
+
+
+### Notify the owner sparingly
+
+Use `buzz notify "text"` (optional `--context`) only for something the owner is waiting on: a long job finished or failed, or a decision blocking you. Never use it for progress updates. Notifications are limited to one per five minutes and six per UTC day per agent; if refused, send a normal message instead. They remain in your owner conversation.

@@ -15,6 +15,35 @@ pub mod app;
 #[cfg(all(feature = "desktop", target_os = "macos"))]
 mod notifications;
 
+/// Bounded deduplication across dashboard reloads in one app process.
+#[derive(Default)]
+pub struct AgentNotifications {
+    seen: BTreeSet<i64>,
+    floor: i64,
+}
+
+impl AgentNotifications {
+    pub fn accept(&mut self, id: i64, agent: &str, body: &str) -> Result<bool, String> {
+        if id <= 0
+            || agent.is_empty()
+            || agent.chars().count() > 128
+            || agent.chars().any(char::is_control)
+            || body.trim().is_empty()
+            || body.chars().count() > 1000
+            || body.contains('\0')
+        {
+            return Err("Invalid agent notification".into());
+        }
+        if id <= self.floor || !self.seen.insert(id) {
+            return Ok(false);
+        }
+        if self.seen.len() > 512 {
+            self.floor = self.seen.pop_first().unwrap();
+        }
+        Ok(true)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HubUrl(Url);
 
@@ -158,6 +187,29 @@ mod tests {
         ] {
             assert!(HubUrl::parse(good).is_ok(), "{good}");
         }
+    }
+
+    #[test]
+    fn explicit_notifications_validate_and_deduplicate() {
+        let mut tracker = AgentNotifications::default();
+        assert!(tracker.accept(2, "fake-agent", "Done").unwrap());
+        assert!(tracker.accept(1, "fake-agent", "Earlier").unwrap());
+        assert!(!tracker.accept(2, "fake-agent", "Done").unwrap());
+        for (id, agent, body) in [
+            (0, "fake", "done"),
+            (3, "bad\nagent", "done"),
+            (3, "fake", ""),
+            (3, "fake", "bad\0body"),
+        ] {
+            assert!(tracker.accept(id, agent, body).is_err());
+        }
+        assert!(tracker.accept(3, "fake", "Done").unwrap());
+        assert!(tracker.accept(4, "fake", &"a".repeat(1001)).is_err());
+        for id in 5..600 {
+            assert!(tracker.accept(id, "fake", "Done").unwrap());
+        }
+        assert_eq!(tracker.seen.len(), 512);
+        assert!(!tracker.accept(1, "fake", "Done").unwrap());
     }
 
     #[test]

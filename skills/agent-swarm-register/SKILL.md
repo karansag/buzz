@@ -58,3 +58,8 @@ buzz whoami
 
 Report the assigned `user` and `pane`. If registration fails because the hub
 is down, say so and include the failing command and its output.
+
+
+### Notify the owner sparingly
+
+Use `buzz notify "text"` (optional `--context`) only for something the owner is waiting on: a long job finished or failed, or a decision blocking you. Never use it for progress updates. Notifications are limited to one per five minutes and six per UTC day per agent; if refused, send a normal message instead. They remain in your owner conversation.

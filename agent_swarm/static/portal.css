@@ -61,11 +61,11 @@
   }
   header.top .right { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--cream-dim); }
   .beacon { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--moss); box-shadow: 0 0 0 0 rgba(143,191,111,.6); animation: beacon 2.4s infinite; vertical-align: 1px; margin-right: 6px; }
-  header.top .reload {
+  header.top .reload, header.top .enable-notifications {
     min-height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--honey-dim);
     background: none; color: var(--cream); font: inherit; cursor: pointer;
   }
-  header.top .reload:active { background: rgba(242,169,59,.14); }
+  header.top .reload:active, header.top .enable-notifications:active { background: rgba(242,169,59,.14); }
   .beacon.down { background: var(--alert); animation: none; }
   @keyframes beacon { 0% { box-shadow: 0 0 0 0 rgba(143,191,111,.5); } 70% { box-shadow: 0 0 0 7px rgba(143,191,111,0); } 100% { box-shadow: 0 0 0 0 rgba(143,191,111,0); } }
 

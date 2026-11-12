@@ -1,4 +1,4 @@
-use crate::{Attention, HubUrl, Settings};
+use crate::{AgentNotifications, Attention, HubUrl, Settings};
 use serde::Serialize;
 use std::{path::PathBuf, sync::Mutex};
 use tauri::{
@@ -16,6 +16,7 @@ struct AppState {
     settings_error: Option<String>,
     last_url: Mutex<Option<tauri::Url>>,
     attention: Mutex<Attention>,
+    notifications: Mutex<AgentNotifications>,
 }
 
 impl AppState {
@@ -150,6 +151,29 @@ fn attention(
     Ok(())
 }
 
+#[tauri::command]
+fn agent_notification(
+    window: WebviewWindow,
+    state: State<AppState>,
+    id: i64,
+    agent: String,
+    body: String,
+) -> Result<(), String> {
+    let url = window.url().map_err(|e| e.to_string())?;
+    if window.label() != "main" || !state.hub.as_ref().is_some_and(|hub| hub.allows(&url)) {
+        return Err("Notifications must come from the selected hub".into());
+    }
+    let accepted = state
+        .notifications
+        .lock()
+        .map_err(|_| "Notification state is unavailable")?
+        .accept(id, &agent, &body)?;
+    if accepted {
+        crate::notifications::send_message(id, &agent, &body);
+    }
+    Ok(())
+}
+
 fn show_dashboard(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -223,6 +247,7 @@ pub fn run() {
         }))
         .invoke_handler(tauri::generate_handler![
             attention,
+            agent_notification,
             setup_info,
             save_hub,
             open_dashboard
@@ -245,7 +270,7 @@ pub fn run() {
                 Err(error) => (None, Some(error)),
             };
             if let Some(hub) = &hub {
-                // Exact scheme/host/port, all dashboard routes, only attention.
+                // Exact scheme/host/port, dashboard attention and notification commands.
                 // All custom commands are declared in AppManifest in build.rs
                 // so no command silently bypasses Tauri's capability system.
                 app.add_capability(
@@ -253,7 +278,8 @@ pub fn run() {
                         .window("main")
                         .local(false)
                         .remote(hub.origin_pattern())
-                        .permission("allow-attention"),
+                        .permission("allow-attention")
+                        .permission("allow-agent-notification"),
                 )?;
             }
             let restored = hub.as_ref().map(|hub| hub.restore(saved_last.as_deref()));
@@ -273,6 +299,7 @@ pub fn run() {
                 settings_error,
                 last_url: Mutex::new(restored),
                 attention: Mutex::default(),
+                notifications: Mutex::default(),
             });
             let window = WebviewWindowBuilder::new(app, "main", start)
                 .title("Buzz")
@@ -322,8 +349,7 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+,"),
             )?;
-            let quit =
-                MenuItem::with_id(app, "quit", "Quit Buzz", true, Some("CmdOrCtrl+Q"))?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Buzz", true, Some("CmdOrCtrl+Q"))?;
             let enable_notifications = MenuItem::with_id(
                 app,
                 "enable-notifications",

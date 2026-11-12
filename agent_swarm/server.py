@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import activity, attachments, bundle, db, digest, names, nodes, panes, protocol, restore, tmux
+from . import activity, attachments, bundle, db, digest, names, nodes, notifications, panes, protocol, restore, tmux
 
 log = logging.getLogger("agent_swarm.monitor")
 
@@ -311,6 +311,13 @@ class ActorFields(BaseModel):
     harness: str | None = Field(default=None, description="See SendReq.harness.")
 
 
+class NotifyReq(ActorFields):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1, max_length=notifications.MAX_TEXT_LENGTH)
+    context: str | None = None
+
+
 class TaskCreateReq(ActorFields):
     attachments: list[str] = Field(default_factory=list, max_length=attachments.MAX_PER_MESSAGE)
     model_config = ConfigDict(extra="forbid")
@@ -533,6 +540,9 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         f"\n"
         f"To reply or initiate, POST to /send (or use the `buzz send` "
         f"CLI). Use `--reply-to <message-id>` on `buzz send` to link a reply.\n"
+        f'Use `buzz notify "text"` (optional `--context`) only for something the owner is waiting on: '
+        f"a long job finished or failed, or a decision blocking you. Never use it for progress updates. "
+        f"Limit: one per five minutes and six per UTC day per agent; send a normal message instead if refused.\n"
         f"Currently registered peers:\n"
         f"{peer_lines}\n"
         f"\n"
@@ -1548,6 +1558,19 @@ def create_app(
         except Exception:  # noqa: BLE001 - the delivery that follows reports a broken node
             return None
         return activity.trust_prompt(screen) if screen else None
+
+    @app.post("/notify")
+    def notify(req: NotifyReq, request: Request):
+        node = _claimed_node(request, req.node)
+        sender = _caller(node, req.tmux_pane, req.agent_id, req.pane_verified, req.pane_in_tree, req.harness)
+        if not req.content.strip() or "\0" in req.content:
+            raise HTTPException(status_code=422, detail="notification text must be nonempty and contain no NUL characters")
+        try:
+            mid = db.record_notification(conn, sender, req.content, req.context)
+        except notifications.NotificationLimit as exc:
+            raise HTTPException(status_code=429, detail=str(exc),
+                                headers={"Retry-After": str(exc.retry_after)}) from exc
+        return {"ok": True, "status": "delivered", "message_id": mid}
 
     @app.post("/send")
     def send(req: SendReq, request: Request):
