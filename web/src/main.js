@@ -1235,6 +1235,9 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 // Text size in focus mode, in px; A− / A+ step it and the choice is kept.
 const FOCUS_FONT = { min: 12, max: 26, start: 16, step: 2 };
 const FOCUS_FONT_KEY = "agent-swarm:focus-font";
+// How long a scroll anchor is held across the reflows that follow a layout
+// change in focus mode (a phone's viewport sizing, a font swapping in).
+const FOCUS_HOLD_MS = 500;
 
 // Chat convention: the sender whose side you are on sits on the right. In a
 // thread with the owner that is the owner. Between two agents it is the
@@ -1308,11 +1311,35 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   const [focusFont, setFocusFont] = useState(() => {
     try { return Number(localStorage.getItem(FOCUS_FONT_KEY)) || FOCUS_FONT.start; } catch { return FOCUS_FONT.start; }
   });
-  const stepFont = (by) => setFocusFont(size => {
-    const next = Math.max(FOCUS_FONT.min, Math.min(FOCUS_FONT.max, size + by));
-    try { localStorage.setItem(FOCUS_FONT_KEY, String(next)); } catch { /* not kept, still applied */ }
-    return next;
-  });
+  // Focus mode reflows every bubble: it sets its own type size and padding,
+  // and A-/A+ change that size. The scroll is therefore anchored on how much
+  // conversation is left below the reader rather than on an absolute scrollTop,
+  // which would land somewhere else once the text gets taller. Measured before
+  // the layout changes and restored in the effect below.
+  const scrollAnchor = useRef(null);
+  // Some reflows land after the toggle: a phone's viewport sizing, a font
+  // swapping in. Hold the anchor through them for a moment, then let normal
+  // following take over again, so a later resize or a new message does not
+  // pull a reader who has since moved.
+  const holdUntil = useRef(0);
+  const rememberScroll = () => {
+    const el = boxRef.current;
+    if (!el || !expanded) return;
+    scrollAnchor.current = {
+      distance: Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight),
+      pinned: follower.current.pinned(),
+    };
+    holdUntil.current = performance.now() + FOCUS_HOLD_MS;
+  };
+  const releaseScroll = () => { holdUntil.current = 0; };
+  const stepFont = (by) => {
+    rememberScroll();
+    setFocusFont(size => {
+      const next = Math.max(FOCUS_FONT.min, Math.min(FOCUS_FONT.max, size + by));
+      try { localStorage.setItem(FOCUS_FONT_KEY, String(next)); } catch { /* not kept, still applied */ }
+      return next;
+    });
+  };
   const savedScroll = useRef(0);
   const bodyId = `thread-${encodeURIComponent(pairKey(a, b))}`;
   useLayoutEffect(() => {
@@ -1331,6 +1358,22 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   for (const gap of gaps) {
     if (msgs.some(m => m.id === gap.after) && msgs.some(m => m.id === gap.before)) gapAt.set(gap.before, gap);
   }
+  // Put the reader back at the anchored place: the newest message when they
+  // were following it, otherwise the same distance from the bottom.
+  const applyAnchor = () => {
+    const el = boxRef.current;
+    const anchor = scrollAnchor.current;
+    if (!el || !anchor) return;
+    if (anchor.pinned) {
+      follower.current.pin();
+      el.scrollTop = el.scrollHeight;
+    } else {
+      const max = Math.max(0, el.scrollHeight - el.clientHeight);
+      el.scrollTop = Math.max(0, Math.min(max, max - anchor.distance));
+    }
+    previousHistory.current = { first: msgs[0]?.id, height: el.scrollHeight, top: el.scrollTop };
+    noteAway(el);
+  };
   useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el || !expanded) return;
@@ -1339,6 +1382,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       el.scrollTop = previous.top + el.scrollHeight - previous.height;
     }
     const stick = () => {
+      if (performance.now() < holdUntil.current) applyAnchor();
       follower.current.follow(el);
       previousHistory.current = { first: msgs[0]?.id, height: el.scrollHeight, top: el.scrollTop };
       noteAway(el);
@@ -1347,7 +1391,11 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     ro.observe(el);
     for (const child of el.children) ro.observe(child);
     stick();
-    return () => ro.disconnect();
+    for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) el.addEventListener(type, releaseScroll, { passive: true });
+    return () => {
+      ro.disconnect();
+      for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) el.removeEventListener(type, releaseScroll);
+    };
   }, [msgs.length, lastId, historyHeight, expanded]);
   // Open at one message: a link like #/agent/<handle>?m=<id>, from the chats
   // search or another search UI. Scroll it to the middle and flash it with the
@@ -1374,10 +1422,13 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     target.classList.add("reply-highlight");
     jumpedTo.current = jumpTo;
   }, [jumpTo, expanded, msgs.length]);
-  const toggleFocus = () => {
+  // Focus mode in or out, keeping the reader's place. Esc calls this too.
+  const setFocus = (next) => {
+    rememberScroll();
     setExpanded(true);
-    setFocused(v => !v);
+    setFocused(next);
   };
+  const toggleFocus = () => setFocus(!focused);
   useEffect(() => {
     document.documentElement.classList.toggle("thread-focus-open", focused);
     return () => document.documentElement.classList.remove("thread-focus-open");
@@ -1400,6 +1451,12 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       viewport.removeEventListener("scroll", fitViewport);
     };
   }, [focused]);
+  // Put the reader back where they were, after every layout effect that moves
+  // the box (the phone's visual-viewport sizing above included) has run.
+  useLayoutEffect(() => {
+    if (!scrollAnchor.current || !expanded) return;
+    applyAnchor();
+  }, [focused, focusFont]);
   useLayoutEffect(() => {
     const onKey = (e) => {
       if (e.isComposing || document.querySelector(".quick-switch[open], dialog.page-dialog[open]")) return;
@@ -1407,7 +1464,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       if (e.key === "Escape" && focused) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        setFocused(false);
+        setFocus(false);
         return;
       }
       const modifier = focusMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;

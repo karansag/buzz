@@ -286,6 +286,84 @@ test('a send whose answer is lost is retried under the same id, not duplicated',
   } finally { await page.close(); }
 });
 
+// Focus mode sets its own type size and padding, so the conversation reflows
+// taller or shorter. Anchoring on the scroll position from the top puts the
+// reader somewhere else; it has to anchor on the distance from the bottom.
+for (const width of [390, 1500]) {
+  test(`focus mode keeps the reader's place at ${width}px`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    for (let i = 0; i < 60; i++) {
+      state.messages.push({ id: 200 + i, sender: i % 2 ? 'stoat' : 'owner', recipient: i % 2 ? 'owner' : 'stoat',
+        content: `filler ${i} with a sentence that wraps a couple of times in the bubble.`, ts: state.now + i, status: 'delivered', attachments: [] });
+    }
+    const box = page.locator('.thread .msgs').first();
+    const metrics = () => box.evaluate(e => ({
+      distance: Math.round(e.scrollHeight - e.scrollTop - e.clientHeight),
+      height: e.clientHeight, scroll: e.scrollHeight,
+    }));
+    const toggle = () => page.keyboard.press('Control+Shift+L');
+    try {
+      await page.goto(base + '#/agent/stoat');
+      await box.waitFor();
+      await page.waitForTimeout(200);
+      // Wheel down to the very bottom, as a reader does.
+      await box.hover();
+      for (let i = 0; i < 14; i++) { await page.mouse.wheel(0, 2000); await page.waitForTimeout(30); }
+      await page.waitForTimeout(200);
+      assert.ok((await metrics()).distance <= 2, 'the test did not reach the bottom first');
+      // Bottom stays bottom, in to focus mode and back out.
+      await toggle();
+      await page.waitForSelector('.thread.focused');
+      await page.waitForTimeout(250);
+      const entered = await metrics();
+      assert.ok(entered.distance <= 2, `entering focus mode left the bottom by ${entered.distance}px`);
+      await toggle();
+      await page.waitForTimeout(250);
+      const left = await metrics();
+      assert.ok(left.distance <= 2, `leaving focus mode left the bottom by ${left.distance}px`);
+      // The owner's report: stopping a few pixels short of the bottom (where the
+      // thread is no longer following the newest message) used to drop the
+      // reader a few hundred pixels back into the conversation.
+      await box.evaluate(e => { e.scrollTop = e.scrollHeight - e.clientHeight - 20; e.dispatchEvent(new Event('scroll')); });
+      await page.waitForTimeout(150);
+      const near = await metrics();
+      assert.equal(near.distance, 20);
+      await toggle();
+      await page.waitForTimeout(300);
+      assert.ok(Math.abs((await metrics()).distance - near.distance) <= 8,
+        'entering focus mode moved a reader who had stopped just above the bottom');
+      await toggle();
+      await page.waitForTimeout(300);
+      assert.ok(Math.abs((await metrics()).distance - near.distance) <= 8,
+        'leaving focus mode moved a reader who had stopped just above the bottom');
+      // Partway through the thread, the distance from the bottom survives both
+      // toggles, and so does the size buttons' reflow.
+      await box.evaluate(e => { e.scrollTop = Math.round(e.scrollHeight * 0.45); e.dispatchEvent(new Event('scroll')); });
+      await page.waitForTimeout(150);
+      const mid = await metrics();
+      assert.ok(mid.distance > 200, 'the test is not partway through the thread');
+      await toggle();
+      await page.waitForTimeout(300);
+      const midIn = await metrics();
+      assert.ok(Math.abs(midIn.distance - mid.distance) <= 8,
+        `entering focus mode moved the reader ${midIn.distance - mid.distance}px from the bottom`);
+      await page.getByRole('button', { name: 'Larger text' }).click();
+      await page.waitForTimeout(300);
+      const bigger = await metrics();
+      assert.ok(Math.abs(bigger.distance - mid.distance) <= 8,
+        `the larger text button moved the reader ${bigger.distance - mid.distance}px from the bottom`);
+      await page.getByRole('button', { name: 'Smaller text' }).click();
+      await page.waitForTimeout(200);
+      await toggle();
+      await page.waitForTimeout(300);
+      const midOut = await metrics();
+      assert.ok(Math.abs(midOut.distance - mid.distance) <= 8,
+        `leaving focus mode moved the reader ${midOut.distance - mid.distance}px from the bottom`);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
 test('a conversation expands to fill the window and back (button, shortcut, Esc)', async () => {
   const { page, errors } = await setup(1500, 900, false);
   try {

@@ -11921,6 +11921,12 @@ function createBottomFollower() {
 		},
 		unpin() {
 			pinned = false;
+		},
+		pinned() {
+			return pinned;
+		},
+		pin() {
+			pinned = true;
 		}
 	};
 }
@@ -13468,6 +13474,7 @@ var FOCUS_FONT = {
 	step: 2
 };
 var FOCUS_FONT_KEY = "agent-swarm:focus-font";
+var FOCUS_HOLD_MS = 500;
 function sentByViewer(sender, a, b, page) {
 	if (a === "owner" || b === "owner") return sender === "owner";
 	if (page === a || page === b) return sender === page;
@@ -13531,13 +13538,30 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 			return FOCUS_FONT.start;
 		}
 	});
-	const stepFont = (by) => setFocusFont((size) => {
-		const next = Math.max(FOCUS_FONT.min, Math.min(FOCUS_FONT.max, size + by));
-		try {
-			localStorage.setItem(FOCUS_FONT_KEY, String(next));
-		} catch {}
-		return next;
-	});
+	const scrollAnchor = A(null);
+	const holdUntil = A(0);
+	const rememberScroll = () => {
+		const el = boxRef.current;
+		if (!el || !expanded) return;
+		scrollAnchor.current = {
+			distance: Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight),
+			pinned: follower.current.pinned()
+		};
+		holdUntil.current = performance.now() + FOCUS_HOLD_MS;
+	};
+	const releaseScroll = () => {
+		holdUntil.current = 0;
+	};
+	const stepFont = (by) => {
+		rememberScroll();
+		setFocusFont((size) => {
+			const next = Math.max(FOCUS_FONT.min, Math.min(FOCUS_FONT.max, size + by));
+			try {
+				localStorage.setItem(FOCUS_FONT_KEY, String(next));
+			} catch {}
+			return next;
+		});
+	};
 	const savedScroll = A(0);
 	const bodyId = `thread-${encodeURIComponent(pairKey(a, b))}`;
 	_(() => {
@@ -13546,12 +13570,31 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	const lastId = msgs.length ? msgs[msgs.length - 1].id : null;
 	const gapAt = /* @__PURE__ */ new Map();
 	for (const gap of gaps) if (msgs.some((m) => m.id === gap.after) && msgs.some((m) => m.id === gap.before)) gapAt.set(gap.before, gap);
+	const applyAnchor = () => {
+		const el = boxRef.current;
+		const anchor = scrollAnchor.current;
+		if (!el || !anchor) return;
+		if (anchor.pinned) {
+			follower.current.pin();
+			el.scrollTop = el.scrollHeight;
+		} else {
+			const max = Math.max(0, el.scrollHeight - el.clientHeight);
+			el.scrollTop = Math.max(0, Math.min(max, max - anchor.distance));
+		}
+		previousHistory.current = {
+			first: msgs[0]?.id,
+			height: el.scrollHeight,
+			top: el.scrollTop
+		};
+		noteAway(el);
+	};
 	_(() => {
 		const el = boxRef.current;
 		if (!el || !expanded) return;
 		const previous = previousHistory.current;
 		if (previous && previous.first !== msgs[0]?.id && msgs.some((m) => m.id === previous.first)) el.scrollTop = previous.top + el.scrollHeight - previous.height;
 		const stick = () => {
+			if (performance.now() < holdUntil.current) applyAnchor();
 			follower.current.follow(el);
 			previousHistory.current = {
 				first: msgs[0]?.id,
@@ -13564,7 +13607,21 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		ro.observe(el);
 		for (const child of el.children) ro.observe(child);
 		stick();
-		return () => ro.disconnect();
+		for (const type of [
+			"wheel",
+			"touchstart",
+			"pointerdown",
+			"keydown"
+		]) el.addEventListener(type, releaseScroll, { passive: true });
+		return () => {
+			ro.disconnect();
+			for (const type of [
+				"wheel",
+				"touchstart",
+				"pointerdown",
+				"keydown"
+			]) el.removeEventListener(type, releaseScroll);
+		};
 	}, [
 		msgs.length,
 		lastId,
@@ -13597,10 +13654,12 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		expanded,
 		msgs.length
 	]);
-	const toggleFocus = () => {
+	const setFocus = (next) => {
+		rememberScroll();
 		setExpanded(true);
-		setFocused((v) => !v);
+		setFocused(next);
 	};
+	const toggleFocus = () => setFocus(!focused);
 	h(() => {
 		document.documentElement.classList.toggle("thread-focus-open", focused);
 		return () => document.documentElement.classList.remove("thread-focus-open");
@@ -13622,13 +13681,17 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		};
 	}, [focused]);
 	_(() => {
+		if (!scrollAnchor.current || !expanded) return;
+		applyAnchor();
+	}, [focused, focusFont]);
+	_(() => {
 		const onKey = (e) => {
 			if (e.isComposing || document.querySelector(".quick-switch[open], dialog.page-dialog[open]")) return;
 			if (e.key === "Escape" && search?.open) return;
 			if (e.key === "Escape" && focused) {
 				e.preventDefault();
 				e.stopImmediatePropagation();
-				setFocused(false);
+				setFocus(false);
 				return;
 			}
 			const modifier = focusMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;

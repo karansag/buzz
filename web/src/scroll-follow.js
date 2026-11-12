@@ -20,5 +20,13 @@ export function createBottomFollower() {
     unpin() {
       pinned = false;
     },
+    // Whether the reader is following the newest message.
+    pinned() {
+      return pinned;
+    },
+    // Back to following, e.g. after a layout change they did not ask for.
+    pin() {
+      pinned = true;
+    },
   };
 }
