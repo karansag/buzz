@@ -361,15 +361,11 @@ class NodeRegistry:
 
 
 def _observed(observation: dict, pane: str, colors: bool) -> str | None:
-    """A pane's screen from a node's observation, with or without colors.
-
-    Nodes send colored "screens". A node not yet updated sends plain
-    "captures": fine for plain readers, and a colored reader asks again.
-    """
+    """A pane's screen from a node's colored observation, with or without colors."""
     text = (observation.get("screens") or {}).get(pane)
-    if text is not None:
-        return text if colors else activity.strip_colors(text)
-    return None if colors else (observation.get("captures") or {}).get(pane)
+    if text is None:
+        return None
+    return text if colors else activity.strip_colors(text)
 
 
 class RemoteNode:

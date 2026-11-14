@@ -54,18 +54,18 @@ def test_a_remote_capture_uses_the_fresh_colored_observation_either_way():
     assert node.capture("%1", "srv", colors=True) == ("\x1b[31mred\x1b[0m screen", None)
 
 
-def test_an_old_node_plain_observation_serves_plain_readers_and_colors_ask_again():
+def test_an_old_node_without_colored_screens_is_asked_each_time():
+    # Nodes from before colored observations send "captures". Nothing reads
+    # those any more; the hub just asks the node, so it still works.
     node = nodes.RemoteNode("mac", 1, loop=None, send=None, close=None, interval=2.0)
     node._last = {"tmux_server": "srv", "captures": {"%1": "plain screen"}}
     node._last_at = time.monotonic()
     calls = []
     node._call = lambda kind, ttl, **args: calls.append((kind, args)) or {
-        "status": "ok", "data": {"text": "\x1b[31mred\x1b[0m"}}
-    assert node.capture("%1", "srv") == ("plain screen", None)
-    assert node.screen("%1", "srv") == "plain screen"
-    assert calls == []
-    assert node.capture("%1", "srv", colors=True) == ("\x1b[31mred\x1b[0m", None)
-    assert calls == [("capture", {"pane": "%1", "tmux_server": "srv", "colors": True})]
+        "status": "ok", "data": {"text": "fresh"}}
+    assert node.capture("%1", "srv") == ("fresh", None)
+    assert node.screen("%1", "srv") is None
+    assert calls == [("capture", {"pane": "%1", "tmux_server": "srv", "colors": False})]
 
 
 def test_a_remote_screen_for_the_trust_check_never_waits_on_the_node():
