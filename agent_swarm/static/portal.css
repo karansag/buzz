@@ -290,7 +290,7 @@
   .fhead .model-label .pen { color: var(--honey-dim); font-size: 10px; }
   .fhead .model-label .unset { font-style: italic; }
   .fhead .model-edit { display: inline-flex; align-items: center; gap: 4px; }
-  .fhead .model-edit input { font: inherit; color: var(--cream); background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; width: 190px; }
+  .fhead .model-edit input, .fhead .model-edit select { font: inherit; color: var(--cream); background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; width: 190px; }
   .fhead .inst { font-size: 11px; color: var(--cream-dim); font-style: italic; }
   button.focus-back {
     display: block; margin-bottom: 16px; padding: 7px 12px;
@@ -879,7 +879,7 @@ form.team-manage input { flex-basis: 100%; }
   input[type="text"], input:not([type]), select, textarea,
   .task-composer input.task-title, .task-composer textarea,
   .composer textarea, .composer .context, .tcard .foot select,
-  .fhead .model-edit input, .task-verification textarea { font-size: 16px; }
+  .fhead .model-edit input, .fhead .model-edit select, .task-verification textarea { font-size: 16px; }
   .thread { --thread-font: 16px; }
   .thread.focused { --thread-font: var(--focus-font); }
   .thread .composer textarea { font-size: max(16px, var(--thread-font)); }

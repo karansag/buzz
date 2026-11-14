@@ -12378,19 +12378,21 @@ var SWITCHABLE = [
 	"codex",
 	"pi"
 ];
+var OTHER_MODEL = "\0other";
 function ModelLabel({ r, refresh }) {
 	const [editing, setEditing] = d(false);
 	const [value, setValue] = d("");
 	const [known, setKnown] = d([]);
 	const [busy, setBusy] = d(false);
+	const [other, setOther] = d(false);
 	const inputRef = A(null);
 	h(() => {
 		if (editing) inputRef.current?.focus();
-	}, [editing]);
+	}, [editing, other]);
 	const flavor = (r.flavor || "generic").toLowerCase();
-	const listId = `models-${r.user_id}`;
 	const start = () => {
 		setValue(r.model || "");
+		setOther(false);
 		setEditing(true);
 		fetch("/api/spawn-options").then((res) => res.json()).then((d) => setKnown(((d.harnesses || []).find((h) => h.flavor === flavor) || {}).models || [])).catch(() => {});
 	};
@@ -12424,18 +12426,25 @@ function ModelLabel({ r, refresh }) {
       title=${switchable ? "Switch this agent's model for its current session (drives /model in its pane)." : "Edit the model label. Display only: switch the real model in the agent's pane, then update it here."}>
       ${r.model ? m$1`<b>${r.model}</b>` : m$1`<span class="unset">set model</span>`} <span class="pen">✎</span>
     </button>`;
-	return m$1`<span class="model-edit">
-    <input type="text" value=${value} list=${listId} placeholder="e.g. claude-opus-4-7"
-      aria-label=${`Model label for ${r.user_id}`} disabled=${busy} ref=${inputRef}
-      onInput=${(e) => setValue(e.target.value)}
-      onKeyDown=${(e) => {
+	const options = [.../* @__PURE__ */ new Set([...r.model ? [r.model] : [], ...known])];
+	const typing = other || options.length === 0;
+	const keys = (e) => {
 		if (e.key === "Enter") {
 			e.preventDefault();
 			save();
 		}
 		if (e.key === "Escape") setEditing(false);
-	}} />
-    <datalist id=${listId}>${known.map((m) => m$1`<option key=${m} value=${m} />`)}</datalist>
+	};
+	return m$1`<span class="model-edit">
+    ${typing ? m$1`<input type="text" value=${value} placeholder="e.g. claude-opus-4-7"
+          aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
+          onInput=${(e) => setValue(e.target.value)} onKeyDown=${keys} />` : m$1`<select value=${value} aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
+          onChange=${(e) => e.target.value === OTHER_MODEL ? (setOther(true), setValue("")) : setValue(e.target.value)}
+          onKeyDown=${keys}>
+          ${!value && m$1`<option value="" disabled>pick a model</option>`}
+          ${options.map((m) => m$1`<option key=${m} value=${m}>${m}</option>`)}
+          <option value=${OTHER_MODEL}>other…</option>
+        </select>`}
     <button type="button" class="mini" disabled=${busy} onClick=${save}>${busy ? switchable ? "switching…" : "saving…" : switchable ? "switch" : "save"}</button>
     <button type="button" class="mini" disabled=${busy} onClick=${() => setEditing(false)}>cancel</button>
   </span>`;
