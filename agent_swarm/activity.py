@@ -211,7 +211,18 @@ def _red_lines(colored: str) -> list[tuple[str, bool]]:
             at = m.end()
             if m.group(2) != "m":
                 continue
-            params = [int(p) if p.isdigit() else 0 for p in re.split(r"[;:]", m.group(1))]
+            # A color given with colons ("38:2::r:g:b", "38:5:n") is one
+            # group with its own fields; with semicolons it spans several.
+            params: list = []
+            for group in m.group(1).split(";"):
+                if ":" in group:
+                    sub = [int(p) if p.isdigit() else 0 for p in group.split(":")]
+                    if sub[0] in (38, 48, 58) and len(sub) >= 3:
+                        rgb = sub[1] == 2 and len(sub) >= 5
+                        sub = [sub[0], sub[1], *(sub[-3:] if rgb else sub[-1:])]
+                    params.extend(sub)
+                else:
+                    params.append(int(group) if group.isdigit() else 0)
             i = 0
             while i < len(params):
                 p = params[i]

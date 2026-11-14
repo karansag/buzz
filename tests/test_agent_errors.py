@@ -103,6 +103,14 @@ def test_basic_red_and_256_color_reds():
     assert activity.error_detail(None, "\x1b[38;5;196mAPI Error: 500\x1b[0m\n") == "API Error: 500"
 
 
+def test_colon_form_colors():
+    assert activity.error_detail(None, "\x1b[38:2::234:127:129mError: 402 no credits\x1b[39m\n") == "Error: 402 no credits"
+    assert activity.error_detail(None, "\x1b[38:2:0:234:127:129mquota exceeded\x1b[39m\n") == "quota exceeded"
+    assert activity.error_detail(None, "\x1b[38:5:196mrate limit\x1b[39m\n") == "rate limit"
+    # Green in colon form is not red, whatever the colorspace field says.
+    assert activity.error_detail(None, "\x1b[38:2::0:200:0mrate limit\x1b[39m\n") is None
+
+
 def test_strip_colors_gives_the_plain_screen():
     assert activity.strip_colors("\x1b[1m\x1b[38;2;1;2;3mhi\x1b[0m \x1b]0;title\x07there") == "hi there"
 

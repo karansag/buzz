@@ -2171,7 +2171,7 @@ def create_app(
                 {
                     "status": row["status"],
                     "detail": row["detail"],
-                    "error": row["error"],
+                    "error": row.get("error"),
                     "since": row["since"],
                 }
                 if row
