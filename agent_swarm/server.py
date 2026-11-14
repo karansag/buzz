@@ -899,7 +899,20 @@ def create_app(
                 # an id held on another machine is a refusal, never this caller.
                 if (db.get_recipient(conn, by_id) or {}).get("node") != node.name:
                     return None, "session", f"this session belongs to {by_id} on another node", (tmux_pane, None)
-                return by_id, "session", None, (tmux_pane, None)
+                if not (pane_in_tree and tmux_pane):
+                    return by_id, "session", None, (tmux_pane, None)
+                # The caller runs inside its pane. If the session's agent is
+                # live in another pane, this is a copy of that session
+                # (`claude --resume` of a live agent): it is whoever holds
+                # this pane, never the agent it copied.
+                pane, label, server = _pane_ref(tmux_pane, node)
+                if not _live_elsewhere(by_id, node.name, pane, server):
+                    return by_id, "session", None, (pane, label)
+                pane_user = db.lookup_user_by_pane(conn, node.name, pane, server)
+                return pane_user, "pane", None if pane_user else (
+                    f"this session is {by_id}'s, which is live in another pane; run "
+                    "`buzz register` here to register this pane as its own agent"
+                ), (pane, label)
         if not tmux_pane:
             why = "this session is not registered" if agent_id else "no pane and no session id"
             return None, "session" if agent_id else "pane", f"{why}; run `buzz register` from the agent's pane", (None, None)
@@ -1080,8 +1093,20 @@ def create_app(
             })
         flavor_hint = req.flavor or (tmux.infer_flavor(req.model) if req.model else None)
         existing_id = None
-        if req.agent_id:
-            existing_id = db.lookup_user_by_agent_id(conn, req.agent_id)
+        session = req.agent_id or None
+        if session:
+            existing_id = db.lookup_user_by_agent_id(conn, session)
+            if existing_id is not None:
+                # A node naming another machine's agent is refused outright.
+                _own_row_or_403(request, existing_id)
+            if existing_id and _live_elsewhere(existing_id, node.name, pane, server):
+                # A copy of a live agent's session in another pane: this pane
+                # is its own agent. It does not record the id, which would
+                # replace the live agent's (one row per session id).
+                log.warning("pane %s runs a copy of %s's live session %s; not taking its record",
+                            pane, existing_id, session[:8])
+                existing_id = None
+                session = None
         if existing_id is None:
             existing_id = db.lookup_user_by_pane(conn, node.name, pane, server)
         if existing_id is None and server is not None and label and flavor_hint:
@@ -1101,7 +1126,7 @@ def create_app(
             """
             row = db.get_recipient(conn, handle) if handle else None
             if row and row.get("reserved") and row.get("agent_id"):
-                if (req.agent_id or None) != row["agent_id"]:
+                if session != row["agent_id"]:
                     raise HTTPException(
                         status_code=409,
                         detail={
@@ -1126,7 +1151,7 @@ def create_app(
             _own_row_or_403(request, requested)
             if (
                 db.name_taken_by_other(
-                    conn, requested, req.agent_id, node.name, pane, server
+                    conn, requested, session, node.name, pane, server
                 )
                 and _is_alive(requested)
             ):
@@ -1175,7 +1200,7 @@ def create_app(
             conn,
             user_id,
             pane,
-            req.agent_id,
+            session,
             req.model,
             flavor,
             req.instructions,
@@ -1199,7 +1224,7 @@ def create_app(
             "tmux_pane": pane,
             "pane_label": label,
             "node": registered["node"] if registered else req.node,
-            "agent_id": registered["agent_id"] if registered else req.agent_id,
+            "agent_id": registered["agent_id"] if registered else session,
             "model": registered["model"] if registered else req.model,
             "flavor": registered["flavor"] if registered else flavor,
             "instructions": registered["instructions"] if registered else req.instructions,
@@ -1306,6 +1331,19 @@ def create_app(
 
     def _is_alive(user_id: str) -> bool:
         return any(r["user_id"] == user_id and r["alive"] for r in _annotated_recipients())
+
+    def _live_elsewhere(user_id: str, node_name: str, pane: str, server: str | None) -> bool:
+        """True when `user_id` is registered on another pane that is still live.
+
+        A session id is then not proof of identity: `claude --resume` or
+        `--continue` in a second pane runs a live agent's session there too,
+        and the copy must not take that agent's record.
+        """
+        row = db.get_recipient(conn, user_id) or {}
+        here = (node_name, pane, server)
+        if (row.get("node"), row.get("tmux_pane"), row.get("tmux_server")) == here:
+            return False
+        return _is_alive(user_id)
 
     def _migrate_legacy_panes() -> None:
         """Rebind rows stored before pane ids; see agent_swarm/panes.py."""

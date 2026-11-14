@@ -164,15 +164,32 @@ def test_register_rejects_explicit_user_id(client):
 
 
 def test_register_reuses_name_for_same_agent_id(client):
+    # The session left its old pane (now a bare shell) and resumed in a new one.
     first = client.post(
         "/register",
-        json={"tmux_pane": "0:0.0", "agent_id": "agent-1"},
+        json={"tmux_pane": "0:2.0", "agent_id": "agent-1"},
     ).json()
     second = client.post(
         "/register",
         json={"tmux_pane": "0:1.0", "agent_id": "agent-1"},
     ).json()
     assert second["user_id"] == first["user_id"]
+    assert second["tmux_pane"] == "0:1.0"
+
+
+def test_a_copy_of_a_live_agents_session_in_another_pane_gets_its_own_handle(client):
+    # 2026-11-14: the owner resumed grison's session in coyote's pane, then
+    # started a fresh one there. Each startup hook registered the pane.
+    grison = client.post("/register", json={
+        "tmux_pane": "0:0.0", "agent_id": "sess-grison", "requested_user": "grison"}).json()
+    copy = client.post("/register", json={"tmux_pane": "0:1.0", "agent_id": "sess-grison"}).json()
+    assert copy["user_id"] != "grison" and copy["agent_id"] is None
+    fresh = client.post("/register", json={"tmux_pane": "0:1.0", "agent_id": "sess-new"}).json()
+    assert fresh["user_id"] == copy["user_id"] and fresh["agent_id"] == "sess-new"
+    # grison keeps its pane and session throughout.
+    row = next(r for r in client.get("/recipients").json()["recipients"] if r["user_id"] == "grison")
+    assert (row["tmux_pane"], row["agent_id"]) == ("0:0.0", "sess-grison")
+    assert grison["user_id"] == "grison"
 
 
 def test_register_keeps_contact_preferences(client):
@@ -1285,8 +1302,9 @@ def test_register_records_the_node_it_came_from(client):
 
 def test_agent_reregistering_from_another_node_moves_with_its_handle(client):
     _connect_node(client, "macbook")
+    # Its MacBook pane is back to a bare shell: the agent left it.
     user = client.post(
-        "/register", json={"tmux_pane": "0:0.0", "agent_id": "a-move", "node": "macbook"}
+        "/register", json={"tmux_pane": "0:2.0", "agent_id": "a-move", "node": "macbook"}
     ).json()["user_id"]
     r = client.post("/register", json={"tmux_pane": "0:1.0", "agent_id": "a-move"})
     assert r.json()["user_id"] == user

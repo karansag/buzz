@@ -234,3 +234,27 @@ def test_unverified_task_caller_is_not_treated_as_owner(client):
     register(client, '0:0.0', 'otter')
     r = client.post('/tasks', json={'title': 'not owner', 'tmux_pane': '0:0.0', 'pane_verified': False})
     assert r.status_code == 404
+
+
+def test_a_copy_of_a_live_session_in_its_own_pane_is_not_that_agent(client):
+    # `claude --resume` of grison's live session in another pane: its
+    # commands send grison's session id from inside that other pane.
+    register(client, "0:0.0", "grison", agent_id="sess-grison")
+    register(client, "0:1.0", "coyote", agent_id="sess-coyote")
+    answer = whoami(client, tmux_pane="0:1.0", agent_id="sess-grison",
+                    pane_verified="true", pane_in_tree="true", harness="claude")
+    assert answer["user_id"] == "coyote" and answer["identified_by"] == "pane"
+    # Not inside its pane (a background host): the session id still decides.
+    answer = whoami(client, tmux_pane="0:1.0", agent_id="sess-grison", pane_verified="false")
+    assert answer["user_id"] == "grison"
+    # In grison's own pane it is grison.
+    answer = whoami(client, tmux_pane="0:0.0", agent_id="sess-grison",
+                    pane_verified="true", pane_in_tree="true", harness="claude")
+    assert answer["user_id"] == "grison"
+
+
+def test_a_copy_in_an_unregistered_pane_is_told_to_register(client):
+    register(client, "0:0.0", "grison", agent_id="sess-grison")
+    answer = whoami(client, tmux_pane="0:1.0", agent_id="sess-grison",
+                    pane_verified="true", pane_in_tree="true", harness="claude")
+    assert answer["user_id"] is None and "live in another pane" in answer["detail"]
