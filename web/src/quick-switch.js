@@ -104,7 +104,7 @@ export function QuickSwitcher({ state, navigate }) {
         ${options.map(o => html`<div key=${o.id} id=${`switch-${o.id}`} role="option" aria-selected=${current?.id === o.id}
           aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
           onClick=${() => choose(o)}>
-          ${o.target && html`<${Bee} node=${o.target.node} flavor=${o.target.flavor} size="small" working=${o.target.activity?.status === "working"} />`}
+          ${o.target && html`<${Bee} node=${o.target.node} flavor=${o.target.flavor} error=${o.target.activity?.error} size="small" working=${o.target.activity?.status === "working"} />`}
           <span><b>${o.name}</b>${mode === "agents" && html`<${Crown} teams=${state.teams} user=${o.target?.user_id} word=${true} />`}<small>${o.detail}</small>
             ${o.summary && html`<small class="quick-switch-summary" title=${o.summary}>${o.summary}</small>`}</span>
         </div>`)}

@@ -4,7 +4,7 @@ Every frame is a JSON object with a "type". The node dials the hub, so the
 hub never needs to reach a node's address, and the node never listens.
 
     node -> hub   hello     once, first: who I am and what I can do
-                  observe   every interval: my panes, and captures of the
+                  observe   every interval: my panes, and colored screens of the
                             ones the hub watches; doubles as the heartbeat
                   result    the outcome of one command, by op id
     hub -> node   welcome   the interval to observe at, the panes to watch
@@ -77,7 +77,7 @@ def observe(
     seq: int,
     tmux_server: str | None,
     table: dict[str, dict[str, str]] | None,
-    captures: dict[str, str],
+    screens: dict[str, str],
     unavailable: str | None = None,
 ) -> dict:
     """One tick of what the node sees. `table` is None, with `unavailable`
@@ -88,6 +88,6 @@ def observe(
         "seq": seq,
         "tmux_server": tmux_server,
         "table": table,
-        "captures": captures,
+        "screens": screens,
         "unavailable": unavailable,
     }

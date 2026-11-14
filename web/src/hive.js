@@ -6,7 +6,7 @@ import { AttachmentList } from "./attachments.js";
 import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 
-import { Bee, JSONH, STATE, WORKING_HALO, agentShown, agentStatus, focusHash, harnessChoices, harnessStyle, hue, patchTask, stopAgentPrompt } from "./shared.js";
+import { Bee, ERROR_RED, JSONH, STATE, WORKING_HALO, agentShown, agentStatus, focusHash, harnessChoices, harnessStyle, hue, patchTask, stopAgentPrompt } from "./shared.js";
 
 import { COMPACT_LAYOUT, useMedia } from "./use-media.js";
 
@@ -71,7 +71,7 @@ export function CompactBees({ state, machine, harness = null }) {
       const harness = harnessStyle(r.flavor);
       return html`<a key=${r.user_id} class="bee-tile" href=${focusHash(r.user_id)}
         title=${[r.user_id, machineName(r.node), st.word, agentPreview(r)].filter(Boolean).join(" · ")} style=${`--machine:${machineColor(r.node)}`}>
-        <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
+        <${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} working=${status === "working"} />
         <span class="bee-name">${r.user_id}<${Crown} teams=${state.teams} user=${r.user_id} /></span>
         <span class="bee-machine">${machineName(r.node)}</span>
         <span class="bee-state"><span class=${`status ${st.cls}`} aria-hidden="true"></span>${st.word} · ${harness.mark} ${harness.label}</span>
@@ -493,7 +493,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
       for (const bee of beeData) {
         const { r, name, harness, x, y, dx, dy, q, picked, assigned, primary, extras, working, busy, dancing } = bee;
         const doing = r.summaries?.find(s => s.source !== "owner");
-        bees.set(name, { x, y, task: primary, node: machineName(r.node), harness: harness.key, doing: doing?.text });
+        bees.set(name, { x, y, task: primary, node: machineName(r.node), harness: harness.key, doing: doing?.text, error: r.activity?.error });
         ctx.save();
         if (!agentShown(r, machineRef.current, harnessRef.current)) ctx.globalAlpha = .18;
         if (assigned) token(assigned, x + 22, y + Math.sin(q * .8) * 3);
@@ -554,9 +554,10 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
         ctx.font = "8px ui-monospace, monospace";
         ctx.fillStyle = machineColor(r.node);
         ctx.fillText(machineName(r.node), x, labelY + 11);
-        const attention = r.activity && r.activity.status === "needs_attention";
+        const error = r.activity?.error;
+        const attention = error || (r.activity && r.activity.status === "needs_attention");
         if (attention) {
-          ctx.fillStyle = "#f2a93b"; ctx.font = "bold 13px ui-monospace, monospace";
+          ctx.fillStyle = error ? ERROR_RED : "#f2a93b"; ctx.font = `bold ${error ? 17 : 13}px ui-monospace, monospace`;
           ctx.textBaseline = "alphabetic"; ctx.fillText("!", x, y - 14);
         }
         const myTeam = (r.team_id && teamById.get(r.team_id)) || null;
@@ -670,7 +671,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
 
       const hovered = hoverRef.current && bees.get(hoverRef.current);
       if (hovered) {
-        const said = hovered.doing || (hovered.task && hovered.task.title);
+        const said = hovered.error ? `! ${hovered.error}` : hovered.doing || (hovered.task && hovered.task.title);
         const title = said ? ` · ${said.length > 70 ? `${said.slice(0, 69)}…` : said}` : "";
         const harnessLabel = harnessStyle(hovered.harness).label;
         const label = `${hoverRef.current} · ${hovered.node} · ${harnessLabel}${title}`;

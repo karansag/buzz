@@ -30,7 +30,7 @@ log = logging.getLogger("agent_swarm.monitor")
 
 # Default activity shown when the monitor is off or hasn't observed an agent
 # yet. The dashboard must tolerate this shape.
-UNKNOWN_ACTIVITY = {"status": "unknown", "detail": None, "since": None}
+UNKNOWN_ACTIVITY = {"status": "unknown", "detail": None, "error": None, "since": None}
 
 DB_PATH = Path(
     os.environ.get(
@@ -688,7 +688,7 @@ def create_app(
             alive = (
                 snap is not None and pane in snap.live and _stale(r, snap.server) is None
             )
-            capture = None
+            capture = colored = None
             if alive:
                 # Claude Code and Codex title their pane with the current topic.
                 topic = tmux.title_summary(snap.title(pane) or "")
@@ -701,19 +701,23 @@ def create_app(
                     db.set_cwd(conn, r["user_id"], cwd)
                 # Subprocess capture must not block the event loop, and one
                 # pane's failure must not end the tick for the others.
+                # With colors, for the error check; the rest reads it plain.
                 try:
-                    text, err = await asyncio.to_thread(node.capture, pane, r.get("tmux_server"))
+                    text, err = await asyncio.to_thread(
+                        node.capture, pane, r.get("tmux_server"), True
+                    )
                 except Exception:
                     log.exception("capture of %s on %s failed", pane, node.name)
                     text, err = None, "capture failed"
-                capture = text if err is None else None
+                colored = text if err is None else None
+                capture = activity.strip_colors(colored) if colored is not None else None
                 # Keep the model label in step with what the harness shows,
                 # whoever changed it (/model typed in the pane, a switch).
                 seen = model_switch.screen_model(r.get("flavor"), capture)
                 if seen and seen != r.get("model"):
                     db.set_recipient_model(conn, r["user_id"], seen)
             observations.append(
-                activity.Observation(r["user_id"], r.get("flavor"), alive, capture)
+                activity.Observation(r["user_id"], r.get("flavor"), alive, capture, colored)
             )
         now = time.time()
         notes = activity.step(registry, observations, now, interval, grace)
@@ -2164,7 +2168,12 @@ def create_app(
             r["compact_command"] = tmux.compact_command_for_flavor(r.get("flavor"))
             row = registry.get(r["user_id"])
             r["activity"] = (
-                {"status": row["status"], "detail": row["detail"], "since": row["since"]}
+                {
+                    "status": row["status"],
+                    "detail": row["detail"],
+                    "error": row["error"],
+                    "since": row["since"],
+                }
                 if row
                 else dict(UNKNOWN_ACTIVITY)
             )

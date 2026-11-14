@@ -45,7 +45,16 @@ def test_capture_keeps_colors_only_when_asked(isolated_tmux):
     assert err is None and "\x1b[31mred" in colored and "\x1b[38;5;174mpink" in colored
 
 
-def test_remote_terminal_view_asks_the_node_for_colors_instead_of_the_plain_observation():
+def test_a_remote_capture_uses_the_fresh_colored_observation_either_way():
+    node = nodes.RemoteNode("mac", 1, loop=None, send=None, close=None, interval=2.0)
+    node._last = {"tmux_server": "srv", "screens": {"%1": "\x1b[31mred\x1b[0m screen"}}
+    node._last_at = time.monotonic()
+    node._call = lambda *a, **k: pytest.fail("a fresh observation needs no round trip")
+    assert node.capture("%1", "srv") == ("red screen", None)
+    assert node.capture("%1", "srv", colors=True) == ("\x1b[31mred\x1b[0m screen", None)
+
+
+def test_an_old_node_plain_observation_serves_plain_readers_and_colors_ask_again():
     node = nodes.RemoteNode("mac", 1, loop=None, send=None, close=None, interval=2.0)
     node._last = {"tmux_server": "srv", "captures": {"%1": "plain screen"}}
     node._last_at = time.monotonic()
@@ -53,6 +62,7 @@ def test_remote_terminal_view_asks_the_node_for_colors_instead_of_the_plain_obse
     node._call = lambda kind, ttl, **args: calls.append((kind, args)) or {
         "status": "ok", "data": {"text": "\x1b[31mred\x1b[0m"}}
     assert node.capture("%1", "srv") == ("plain screen", None)
+    assert node.screen("%1", "srv") == "plain screen"
     assert calls == []
     assert node.capture("%1", "srv", colors=True) == ("\x1b[31mred\x1b[0m", None)
     assert calls == [("capture", {"pane": "%1", "tmux_server": "srv", "colors": True})]
@@ -62,7 +72,7 @@ def test_a_remote_screen_for_the_trust_check_never_waits_on_the_node():
     node = nodes.RemoteNode("mac", 1, loop=None, send=None, close=None, interval=2.0)
     node._call = lambda *a, **k: pytest.fail("a message send must not wait on a capture round trip")
     assert node.screen("%1", "srv") is None  # nothing observed yet
-    node._last = {"tmux_server": "srv", "captures": {"%1": "screen"}}
+    node._last = {"tmux_server": "srv", "screens": {"%1": "\x1b[1mscreen\x1b[0m"}}
     assert node.screen("%1", "srv") == "screen"
     assert node.screen("%1", "other-server") is None
     assert node.screen("%2", "srv") is None

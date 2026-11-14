@@ -3076,3 +3076,30 @@ test('the model label switches a Codex agent and shows why a switch failed', asy
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
+
+test('an agent stopped by an error shows a red ! on its bee, with the error on hover', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  const line = '■ You’ve hit your usage limit. Visit https://chatgpt.com/settings/usage to purchase more credits or try again at 1:32 PM.';
+  const sick = state.recipients[2];
+  sick.activity = { status: 'idle', detail: null, error: line, since: state.now };
+  try {
+    await page.goto(base + '#/');
+    const row = page.locator('#agent-sidebar .team-mate', { hasText: sick.user_id });
+    const badge = row.locator('svg.agent-bee .bee-error');
+    await badge.waitFor();
+    assert.equal(await badge.locator('title').textContent(), line);
+    assert.match(await row.locator('svg.agent-bee').getAttribute('aria-label'), /error: ■ You’ve hit your usage limit/);
+    // The small sidebar bee also gets a readable mark beside the name.
+    assert.equal(await row.locator('.agent-error-mark').getAttribute('title'), line);
+    // Only the agent with the error is marked.
+    assert.equal(await page.locator('#agent-sidebar .bee-error').count(), 1);
+    assert.equal(await page.locator('#agent-sidebar .agent-error-mark').count(), 1);
+    await page.goto(base + `#/agent/${encodeURIComponent(sick.user_id)}`);
+    await page.locator('.fhead svg.agent-bee .bee-error').waitFor();
+    assert.equal(await page.locator('.fhead .agent-error').textContent(), `! ${line}`);
+    // It clears when the hub stops reporting it.
+    sick.activity = { status: 'working', detail: null, error: null, since: state.now };
+    await page.locator('.fhead .bee-error').waitFor({ state: 'detached', timeout: 15000 });
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});

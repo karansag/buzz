@@ -425,14 +425,14 @@ class Daemon:
             snap = self.executor.local.snapshot()
         except nodes.Unavailable as e:
             return protocol.observe(self.seq, None, None, {}, str(e))
-        captures = {}
+        screens = {}
         for pane, expected in self.watched.items():
             if pane not in snap.live or (expected and expected != snap.server):
                 continue
-            text, err = self.executor.local.capture(pane, expected)
+            text, err = self.executor.local.capture(pane, expected, colors=True)
             if err is None and text is not None:
-                captures[pane] = text
-        return protocol.observe(self.seq, snap.server, snap.table, captures)
+                screens[pane] = text
+        return protocol.observe(self.seq, snap.server, snap.table, screens)
 
     async def session(self, ws) -> None:
         await ws.send(json.dumps(self.hello()))

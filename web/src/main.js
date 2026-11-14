@@ -20,6 +20,7 @@ import {
   agentStatus,
   Avatar,
   Bee,
+  ErrorMark,
   MachineBadge,
   rel,
   currentTask,
@@ -802,8 +803,9 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
             e.dataTransfer.setData("text/plain", r.user_id);
             setDragging(r.user_id);
           }} onDragEnd=${() => { setDragging(null); setOver(null); }}>
-          <${Bee} node=${r.node} flavor=${r.flavor} size="small" working=${st.cls === "working"} />
+          <${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />
           <span class="team-mate-name">${r.user_id}</span>
+          <${ErrorMark} error=${r.activity?.error} />
           <${Crown} teams=${team} user=${r.user_id} />
           ${state.supervisor && state.supervisor.user_id === r.user_id && html`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
           <span class=${`status ${st.cls}`}></span>
@@ -1702,8 +1704,9 @@ function TeamStrip({ crew, user, unreadFor }) {
       return html`<a key=${m.user_id} href=${`#/agent/${encodeURIComponent(m.user_id)}`}
         class=${`team-mate ${here ? "here" : ""}`} aria-current=${here ? "page" : null}
         title=${`${m.user_id} · ${st.word}`}>
-        <${Bee} node=${m.node} flavor=${m.flavor} size="small" working=${st.cls === "working"} />
+        <${Bee} node=${m.node} flavor=${m.flavor} error=${m.activity?.error} size="small" working=${st.cls === "working"} />
         <span class="team-mate-name">${m.user_id}</span>
+        <${ErrorMark} error=${m.activity?.error} />
         <${Crown} teams=${crew.team} user=${m.user_id} />
         <span class=${`status ${st.cls}`}></span>
         ${unreadFor(m.user_id) && html`<span class="team-mate-unread" title="new reply">●</span>`}
@@ -1881,10 +1884,10 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
           // search the row opens the end of the conversation, as before.
           const matchId = c.match?.id ?? null;
           return html`<a key=${c.agent} class="chat-row" href=${agentHash(c.agent, matchId)}>
-            ${r ? html`<${Bee} node=${r.node} flavor=${r.flavor} size="small" working=${st.cls === "working"} />`
+            ${r ? html`<${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />`
               : html`<span class="chat-gone" aria-hidden="true">◌</span>`}
             <span class="chat-main">
-              <span class="chat-who">${c.agent}<${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
+              <span class="chat-who">${c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && html`<span class="team-mate-unread" title="new reply">●</span>`}
                 <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
               <span class="chat-line">${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
@@ -1983,7 +1986,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       ${crew && html`<${TeamStrip} crew=${crew} user=${user} unreadFor=${unreadFor} />`}
     </div>
     <div class="fhead">
-      <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
+      <${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} working=${status === "working"} />
       <div class="who">
         <div class="nm">${user}<${Crown} teams=${state.teams} user=${user} word=${true} teamName=${true} /><span class=${`status ${st.cls}`} title=${st.word}></span></div>
         <div class="meta">
@@ -1994,7 +1997,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
           <${StopAgentButton} key=${user} r=${r} refresh=${refresh} />
           <${InterruptAgent} key=${`interrupt-${user}`} r=${r} />
           · joined ${rel(r.registered_at, state.now)}
-          · <span style=${`color:${st.color}`}>${st.word}</span>${status === "needs_attention" && detail ? html` <span class="attn">${detail}</span>` : ""}
+          · <span style=${`color:${st.color}`}>${st.word}</span>${status === "needs_attention" && detail ? html` <span class="attn">${detail}</span>` : ""}${r.activity?.error ? html` <span class="agent-error">! ${r.activity.error}</span>` : ""}
         </div>
         ${r.instructions && html`<div class="inst">"${r.instructions}"</div>`}
       </div>

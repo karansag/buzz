@@ -337,7 +337,8 @@ def test_daemon_session_says_hello_observes_and_answers_commands(tmp_path, monke
     assert ws.sent[0]["tmux_server"] == "srv-1" and ws.sent[0]["protocol"] == protocol.PROTOCOL
     observe = next(f for f in ws.sent if f["type"] == "observe")
     assert observe["tmux_server"] == "srv-1" and set(observe["table"]) == {"%1", "%2"}
-    assert observe["captures"] == {"%1": "screen"}  # only live watched panes are captured
+    assert observe["screens"] == {"%1": "screen"}  # only live watched panes are captured
+    assert ("capture", "%1", "srv-1", True) in local.calls  # with colors, for the error check
     result = next(f for f in ws.sent if f["type"] == "result")
     assert result["op_id"] == "m1" and result["status"] == "ok"
     assert daemon.watched == {}  # the watch frame was applied

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_swarm import db, nodes, server, tmux
+from agent_swarm import activity, db, nodes, server, tmux
 
 
 WEB_ROOT = Path(__file__).parents[1] / "web"
@@ -540,20 +540,22 @@ def test_state_defaults_activity_to_unknown_without_monitor_data(client):
     user = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["user_id"]
     state = client.get("/api/state").json()
     act = next(r["activity"] for r in state["recipients"] if r["user_id"] == user)
-    assert act == {"status": "unknown", "detail": None, "since": None}
+    assert act == {"status": "unknown", "detail": None, "error": None, "since": None}
 
 
 def test_state_carries_seeded_activity(client):
     user = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["user_id"]
     client.app.state.activity_registry[user] = {
         "hash": "abc", "changed_at": 1.0, "status": "needs_attention",
-        "detail": "Do you want to proceed?", "since": 2.0, "notified": True,
+        "detail": "Do you want to proceed?", "error": "API Error: 402", "since": 2.0,
+        "notified": True,
     }
     state = client.get("/api/state").json()
     act = next(r["activity"] for r in state["recipients"] if r["user_id"] == user)
     assert act == {
         "status": "needs_attention",
         "detail": "Do you want to proceed?",
+        "error": "API Error: 402",
         "since": 2.0,
     }
 
@@ -1560,6 +1562,30 @@ def test_a_failing_capture_does_not_end_the_monitor_tick(client):
     by_user = {r["user_id"]: r["activity"]["status"] for r in client.get("/api/state").json()["recipients"]}
     assert by_user["puffin"] == "unknown"  # alive, but nothing could be read
     assert by_user["otter"] == "working"
+
+
+def test_monitor_flags_an_agent_stopped_by_an_error(client):
+    screen = "\x1b[38;5;1m■ You've hit your usage limit.\x1b[39m\n› Ask Codex to do anything\n"
+    asked = []
+
+    class Limited(nodes.LocalNode):
+        def capture(self, pane, tmux_server, colors=False):
+            asked.append(colors)
+            return (screen if colors else activity.strip_colors(screen)), None
+
+    client.app.state.nodes.add(Limited("macbook"))
+    client.post("/register", json={"tmux_pane": "0:0.0", "node": "macbook",
+                                   "requested_user": "skink", "flavor": "codex"})
+    # The screen has been still for a while.
+    client.app.state.activity_registry["skink"] = {
+        "hash": activity.snapshot_hash(activity.strip_colors(screen)), "changed_at": 0.0,
+        "status": "idle", "detail": None, "error": None, "since": 0.0, "notified": False,
+    }
+    asyncio.run(client.app.state.monitor_tick())
+    act = next(r["activity"] for r in client.get("/api/state").json()["recipients"]
+               if r["user_id"] == "skink")
+    assert act["status"] == "idle" and act["error"] == "■ You've hit your usage limit."
+    assert asked == [True]  # one capture, with colors
 
 
 def test_worktree_paths_from_before_nodes_belong_to_this_machine(tmp_path):

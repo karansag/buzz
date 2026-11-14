@@ -127,11 +127,20 @@ export function MachineBadge({ node }) {
   return html`<span class="machine-badge" style=${`--machine:${machineColor(node)}`} title=${`Machine: ${machineName(node)}`}><span class="machine-mark" aria-hidden="true"></span>${machineName(node)}</span>`;
 }
 
+export const ERROR_RED = "#e5484d";
+
+// The same error as a mark beside a name, where the bee is too small to show one.
+export function ErrorMark({ error }) {
+  return error ? html`<span class="agent-error-mark" title=${error} aria-label=${`error: ${error}`}>!</span>` : null;
+}
+
 // The bee flies to the right: head at x=44, tail at x=7. Both wings are drawn
 // tilted back over the abdomen, so their outer ends point away from the head.
-export function Bee({ node, flavor, size = "", working = false }) {
+// `error` is the line an agent stopped on (a usage limit, no credits, a
+// failed API call): a red "!" on the bee, showing the line on hover.
+export function Bee({ node, flavor, size = "", working = false, error = null }) {
   const harness = harnessStyle(flavor);
-  return html`<svg class=${`agent-bee ${size}`} style=${`--machine:${machineColor(node)}`} viewBox="0 0 56 42" role="img" aria-label=${`${machineName(node)} machine, ${harness.label} harness${working ? ", working" : ""}`}>
+  return html`<svg class=${`agent-bee ${size}`} style=${`--machine:${machineColor(node)}`} viewBox="0 0 56 42" role="img" aria-label=${`${machineName(node)} machine, ${harness.label} harness${working ? ", working" : ""}${error ? `, error: ${error}` : ""}`}>
     <title>${harness.label} harness: ${harness.mark} and stripes · ${machineName(node)}: body and border</title>
     ${working && html`<g class="bee-working-halo" style=${`--working:${WORKING_HALO.color}`}>
       <circle cx="27" cy="21" r="28" fill=${WORKING_HALO.fill} stroke=${WORKING_HALO.color} stroke-width="2.5" />
@@ -142,5 +151,9 @@ export function Bee({ node, flavor, size = "", working = false }) {
     <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7" />
     <path d="M19 12v18M29 11v20" stroke=${harness.color} stroke-width="4" />
     <circle cx="44" cy="21" r="6" fill="#16120c" /><circle cx="46" cy="19" r="1.3" fill="#f0e6d2" />
+    ${error && html`<g class="bee-error"><title>${error}</title>
+      <circle cx="46" cy="9" r="10" fill=${ERROR_RED} stroke="#16120c" stroke-width="2" />
+      <text x="46" y="14.5" text-anchor="middle" font-size="16" font-weight="800" fill="#fff">!</text>
+    </g>`}
   </svg>`;
 }

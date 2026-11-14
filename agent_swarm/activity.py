@@ -7,6 +7,7 @@ in as Observations and records the returned Notifications.
 
 from __future__ import annotations
 
+import colorsys
 import hashlib
 import re
 from typing import NamedTuple
@@ -17,6 +18,9 @@ class Observation(NamedTuple):
     flavor: str | None
     pane_alive: bool
     capture: str | None  # None means the capture failed this tick
+    # The same screen with its SGR color codes, when the node sent them.
+    # Only the error check reads it; everything else reads `capture`.
+    colored: str | None = None
 
 
 class Notification(NamedTuple):
@@ -135,6 +139,124 @@ def _attention_detail(flavor: str | None, capture: str) -> str | None:
     return (question or marker).strip()
 
 
+# An agent stopped by an error: a usage limit, no credits, a failed API
+# call, or lost auth. Every harness prints these in red near the bottom of
+# the screen, and nothing else counts: red alone is also diffs and failing
+# tool output, and the words alone are also prose and pasted messages.
+ERROR_WORDS = re.compile(
+    r"(?i)usage limit|limit reached|hit your\b.{0,30}\b(limit|budget)|out of (extra )?usage"
+    r"|usage credits|credit balance|(no|more|out of|insufficient) credits"
+    r"|quota|rate.?limit|too many requests|payment required|billing"
+    r"|api error|invalid api key|unauthori[sz]ed|authentication (failed|error)"
+    r"|/login\b|not logged in|oauth token|overloaded|connection error"
+    r"|\berror\W{1,3}[45]\d\d\b"
+)
+
+# How far up from the bottom an error may sit and still be the agent's
+# current state: below it there is room only for the harness's input box,
+# footer and a queued message or two.
+ERROR_WINDOW = 10
+
+# The bullet each harness starts a reply with. One below the error means
+# the agent answered after it, so the error is history.
+REPLY_BULLETS = {
+    "claude": re.compile(r"^\s*[●⏺] "),
+    "codex": re.compile(r"^\s*• "),
+}
+
+_CSI = re.compile(r"\x1b\[([0-9;:?]*)([A-Za-z])")
+_OTHER_ESCAPE = re.compile(r"\x1b(\][^\x07\x1b]*(\x07|\x1b\\)|[()][A-Za-z0-9]|[=>78])")
+
+
+def strip_colors(text: str) -> str:
+    """The screen as plain text: what `tmux capture-pane` gives without -e."""
+    return _CSI.sub("", _OTHER_ESCAPE.sub("", text))
+
+
+def _cube(n: int) -> tuple[int, int, int]:
+    """RGB of xterm 256-color index n."""
+    if n < 16:
+        base = [(0, 0, 0), (205, 0, 0), (0, 205, 0), (205, 205, 0), (0, 0, 238), (205, 0, 205),
+                (0, 205, 205), (229, 229, 229), (127, 127, 127), (255, 0, 0), (0, 255, 0),
+                (255, 255, 0), (92, 92, 255), (255, 0, 255), (0, 255, 255), (255, 255, 255)]
+        return base[n]
+    if n < 232:
+        n -= 16
+        steps = [0, 95, 135, 175, 215, 255]
+        return steps[n // 36], steps[n // 6 % 6], steps[n % 6]
+    v = 8 + (n - 232) * 10
+    return v, v, v
+
+
+def _is_red(rgb: tuple[int, int, int]) -> bool:
+    """Red or pink-red, not orange, brown or grey: the error colors of
+    Claude (255,107,128 and others), Codex (ANSI red) and Pi (234,127,129)."""
+    h, s, v = colorsys.rgb_to_hsv(*(c / 255 for c in rgb))
+    return (h >= 340 / 360 or h <= 15 / 360) and s >= 0.35 and v >= 0.4
+
+
+def _red_lines(colored: str) -> list[tuple[str, bool]]:
+    """Each line's plain text, and whether any visible character is red.
+
+    tmux carries the color over line ends, so the state runs across lines.
+    """
+    out: list[tuple[str, bool]] = []
+    red = False
+    for line in colored.split("\n"):
+        text, any_red, at = [], False, 0
+        for m in _CSI.finditer(line):
+            chunk = _OTHER_ESCAPE.sub("", line[at:m.start()])
+            text.append(chunk)
+            any_red = any_red or (red and bool(chunk.strip()))
+            at = m.end()
+            if m.group(2) != "m":
+                continue
+            params = [int(p) if p.isdigit() else 0 for p in re.split(r"[;:]", m.group(1))]
+            i = 0
+            while i < len(params):
+                p = params[i]
+                if p in (0, 39):
+                    red = False
+                elif 30 <= p <= 37 or 90 <= p <= 97:
+                    red = p in (31, 91)
+                elif p == 38 and i + 2 < len(params) and params[i + 1] == 5:
+                    red = _is_red(_cube(params[i + 2] % 256))
+                    i += 2
+                elif p == 38 and i + 4 < len(params) and params[i + 1] == 2:
+                    red = _is_red(tuple(min(c, 255) for c in params[i + 2:i + 5]))
+                    i += 4
+                elif p in (48, 58) and i + 1 < len(params):
+                    i += 2 if params[i + 1] == 5 else 4 if params[i + 1] == 2 else 0
+                i += 1
+        chunk = _OTHER_ESCAPE.sub("", line[at:])
+        text.append(chunk)
+        any_red = any_red or (red and bool(chunk.strip()))
+        out.append(("".join(text), any_red))
+    return out
+
+
+def error_detail(flavor: str | None, colored: str) -> str | None:
+    """The error the agent stopped on, or None: the last red line near the
+    bottom that names an error, with the red lines it wraps across."""
+    lines = _red_lines(colored)
+    shown = [i for i, (t, _) in enumerate(lines) if t.strip()]
+    reply = REPLY_BULLETS.get((flavor or "").lower())
+    for i in reversed(shown[-ERROR_WINDOW - 1:]):
+        text, red = lines[i]
+        if not (red and ERROR_WORDS.search(text)):
+            continue
+        if reply and any(reply.search(t) for t, _ in lines[i + 1:]):
+            return None
+        # A long message wraps onto the lines next to it, all red, no gap.
+        first = last = i
+        while first > 0 and lines[first - 1][1]:
+            first -= 1
+        while last + 1 < len(lines) and lines[last + 1][1]:
+            last += 1
+        return " ".join(t.strip() for t, _ in lines[first:last + 1])[:300]
+    return None
+
+
 def step(
     registry: dict[str, dict],
     observations: list[Observation],
@@ -162,6 +284,7 @@ def step(
         prev_notified = prev["notified"] if prev else False
 
         detail: str | None = None
+        error: str | None = None
         snap = prev_hash
         changed_at = prev_changed_at
 
@@ -185,6 +308,9 @@ def step(
                     detail = matched
                 else:
                     status = "idle"
+            # Only a still screen: a working agent has got past any error.
+            if status != "working" and obs.colored is not None:
+                error = error_detail(obs.flavor, obs.colored)
 
         status_changed = status != prev_status
         since = now if status_changed else prev_since
@@ -202,6 +328,7 @@ def step(
             "changed_at": changed_at,
             "status": status,
             "detail": detail,
+            "error": error,
             "since": since,
             "notified": notified,
         }

@@ -9366,9 +9366,13 @@ function Avatar({ name, size }) {
 function MachineBadge({ node }) {
 	return m$1`<span class="machine-badge" style=${`--machine:${machineColor(node)}`} title=${`Machine: ${machineName(node)}`}><span class="machine-mark" aria-hidden="true"></span>${machineName(node)}</span>`;
 }
-function Bee({ node, flavor, size = "", working = false }) {
+var ERROR_RED = "#e5484d";
+function ErrorMark({ error }) {
+	return error ? m$1`<span class="agent-error-mark" title=${error} aria-label=${`error: ${error}`}>!</span>` : null;
+}
+function Bee({ node, flavor, size = "", working = false, error = null }) {
 	const harness = harnessStyle(flavor);
-	return m$1`<svg class=${`agent-bee ${size}`} style=${`--machine:${machineColor(node)}`} viewBox="0 0 56 42" role="img" aria-label=${`${machineName(node)} machine, ${harness.label} harness${working ? ", working" : ""}`}>
+	return m$1`<svg class=${`agent-bee ${size}`} style=${`--machine:${machineColor(node)}`} viewBox="0 0 56 42" role="img" aria-label=${`${machineName(node)} machine, ${harness.label} harness${working ? ", working" : ""}${error ? `, error: ${error}` : ""}`}>
     <title>${harness.label} harness: ${harness.mark} and stripes · ${machineName(node)}: body and border</title>
     ${working && m$1`<g class="bee-working-halo" style=${`--working:${WORKING_HALO.color}`}>
       <circle cx="27" cy="21" r="28" fill=${WORKING_HALO.fill} stroke=${WORKING_HALO.color} stroke-width="2.5" />
@@ -9379,6 +9383,10 @@ function Bee({ node, flavor, size = "", working = false }) {
     <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7" />
     <path d="M19 12v18M29 11v20" stroke=${harness.color} stroke-width="4" />
     <circle cx="44" cy="21" r="6" fill="#16120c" /><circle cx="46" cy="19" r="1.3" fill="#f0e6d2" />
+    ${error && m$1`<g class="bee-error"><title>${error}</title>
+      <circle cx="46" cy="9" r="10" fill=${"#e5484d"} stroke="#16120c" stroke-width="2" />
+      <text x="46" y="14.5" text-anchor="middle" font-size="16" font-weight="800" fill="#fff">!</text>
+    </g>`}
   </svg>`;
 }
 //#endregion
@@ -9578,7 +9586,7 @@ function QuickSwitcher({ state, navigate }) {
         ${options.map((o) => m$1`<div key=${o.id} id=${`switch-${o.id}`} role="option" aria-selected=${current?.id === o.id}
           aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
           onClick=${() => choose(o)}>
-          ${o.target && m$1`<${Bee} node=${o.target.node} flavor=${o.target.flavor} size="small" working=${o.target.activity?.status === "working"} />`}
+          ${o.target && m$1`<${Bee} node=${o.target.node} flavor=${o.target.flavor} error=${o.target.activity?.error} size="small" working=${o.target.activity?.status === "working"} />`}
           <span><b>${o.name}</b>${mode === "agents" && m$1`<${Crown} teams=${state.teams} user=${o.target?.user_id} word=${true} />`}<small>${o.detail}</small>
             ${o.summary && m$1`<small class="quick-switch-summary" title=${o.summary}>${o.summary}</small>`}</span>
         </div>`)}
@@ -10374,7 +10382,7 @@ function CompactBees({ state, machine, harness = null }) {
 			st.word,
 			agentPreview(r)
 		].filter(Boolean).join(" · ")} style=${`--machine:${machineColor(r.node)}`}>
-        <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
+        <${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} working=${status === "working"} />
         <span class="bee-name">${r.user_id}<${Crown} teams=${state.teams} user=${r.user_id} /></span>
         <span class="bee-machine">${machineName(r.node)}</span>
         <span class="bee-state"><span class=${`status ${st.cls}`} aria-hidden="true"></span>${st.word} · ${harness.mark} ${harness.label}</span>
@@ -10881,7 +10889,8 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 					task: primary,
 					node: machineName(r.node),
 					harness: harness.key,
-					doing: doing?.text
+					doing: doing?.text,
+					error: r.activity?.error
 				});
 				ctx.save();
 				if (!agentShown(r, machineRef.current, harnessRef.current)) ctx.globalAlpha = .18;
@@ -10955,10 +10964,11 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				ctx.font = "8px ui-monospace, monospace";
 				ctx.fillStyle = machineColor(r.node);
 				ctx.fillText(machineName(r.node), x, labelY + 11);
-				const attention = r.activity && r.activity.status === "needs_attention";
+				const error = r.activity?.error;
+				const attention = error || r.activity && r.activity.status === "needs_attention";
 				if (attention) {
-					ctx.fillStyle = "#f2a93b";
-					ctx.font = "bold 13px ui-monospace, monospace";
+					ctx.fillStyle = error ? ERROR_RED : "#f2a93b";
+					ctx.font = `bold ${error ? 17 : 13}px ui-monospace, monospace`;
 					ctx.textBaseline = "alphabetic";
 					ctx.fillText("!", x, y - 14);
 				}
@@ -11099,7 +11109,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 			}
 			const hovered = hoverRef.current && bees.get(hoverRef.current);
 			if (hovered) {
-				const said = hovered.doing || hovered.task && hovered.task.title;
+				const said = hovered.error ? `! ${hovered.error}` : hovered.doing || hovered.task && hovered.task.title;
 				const title = said ? ` · ${said.length > 70 ? `${said.slice(0, 69)}…` : said}` : "";
 				const harnessLabel = harnessStyle(hovered.harness).label;
 				const label = `${hoverRef.current} · ${hovered.node} · ${harnessLabel}${title}`;
@@ -13001,8 +13011,9 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 				setDragging(null);
 				setOver(null);
 			}}>
-          <${Bee} node=${r.node} flavor=${r.flavor} size="small" working=${st.cls === "working"} />
+          <${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />
           <span class="team-mate-name">${r.user_id}</span>
+          <${ErrorMark} error=${r.activity?.error} />
           <${Crown} teams=${team} user=${r.user_id} />
           ${state.supervisor && state.supervisor.user_id === r.user_id && m$1`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
           <span class=${`status ${st.cls}`}></span>
@@ -13922,8 +13933,9 @@ function TeamStrip({ crew, user, unreadFor }) {
 		return m$1`<a key=${m.user_id} href=${`#/agent/${encodeURIComponent(m.user_id)}`}
         class=${`team-mate ${here ? "here" : ""}`} aria-current=${here ? "page" : null}
         title=${`${m.user_id} · ${st.word}`}>
-        <${Bee} node=${m.node} flavor=${m.flavor} size="small" working=${st.cls === "working"} />
+        <${Bee} node=${m.node} flavor=${m.flavor} error=${m.activity?.error} size="small" working=${st.cls === "working"} />
         <span class="team-mate-name">${m.user_id}</span>
+        <${ErrorMark} error=${m.activity?.error} />
         <${Crown} teams=${crew.team} user=${m.user_id} />
         <span class=${`status ${st.cls}`}></span>
         ${unreadFor(m.user_id) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
@@ -14100,9 +14112,9 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
 		const m = c.match || c.last;
 		const matchId = c.match?.id ?? null;
 		return m$1`<a key=${c.agent} class="chat-row" href=${agentHash(c.agent, matchId)}>
-            ${r ? m$1`<${Bee} node=${r.node} flavor=${r.flavor} size="small" working=${st.cls === "working"} />` : m$1`<span class="chat-gone" aria-hidden="true">◌</span>`}
+            ${r ? m$1`<${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />` : m$1`<span class="chat-gone" aria-hidden="true">◌</span>`}
             <span class="chat-main">
-              <span class="chat-who">${c.agent}<${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
+              <span class="chat-who">${c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
                 <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
               <span class="chat-line">${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
@@ -14193,7 +14205,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       ${crew && m$1`<${TeamStrip} crew=${crew} user=${user} unreadFor=${unreadFor} />`}
     </div>
     <div class="fhead">
-      <${Bee} node=${r.node} flavor=${r.flavor} working=${status === "working"} />
+      <${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} working=${status === "working"} />
       <div class="who">
         <div class="nm">${user}<${Crown} teams=${state.teams} user=${user} word=${true} teamName=${true} /><span class=${`status ${st.cls}`} title=${st.word}></span></div>
         <div class="meta">
@@ -14204,7 +14216,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
           <${StopAgentButton} key=${user} r=${r} refresh=${refresh} />
           <${InterruptAgent} key=${`interrupt-${user}`} r=${r} />
           · joined ${rel(r.registered_at, state.now)}
-          · <span style=${`color:${st.color}`}>${st.word}</span>${status === "needs_attention" && detail ? m$1` <span class="attn">${detail}</span>` : ""}
+          · <span style=${`color:${st.color}`}>${st.word}</span>${status === "needs_attention" && detail ? m$1` <span class="attn">${detail}</span>` : ""}${r.activity?.error ? m$1` <span class="agent-error">! ${r.activity.error}</span>` : ""}
         </div>
         ${r.instructions && m$1`<div class="inst">"${r.instructions}"</div>`}
       </div>

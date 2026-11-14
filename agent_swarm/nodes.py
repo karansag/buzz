@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
 
-from . import config, protocol, tmux
+from . import activity, config, protocol, tmux
 
 log = logging.getLogger("agent_swarm.nodes")
 
@@ -360,6 +360,18 @@ class NodeRegistry:
         return list(self._nodes)
 
 
+def _observed(observation: dict, pane: str, colors: bool) -> str | None:
+    """A pane's screen from a node's observation, with or without colors.
+
+    Nodes send colored "screens". A node not yet updated sends plain
+    "captures": fine for plain readers, and a colored reader asks again.
+    """
+    text = (observation.get("screens") or {}).get(pane)
+    if text is not None:
+        return text if colors else activity.strip_colors(text)
+    return None if colors else (observation.get("captures") or {}).get(pane)
+
+
 class RemoteNode:
     """A machine reached over the websocket it opened to the hub.
 
@@ -543,12 +555,12 @@ class RemoteNode:
     def capture(
         self, pane: str, tmux_server: str | None, colors: bool = False
     ) -> tuple[str | None, str | None]:
-        # The node captures watched panes with every observation; use that
-        # when it is fresh rather than asking again. Those are plain text.
+        # The node captures watched panes, with colors, every observation;
+        # use that when it is fresh rather than asking again.
         last, at = self._last, self._last_at
-        if not colors and last and at and time.monotonic() - at <= self.interval * 1.5:
+        if last and at and time.monotonic() - at <= self.interval * 1.5:
             if tmux_server is None or last.get("tmux_server") == tmux_server:
-                text = (last.get("captures") or {}).get(pane)
+                text = _observed(last, pane, colors)
                 if text is not None:
                     return text, None
         r = self._call("capture", COMMAND_TTL, pane=pane, tmux_server=tmux_server, colors=colors)
@@ -561,7 +573,7 @@ class RemoteNode:
         last = self._last
         if not last or (tmux_server is not None and last.get("tmux_server") != tmux_server):
             return None
-        return (last.get("captures") or {}).get(pane)
+        return _observed(last, pane, colors=False)
 
     def deliver(
         self,
