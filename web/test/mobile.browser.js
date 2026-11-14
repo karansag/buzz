@@ -3040,3 +3040,39 @@ for (const width of [390, 1500]) {
     } finally { await page.close(); }
   });
 }
+
+test('the model label switches a Codex agent and shows why a switch failed', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  await page.route('**/api/spawn-options', r => r.fulfill({ json: { harnesses: [
+    { flavor: 'codex', models: ['gpt-6.1-sol', 'gpt-6-luna'] }] } }));
+  const sent = [];
+  let fail = false;
+  await page.route('**/agents/stoat/switch-model', r => {
+    sent.push(r.request().postDataJSON());
+    if (fail) return r.fulfill({ status: 502, json: { detail: {
+      error: 'timed out waiting for the /model picker', screen: '› Ask Codex\n  GPT-6-Luna medium · ~/x' } } });
+    state.recipients[0].model = 'gpt-6-luna';
+    return r.fulfill({ json: { ok: true, user_id: 'stoat', model: 'gpt-6-luna' } });
+  });
+  await page.route('**/agents/stoat/model', r => { throw new Error('a switchable agent must not just be relabelled'); });
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const label = page.locator('button.model-label').first();
+    assert.match(await label.getAttribute('title'), /^Switch this agent's model/);
+    await label.click();
+    const input = page.getByRole('combobox', { name: 'Model label for stoat' });
+    await input.fill('gpt-6-luna');
+    await page.getByRole('button', { name: 'switch', exact: true }).click();
+    await page.locator('button.model-label', { hasText: 'gpt-6-luna' }).first().waitFor();
+    assert.deepEqual(sent, [{ model: 'gpt-6-luna' }]);
+
+    fail = true;
+    await page.locator('button.model-label').first().click();
+    await input.fill('gpt-6.1-sol');
+    await input.press('Enter');
+    const message = await answer(page);
+    assert.match(message, /^Could not switch stoat to gpt-6\.1-sol: timed out waiting for the \/model picker/);
+    assert.match(message, /Last screen:\n› Ask Codex\n {2}GPT-6-Luna medium/);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});

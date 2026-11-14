@@ -16,6 +16,7 @@
     buzz supervisor [HANDLE [--objective TEXT] | --clear]   # the swarm supervisor role
     buzz spawn [--flavor claude|codex|pi|hermes] [--model M] [--node N]
     buzz stop HANDLE   # kill that agent's tmux pane
+    buzz model HANDLE... --to MODEL | --team --to MODEL   # switch agents' models (owner or their queen)
     buzz snapshot      # save this machine's tmux layout and the agent in each pane
     buzz restore [--from FILE] [--apply] [--stagger SECONDS]   # after a reboot
     buzz restart HANDLE... | --all [--flavor F] [--force] [--apply]   # e.g. after a harness upgrade
@@ -758,6 +759,49 @@ def cmd_task_update(args: argparse.Namespace) -> int:
     return 0 if r.is_success else 1
 
 
+def cmd_model(args: argparse.Namespace) -> int:
+    """Switch agents' models, or show what they run and can switch to."""
+    recipients = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5).json()["recipients"]
+    by_name = {r["user_id"]: r for r in recipients}
+    handles = list(args.handles)
+    if args.team:
+        me = whoami_lookup(caller()).get("user_id")
+        mine = by_name.get(me or "")
+        if mine is None or mine.get("team_id") is None:
+            print("error: --team needs a registered agent on a team", file=sys.stderr)
+            return 2
+        handles += [r["user_id"] for r in recipients
+                    if r.get("team_id") == mine["team_id"] and r["user_id"] != me]
+    if not handles:
+        print("error: name at least one agent, or pass --team", file=sys.stderr)
+        return 2
+    unknown = [h for h in handles if h not in by_name]
+    if unknown:
+        print(f"error: unknown agent(s): {', '.join(unknown)}", file=sys.stderr)
+        return 2
+    if args.to is None:
+        for h in handles:
+            r = by_name[h]
+            print(f"{h}: {r.get('flavor')} {r.get('model') or '(model unknown)'}")
+        return 0
+    fields = _acting_fields()
+    failed = 0
+    for h in dict.fromkeys(handles):
+        r = httpx.post(
+            f"{base_url()}/agents/{quote(h)}/switch-model",
+            json={"model": args.to, **fields}, headers=_headers(), timeout=90,
+        )
+        if r.is_success:
+            print(f"{h}: now {r.json()['model']}")
+            continue
+        failed += 1
+        detail = r.json().get("detail", {}) if r.headers.get("content-type", "").startswith("application/json") else {}
+        print(f"{h}: failed: {detail.get('error') or r.text[:200]}", file=sys.stderr)
+        if detail.get("screen"):
+            print("  last screen:\n    " + detail["screen"].replace("\n", "\n    "), file=sys.stderr)
+    return 1 if failed else 0
+
+
 def cmd_digest(args: argparse.Namespace) -> int:
     params: dict = {"minutes": args.minutes}
     if args.after_message is not None:
@@ -1087,6 +1131,19 @@ def main(argv: list[str] | None = None) -> int:
         "problem it fixes, and where to look. Required to close a task.",
     )
     tup.set_defaults(func=cmd_task_update)
+
+    mdl = sub.add_parser(
+        "model",
+        help="switch agents' models for their current session (owner, or the agents' queen)",
+    )
+    mdl.add_argument("handles", nargs="*", help="agents to switch")
+    mdl.add_argument("--team", action="store_true", help="every other member of my team")
+    mdl.add_argument(
+        "--to",
+        help="model as the harness names it: sonnet / claude-opus-5-5, a Codex slug, "
+        "Pi's provider/id. Without it, show each agent's current model.",
+    )
+    mdl.set_defaults(func=cmd_model)
 
     st = sub.add_parser(
         "status", help="say in a line what you are working on; shown on the dashboard"

@@ -205,9 +205,13 @@ function shortModel(model, flavor) {
   return model.toLowerCase().startsWith(prefix) ? model.slice(prefix.length) : model;
 }
 
-// The model label is display-only: it records what the agent is running so
-// the roster can show it. Switching models still happens in the agent's own
-// pane (e.g. /model); this just keeps the dashboard in step.
+// For Claude Code, Codex and Pi the model label is a switcher: saving drives
+// the harness's own /model command in the agent's pane, for its current
+// session only, and the hub reads the result back off the screen. The hub
+// also keeps the label in step when /model is typed in the pane. Other
+// harnesses keep a display-only label.
+const SWITCHABLE = ["claude", "codex", "pi"];
+
 function ModelLabel({ r, refresh }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
@@ -225,21 +229,34 @@ function ModelLabel({ r, refresh }) {
       .then(d => setKnown(((d.harnesses || []).find(h => h.flavor === flavor) || {}).models || []))
       .catch(() => {});
   };
+  const switchable = SWITCHABLE.includes(flavor);
   const save = async () => {
     if (busy) return;
     if (value.trim() === (r.model || "")) { setEditing(false); return; }
+    if (switchable && !value.trim()) return;
     setBusy(true);
-    const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/model`, {
-      method: "POST", headers: JSONH, body: JSON.stringify({ model: value }),
-    });
+    const path = switchable ? "switch-model" : "model";
+    const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/${path}`, {
+      method: "POST", headers: JSONH, body: JSON.stringify({ model: value.trim() }),
+    }).catch(() => null);
     setBusy(false);
-    if (!res.ok) { await showNotice(`Could not update the model label for ${r.user_id}.`); return; }
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => ({})) : {};
+      const why = body.detail?.error || (res ? `error ${res.status}` : "no answer from the hub");
+      const screen = body.detail?.screen ? `\n\nLast screen:\n${body.detail.screen}` : "";
+      await showNotice(switchable
+        ? `Could not switch ${r.user_id} to ${value.trim()}: ${why}${screen}`
+        : `Could not update the model label for ${r.user_id}: ${why}`);
+      return;
+    }
     setEditing(false);
     refresh();
   };
   if (!editing) {
     return html`<button type="button" class="model-label" onClick=${start}
-      title="Edit the model label. Display only: switch the real model in the agent's pane, then update it here.">
+      title=${switchable
+        ? "Switch this agent's model for its current session (drives /model in its pane)."
+        : "Edit the model label. Display only: switch the real model in the agent's pane, then update it here."}>
       ${r.model ? html`<b>${r.model}</b>` : html`<span class="unset">set model</span>`} <span class="pen">✎</span>
     </button>`;
   }
@@ -252,7 +269,9 @@ function ModelLabel({ r, refresh }) {
         if (e.key === "Escape") setEditing(false);
       }} />
     <datalist id=${listId}>${known.map(m => html`<option key=${m} value=${m} />`)}</datalist>
-    <button type="button" class="mini" disabled=${busy} onClick=${save}>${busy ? "saving…" : "save"}</button>
+    <button type="button" class="mini" disabled=${busy} onClick=${save}>${busy
+      ? (switchable ? "switching…" : "saving…")
+      : (switchable ? "switch" : "save")}</button>
     <button type="button" class="mini" disabled=${busy} onClick=${() => setEditing(false)}>cancel</button>
   </span>`;
 }

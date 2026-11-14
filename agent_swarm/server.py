@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import activity, attachments, bundle, db, digest, names, nodes, notifications, panes, protocol, restore, tmux
+from . import activity, attachments, bundle, db, digest, model_switch, names, nodes, notifications, panes, protocol, restore, tmux
 
 log = logging.getLogger("agent_swarm.monitor")
 
@@ -412,6 +412,16 @@ class TerminalReq(BaseModel):
     key: str | None = None
 
 
+class SwitchModelReq(ActorFields):
+    model_config = ConfigDict(extra="forbid")
+
+    model: str = Field(
+        min_length=1, max_length=200,
+        description="The model to switch to, as the harness names it: a Claude "
+        "alias or id (sonnet, claude-opus-5-5), a Codex slug, Pi's provider/id.",
+    )
+
+
 class AgentModelReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -697,6 +707,11 @@ def create_app(
                     log.exception("capture of %s on %s failed", pane, node.name)
                     text, err = None, "capture failed"
                 capture = text if err is None else None
+                # Keep the model label in step with what the harness shows,
+                # whoever changed it (/model typed in the pane, a switch).
+                seen = model_switch.screen_model(r.get("flavor"), capture)
+                if seen and seen != r.get("model"):
+                    db.set_recipient_model(conn, r["user_id"], seen)
             observations.append(
                 activity.Observation(r["user_id"], r.get("flavor"), alive, capture)
             )
@@ -2217,6 +2232,71 @@ def create_app(
             now, _recipients_with_activity(), db.list_tasks(conn), msgs,
             after_message, since_ts, sup["user_id"] if sup else None, db.list_teams(conn),
         )
+
+    switching: set[str] = set()
+    switching_lock = threading.Lock()
+
+    @app.post("/agents/{user_id}/switch-model")
+    def agents_switch_model(user_id: str, req: SwitchModelReq, request: Request):
+        """Switch the model an agent runs, for its current session.
+
+        Drives the harness's own /model command in the agent's pane (see
+        model_switch) and reads the result back off the screen. The owner may
+        switch any agent; an agent may switch the members of a team it is
+        queen of.
+        """
+        actor = _actor(request, req)
+        recipient = db.get_recipient(conn, user_id)
+        if recipient is None:
+            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        if actor == user_id:
+            # The switch types into the pane, which would land in the caller's own turn.
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "an agent cannot switch its own model through the hub",
+                        "detail": "run /model in your own harness instead"},
+            )
+        if actor != OWNER:
+            team = db.get_team(conn, recipient["team_id"]) if recipient.get("team_id") else None
+            if team is None or team.get("queen") != actor:
+                raise HTTPException(
+                    status_code=403,
+                    detail={"error": f"{actor} is not the queen of {user_id}'s team",
+                            "detail": "only the owner or the agent's queen can switch its model"},
+                )
+        flavor = recipient.get("flavor")
+        if flavor not in model_switch.SWITCHABLE:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": f"switching models is not supported for {flavor} agents",
+                        "supported": list(model_switch.SWITCHABLE)},
+            )
+        node = _node_of(recipient)
+        reason = _offline(recipient, node, _try_snapshot(node))
+        if reason is not None:
+            raise HTTPException(status_code=409, detail={"error": reason})
+        with switching_lock:
+            if user_id in switching:
+                raise HTTPException(status_code=409, detail={"error": f"{user_id} is already switching models"})
+            switching.add(user_id)
+        try:
+            pane = model_switch.Pane(
+                node, recipient["tmux_pane"], recipient.get("tmux_server"),
+                recipient.get("submit_key") or tmux.DEFAULT_SUBMIT_KEY, flavor,
+            )
+            try:
+                seen = model_switch.switch(pane, req.model.strip())
+            except model_switch.SwitchFailed as e:
+                tail = "\n".join((e.screen or "").rstrip().splitlines()[-12:])
+                raise HTTPException(
+                    status_code=502, detail={"error": str(e), "screen": tail or None},
+                ) from e
+        finally:
+            with switching_lock:
+                switching.discard(user_id)
+        updated = db.set_recipient_model(conn, user_id, seen)
+        log.info("%s switched %s to %s", actor, user_id, seen)
+        return {"ok": True, "user_id": user_id, "model": seen, "recipient": updated}
 
     @app.post("/agents/{user_id}/model")
     def agents_set_model(user_id: str, req: AgentModelReq, _: None = Depends(_require_owner)):

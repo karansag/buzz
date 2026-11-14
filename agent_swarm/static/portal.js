@@ -12363,6 +12363,11 @@ function ResumeAgentButton({ r, refresh }) {
 	return m$1`<button type="button" class="mini resume-agent" disabled=${busy} onClick=${resume}>
     ${busy ? "resuming…" : "resume agent"}</button>${message && m$1`<span role="status"> ${message}</span>`} `;
 }
+var SWITCHABLE = [
+	"claude",
+	"codex",
+	"pi"
+];
 function ModelLabel({ r, refresh }) {
 	const [editing, setEditing] = d(false);
 	const [value, setValue] = d("");
@@ -12379,28 +12384,34 @@ function ModelLabel({ r, refresh }) {
 		setEditing(true);
 		fetch("/api/spawn-options").then((res) => res.json()).then((d) => setKnown(((d.harnesses || []).find((h) => h.flavor === flavor) || {}).models || [])).catch(() => {});
 	};
+	const switchable = SWITCHABLE.includes(flavor);
 	const save = async () => {
 		if (busy) return;
 		if (value.trim() === (r.model || "")) {
 			setEditing(false);
 			return;
 		}
+		if (switchable && !value.trim()) return;
 		setBusy(true);
-		const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/model`, {
+		const path = switchable ? "switch-model" : "model";
+		const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/${path}`, {
 			method: "POST",
 			headers: JSONH,
-			body: JSON.stringify({ model: value })
-		});
+			body: JSON.stringify({ model: value.trim() })
+		}).catch(() => null);
 		setBusy(false);
-		if (!res.ok) {
-			await showNotice(`Could not update the model label for ${r.user_id}.`);
+		if (!res || !res.ok) {
+			const body = res ? await res.json().catch(() => ({})) : {};
+			const why = body.detail?.error || (res ? `error ${res.status}` : "no answer from the hub");
+			const screen = body.detail?.screen ? `\n\nLast screen:\n${body.detail.screen}` : "";
+			await showNotice(switchable ? `Could not switch ${r.user_id} to ${value.trim()}: ${why}${screen}` : `Could not update the model label for ${r.user_id}: ${why}`);
 			return;
 		}
 		setEditing(false);
 		refresh();
 	};
 	if (!editing) return m$1`<button type="button" class="model-label" onClick=${start}
-      title="Edit the model label. Display only: switch the real model in the agent's pane, then update it here.">
+      title=${switchable ? "Switch this agent's model for its current session (drives /model in its pane)." : "Edit the model label. Display only: switch the real model in the agent's pane, then update it here."}>
       ${r.model ? m$1`<b>${r.model}</b>` : m$1`<span class="unset">set model</span>`} <span class="pen">✎</span>
     </button>`;
 	return m$1`<span class="model-edit">
@@ -12415,7 +12426,7 @@ function ModelLabel({ r, refresh }) {
 		if (e.key === "Escape") setEditing(false);
 	}} />
     <datalist id=${listId}>${known.map((m) => m$1`<option key=${m} value=${m} />`)}</datalist>
-    <button type="button" class="mini" disabled=${busy} onClick=${save}>${busy ? "saving…" : "save"}</button>
+    <button type="button" class="mini" disabled=${busy} onClick=${save}>${busy ? switchable ? "switching…" : "saving…" : switchable ? "switch" : "save"}</button>
     <button type="button" class="mini" disabled=${busy} onClick=${() => setEditing(false)}>cancel</button>
   </span>`;
 }
