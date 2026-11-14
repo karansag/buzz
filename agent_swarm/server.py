@@ -2280,6 +2280,14 @@ def create_app(
                 detail={"error": f"switching models is not supported for {flavor} agents",
                         "supported": list(model_switch.SWITCHABLE)},
             )
+        if flavor == "pi" and "/" not in req.model:
+            # Pi takes "provider/id"; a bare name ("sonnet", sent to a mixed
+            # team) must not reach Pi's own matching.
+            raise HTTPException(
+                status_code=422,
+                detail={"error": f"Pi needs a provider/id model, not {req.model!r}",
+                        "models": tmux.pi_models()},
+            )
         node = _node_of(recipient)
         reason = _offline(recipient, node, _try_snapshot(node))
         if reason is not None:

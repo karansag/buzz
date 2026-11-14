@@ -282,6 +282,9 @@ def test_a_queen_switches_her_team_but_nobody_else_can(client, switched):
 def test_switch_refuses_unsupported_harnesses_dead_panes_and_reports_failures(client, monkeypatch):
     hermes = client.post("/register", json={"tmux_pane": "0:0.0", "flavor": "hermes"}).json()["user_id"]
     assert client.post(f"/agents/{hermes}/switch-model", json={"model": "x"}).status_code == 422
+    pi = client.post("/register", json={"tmux_pane": "0:1.0", "flavor": "pi"}).json()["user_id"]
+    assert client.post(f"/agents/{pi}/switch-model", json={"model": "sonnet"}).status_code == 422
+    client.delete(f"/recipients/{pi}")
     shell = client.post("/register", json={"tmux_pane": "0:2.0", "flavor": "claude"}).json()["user_id"]
     assert client.post(f"/agents/{shell}/switch-model", json={"model": "opus"}).status_code == 409
     assert client.post("/agents/ghost/switch-model", json={"model": "opus"}).status_code == 404
