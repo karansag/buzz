@@ -22,6 +22,7 @@ def _isolated_settings(monkeypatch, tmp_path):
                 "CLAUDE_MODEL", "ANTHROPIC_MODEL", "CODEX_MODEL", "PI_MODEL"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "no-codex-home"))
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "no-pi-home"))
     # And the process tree: `register` reads its harness from the ancestry.
     monkeypatch.setattr(tmux, "ancestors", lambda pid=None: [])
 

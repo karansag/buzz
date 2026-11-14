@@ -351,7 +351,7 @@ AGENTS_SESSION = "agents"
 # that selects a model, and the models offered in the UI. A fixed model list
 # goes stale as models are released, so each list is either aliases the
 # harness resolves to its newest model (claude, pi) or read from the
-# harness's own catalog (codex).
+# harness's own settings or catalog (codex, and pi's OpenRouter models).
 # "generic" is intentionally not spawnable: launching a bare shell produces a
 # registered pane with no agent in it, which is not a working target.
 #
@@ -400,6 +400,32 @@ def codex_models() -> list[str]:
         return []
 
 
+PI_ALIASES = [
+    "~anthropic/claude-opus-latest",
+    "~anthropic/claude-sonnet-latest",
+    "~openai/gpt-latest",
+]
+
+
+def pi_openrouter_models() -> list[str]:
+    """The OpenRouter models the owner enabled in Pi, in Pi's order.
+
+    Read from `enabledModels` in Pi's settings.json on every call, so a model
+    added or removed there shows up in the menu without a code change. Only
+    the `openrouter/...` entries: the file also lists other providers.
+    """
+    home = os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / "agent"
+    try:
+        enabled = json.loads((Path(home) / "settings.json").read_text())["enabledModels"]
+        return [m for m in enabled if isinstance(m, str) and m.startswith("openrouter/")]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
+def pi_models() -> list[str]:
+    return PI_ALIASES + [m for m in pi_openrouter_models() if m not in PI_ALIASES]
+
+
 HARNESS_SPAWN: dict[str, HarnessSpec] = {
     "claude": HarnessSpec(
         "claude",
@@ -429,11 +455,9 @@ HARNESS_SPAWN: dict[str, HarnessSpec] = {
     "pi": HarnessSpec(
         "pi",
         "--model",
-        [
-            "~anthropic/claude-opus-latest",
-            "~anthropic/claude-sonnet-latest",
-            "~openai/gpt-latest",
-        ],
+        # Aliases Pi resolves to the newest model, then the owner's OpenRouter
+        # models ("provider/id", which `pi --model` accepts).
+        pi_models,
         # pi does not gate commands behind approval prompts: no extra flags.
     ),
     "hermes": HarnessSpec(
