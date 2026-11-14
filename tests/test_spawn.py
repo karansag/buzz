@@ -260,7 +260,7 @@ def test_spawn_window_starts_in_a_named_folder_and_refuses_a_missing_one(monkeyp
     assert calls == []
 
 
-def test_pi_offers_the_owners_openrouter_models(tmp_path):
+def test_pi_offers_the_owners_shortlist():
     import json
     import os
     from pathlib import Path
@@ -268,15 +268,13 @@ def test_pi_offers_the_owners_openrouter_models(tmp_path):
     assert tmux.HARNESS_SPAWN["pi"].models == tmux.PI_ALIASES
     home = Path(os.environ["PI_CODING_AGENT_DIR"])
     home.mkdir(parents=True)
-    (home / "settings.json").write_text(json.dumps({"enabledModels": [
-        "openai-codex/gpt-6.1-sol", "openrouter/z-ai/glm-5.3",
-        "local-llama//m/bonsai.gguf", "openrouter/google/gemini-4-argon", 7,
-    ]}))
+    shortlist = ["openai-codex/gpt-6.1-sol", "openrouter/z-ai/glm-5.3", "local-llama//m/bonsai.gguf"]
+    (home / "settings.json").write_text(json.dumps({"enabledModels": shortlist + [7, ""]}))
     opts = {o["flavor"]: o["models"] for o in tmux.spawn_options()}
-    assert opts["pi"] == tmux.PI_ALIASES + ["openrouter/z-ai/glm-5.3", "openrouter/google/gemini-4-argon"]
+    assert opts["pi"] == shortlist
     assert tmux.spawn_launch_command("pi", "openrouter/z-ai/glm-5.3") == "pi --model openrouter/z-ai/glm-5.3"
-    # Not enabled: no model flag.
-    assert tmux.spawn_launch_command("pi", "openrouter/meta/other") == "pi"
-    for text in ("not json", "[]", '{"enabledModels": 3}'):
+    # Not shortlisted: no model flag.
+    assert tmux.spawn_launch_command("pi", "~openai/gpt-latest") == "pi"
+    for text in ("not json", "[]", '{"enabledModels": 3}', '{"enabledModels": []}'):
         (home / "settings.json").write_text(text)
         assert tmux.HARNESS_SPAWN["pi"].models == tmux.PI_ALIASES

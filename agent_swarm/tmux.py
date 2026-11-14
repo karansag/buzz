@@ -351,7 +351,7 @@ AGENTS_SESSION = "agents"
 # that selects a model, and the models offered in the UI. A fixed model list
 # goes stale as models are released, so each list is either aliases the
 # harness resolves to its newest model (claude, pi) or read from the
-# harness's own settings or catalog (codex, and pi's OpenRouter models).
+# harness's own settings or catalog (codex's catalog, pi's shortlist).
 # "generic" is intentionally not spawnable: launching a bare shell produces a
 # registered pane with no agent in it, which is not a working target.
 #
@@ -407,23 +407,20 @@ PI_ALIASES = [
 ]
 
 
-def pi_openrouter_models() -> list[str]:
-    """The OpenRouter models the owner enabled in Pi, in Pi's order.
+def pi_models() -> list[str]:
+    """The models the owner shortlisted in Pi (`enabledModels`), in Pi's order.
 
-    Read from `enabledModels` in Pi's settings.json on every call, so a model
-    added or removed there shows up in the menu without a code change. Only
-    the `openrouter/...` entries: the file also lists other providers.
+    Read from Pi's settings.json on every call, so a model added or removed
+    there shows up in the menu without a code change. Without a shortlist,
+    the aliases Pi resolves to the newest models.
     """
     home = os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / "agent"
     try:
         enabled = json.loads((Path(home) / "settings.json").read_text())["enabledModels"]
-        return [m for m in enabled if isinstance(m, str) and m.startswith("openrouter/")]
+        shortlist = [m for m in enabled if isinstance(m, str) and m]
     except (OSError, ValueError, KeyError, TypeError):
-        return []
-
-
-def pi_models() -> list[str]:
-    return PI_ALIASES + [m for m in pi_openrouter_models() if m not in PI_ALIASES]
+        shortlist = []
+    return shortlist or PI_ALIASES
 
 
 HARNESS_SPAWN: dict[str, HarnessSpec] = {
@@ -455,8 +452,7 @@ HARNESS_SPAWN: dict[str, HarnessSpec] = {
     "pi": HarnessSpec(
         "pi",
         "--model",
-        # Aliases Pi resolves to the newest model, then the owner's OpenRouter
-        # models ("provider/id", which `pi --model` accepts).
+        # The owner's Pi shortlist ("provider/id", which `pi --model` accepts).
         pi_models,
         # pi does not gate commands behind approval prompts: no extra flags.
     ),
