@@ -48,6 +48,21 @@ TURN_CLIP = 8_000
 NOTE_CLIP = 1_200
 
 
+# Handoff files live with Buzz's own data, not in the agent's folder: a file
+# dropped into a repo shows up in `git status` and in other agents' `git add`.
+def handoff_dir() -> Path:
+    return Path(os.environ.get("AGENT_SWARM_HANDOFF_DIR")
+                or (Path.home() / ".agent-swarm" / "handoffs"))
+
+
+def handoff_path(handle: str, stamp: str) -> Path:
+    return handoff_dir() / f"{handle}-{stamp}.md"
+
+
+def _stamp(now: float) -> str:
+    return datetime.fromtimestamp(now, timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
 def _now() -> float:
     return datetime.now(timezone.utc).timestamp()
 
@@ -525,7 +540,7 @@ def plan(recipient: dict, to: str, model: str | None = None, *,
             item.chars = sum(len(turn.text) for turn in kept)
             if to in SEED_TARGETS:
                 item.route = "seed"
-                item.session_path = Path(item.cwd) / f".buzz-handoff-{item.handle}.md"
+                item.session_path = handoff_path(item.handle, _stamp(_now()))
                 item.command = seed_command(item, model)
             else:
                 item.command = restore.resume_command({"flavor": to, "agent_id": item.session_id, "model": model})
@@ -567,7 +582,8 @@ def write(item: Switch, max_chars: int = DEFAULT_MAX_CHARS) -> Path:
     with_preamble = [preamble(item), *turns]
     item.chars = sum(len(turn.text) for turn in with_preamble)
     if item.route == "seed":
-        path = Path(item.cwd) / f".buzz-handoff-{item.handle}.md"
+        path = item.session_path or handoff_path(item.handle, _stamp(_now()))
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         body = "\n\n".join(f"**{turn.role}**\n\n{turn.text}" for turn in with_preamble)
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:

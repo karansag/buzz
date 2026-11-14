@@ -276,9 +276,13 @@ def test_codex_target_is_seeded_with_a_handoff_file(fake_homes, monkeypatch, tmp
     monkeypatch.setattr(tmux, "type_line", lambda pane, line: calls.append(line) or (True, None))
     item = handoff.plan(recipient(cwd=str(tmp_path)), "codex")
     assert item.skip is None and item.route == "seed"
+    # The handoff lives in Buzz's own directory, not in the agent's repo.
+    assert item.session_path.parent == fake_homes["home"] / ".agent-swarm" / "handoffs"
     assert handoff.apply(item) is None
-    handed = tmp_path / ".buzz-handoff-otter.md"
-    assert handed.is_file()
+    handed = item.session_path
+    assert handed.is_file() and handed.stat().st_mode & 0o777 == 0o600
+    assert handed.name.startswith("otter-") and handed.name.endswith(".md")
+    assert not (tmp_path / ".buzz-handoff-otter.md").exists()
     body = handed.read_text()
     assert "handoff" in body and "4417" in body
     assert calls and "codex" in calls[0] and str(handed) in calls[0]
