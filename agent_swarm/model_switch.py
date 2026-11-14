@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import nodes
+from . import nodes, tmux
 
 SWITCHABLE = ("claude", "codex", "pi")
 
@@ -46,8 +46,12 @@ _CODEX_EFFORTS = "minimal|low|medium|high|xhigh|extra high|max|ultra"
 # Codex's status line starts with the model and its reasoning level:
 # "GPT-6-Astra medium · ~/agent-swarm · Context 0% used ...".
 _CODEX_STATUS = re.compile(rf"^\s*(\S.*?)\s+({_CODEX_EFFORTS})\s+·")
-# Pi's footer ends with "(provider) id" and, for reasoning models, "• level".
-_PI_FOOTER = re.compile(r"\(([\w.-]+)\)\s+(\S+)(?:\s+•\s+\S+)?\s*$")
+# Pi's footer: context use ("7.1%/131k"), "(auto)" compaction, then
+# "(provider) id" and, for reasoning models, "• level". A narrow pane drops
+# the provider and cuts the end of a long id.
+_PI_FOOTER = re.compile(
+    r"\d+(?:\.\d+)?%/\S+(?:\s+\(auto\))?\s+(?:\(([\w.-]+)\)\s+)?(\S+)(?:\s+•\s+\S+)?\s*$"
+)
 
 
 def _claude_id(family: str, version: str) -> str:
@@ -117,8 +121,24 @@ def screen_model(flavor: str | None, screen: str | None) -> str | None:
     if flavor == "pi":
         for line in reversed(footer):
             if m := _PI_FOOTER.search(line):
-                return f"{m.group(1)}/{m.group(2)}"
+                provider, model = m.groups()
+                return f"{provider}/{model}" if provider else _pi_full_id(model)
         return None
+    return None
+
+
+def _pi_full_id(shown: str) -> str | None:
+    """The shortlisted "provider/id" for an id Pi showed without its provider.
+
+    A cut-off id matches by prefix. None unless exactly one entry fits.
+    """
+    entries = [m for m in tmux.pi_models() if "/" in m]
+    for fits in (lambda id_: id_ == shown, lambda id_: id_.startswith(shown)):
+        found = [m for m in entries if fits(m.split("/", 1)[1])]
+        if len(found) == 1:
+            return found[0]
+        if found:
+            return None
     return None
 
 

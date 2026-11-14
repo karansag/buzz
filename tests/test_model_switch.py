@@ -51,6 +51,26 @@ def test_pi_model_comes_from_its_footer():
     assert ms.screen_model("pi", local) == "local-llama//mnt/storage/ai/models/b.gguf"
 
 
+def test_pi_in_a_narrow_pane_is_resolved_against_the_shortlist(tmp_path, monkeypatch):
+    home = tmp_path / "pi"
+    home.mkdir()
+    (home / "settings.json").write_text(json.dumps({"enabledModels": [
+        "openrouter/thinkingmachines/inkling-2-small:free",
+        "local-llama//mnt/storage/ai/models/bonsai/Ternary-Bonsai-2-27B-PQ2_0.gguf",
+        "local-llama//mnt/storage/ai/models/bonsai/Ternary-Bonsai-2-27B-PQ4.gguf",
+    ]}))
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(home))
+    no_provider = "~/oa (main)\n↑5.5M ↓389k $10.718 36.9%/1.0M (auto)      thinkingmachines/inkling-2-small:free • high\n"
+    assert ms.screen_model("pi", no_provider) == "openrouter/thinkingmachines/inkling-2-small:free"
+    cut = "~/agents$\n↑16k 7.1%/131k (auto)  /mnt/storage/ai/models/bonsai/Ternary-Bonsai-2-27B-PQ2_0.gg\n"
+    assert ms.screen_model("pi", cut) == "local-llama//mnt/storage/ai/models/bonsai/Ternary-Bonsai-2-27B-PQ2_0.gguf"
+    # Cut so short that two entries fit: no guess.
+    ambiguous = "~/agents$\n↑16k 7.1%/131k (auto)  /mnt/storage/ai/models/bonsai/Ternary-Bonsai-2-27B-PQ\n"
+    assert ms.screen_model("pi", ambiguous) is None
+    unknown = "~/agents$\n7.1%/131k (auto)  someone/else\n"
+    assert ms.screen_model("pi", unknown) is None
+
+
 def test_unknown_harness_or_empty_screen_reads_nothing():
     assert ms.screen_model("hermes", "[Opus 5.5]") is None
     assert ms.screen_model("claude", None) is None
