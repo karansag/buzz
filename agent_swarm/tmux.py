@@ -800,6 +800,43 @@ def send_key(pane: str, key: str) -> tuple[bool, str | None]:
     return True, None
 
 
+def respawn_pane(pane: str, cwd: str | None = None) -> tuple[bool, str | None]:
+    """Replace what runs in a pane with a fresh login shell, in `cwd`.
+
+    The pane keeps its id and its place in the window, so the agent's
+    registration, its tile and anything holding the pane id stay valid. This
+    ends whatever was running there, like `buzz restart` does.
+    """
+    command = ["tmux", "respawn-pane", "-k", "-t", pane]
+    if cwd:
+        command += ["-c", cwd]
+    try:
+        subprocess.run(command, capture_output=True, text=True, check=True, timeout=5)
+    except subprocess.CalledProcessError as e:
+        return False, _error_text(e)
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        raise Uncertain(str(e)) from e
+    return True, None
+
+
+def type_line(pane: str, line: str) -> tuple[bool, str | None]:
+    """Type one literal line at a pane's prompt and press Enter.
+
+    Used to start a harness by command (a resume), where delivering a message
+    would be wrong: no prefix, no paste buffer, just the line.
+    """
+    try:
+        subprocess.run(["tmux", "send-keys", "-t", pane, "-l", line],
+                       capture_output=True, text=True, check=True, timeout=5)
+        subprocess.run(["tmux", "send-keys", "-t", pane, "C-m"],
+                       capture_output=True, text=True, check=True, timeout=5)
+    except subprocess.CalledProcessError as e:
+        return False, _error_text(e)
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        raise Uncertain(str(e)) from e
+    return True, None
+
+
 def capture_pane(pane: str, colors: bool = False) -> tuple[str | None, str | None]:
     """Return the pane's visible screen as text. Returns (text, error_or_None).
 

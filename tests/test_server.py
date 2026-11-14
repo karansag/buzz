@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_swarm import activity, db, nodes, server, tmux
+from agent_swarm import activity, db, handoff, nodes, server, tmux
 
 
 WEB_ROOT = Path(__file__).parents[1] / "web"
@@ -875,6 +875,53 @@ def test_stop_is_idempotent_for_stopped_agent(client):
 
 def test_stop_rejects_unknown_agent(client):
     assert client.post("/agents/ghost/stop").status_code == 404
+
+
+def test_switch_rejects_unknown_agent_and_non_owner(client):
+    assert client.post("/agents/ghost/switch", json={"to": "pi"}).status_code == 404
+    r = client.post("/agents/ghost/switch", json={"to": "pi"}, headers={"X-Forwarded-For": "100.1.2.3"})
+    assert r.status_code == 401
+    # Only the harnesses this module can read are accepted.
+    user = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["user_id"]
+    assert client.post(f"/agents/{user}/switch", json={"to": "hermes"}).status_code == 422
+
+
+def test_switch_says_why_it_cannot_before_touching_the_pane(client):
+    user = client.post("/register", json={"tmux_pane": "0:0.0", "agent_id": "no-session",
+                                          "flavor": "claude"}).json()["user_id"]
+    r = client.post(f"/agents/{user}/switch", json={"to": "pi", "dry_run": True})
+    assert r.status_code == 409
+    detail = r.json()["detail"]
+    # No transcript is on disk for this fake agent: the plan says so and the
+    # pane is left alone.
+    assert "transcript" in detail["error"] or "folder" in detail["error"]
+    assert detail["plan"]["to"] == "pi" and detail["plan"]["handle"] == user
+    assert client._kills == []
+
+
+def test_switch_dry_run_reports_the_plan_and_writes_nothing(client, monkeypatch, tmp_path):
+    folder = tmp_path / "work"
+    folder.mkdir()
+    user = client.post("/register", json={"tmux_pane": "0:0.0", "agent_id": "switch-src",
+                                          "flavor": "claude"}).json()["user_id"]
+    conn = db.connect(tmp_path / "db.sqlite")
+    db.set_cwd(conn, user, str(folder))
+    home = tmp_path / "home"
+    source = home / ".claude" / "projects" / handoff.claude_project_dir(str(folder)) / "switch-src.jsonl"
+    source.parent.mkdir(parents=True)
+    source.write_text('{"type":"user","message":{"role":"user","content":"remember 4417"}}\n')
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "pi"))
+    r = client.post(f"/agents/{user}/switch", json={"to": "pi", "dry_run": True})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["applied"] is False
+    plan = body["plan"]
+    assert (plan["from_flavor"], plan["to"], plan["turns"]) == ("claude", "pi", 1)
+    assert "pi --session" in plan["command"]
+    assert not (tmp_path / "pi").exists()
+    assert client._kills == []
 
 
 def test_stop_reports_tmux_failure(client, monkeypatch):

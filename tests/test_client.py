@@ -457,6 +457,13 @@ def test_harness_session_id_comes_from_the_environment(monkeypatch):
     assert client.harness_session_id() == "claude-session"
 
 
+def test_pi_reports_its_session_so_it_can_be_resumed(monkeypatch):
+    # Pi exports PI_SESSION_ID; without it a Pi agent registered with no session
+    # id and could not be resumed or handed to another harness.
+    monkeypatch.setenv("PI_SESSION_ID", "01a1c7e7-ff1d-779b-a95f-21b72e4789c0")
+    assert client.harness_session() == ("pi", "01a1c7e7-ff1d-779b-a95f-21b72e4789c0")
+
+
 def test_with_both_ids_set_the_nearest_harness_wins(monkeypatch):
     # A Codex agent that launched `claude -p`: inside it, Claude is the caller.
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "claude-session")

@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import activity, attachments, bundle, db, digest, model_switch, names, nodes, notifications, panes, protocol, restore, tmux
+from . import activity, attachments, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restore, tmux
 
 log = logging.getLogger("agent_swarm.monitor")
 
@@ -350,6 +350,17 @@ class TaskUpdateReq(ActorFields):
         "feature, how to reproduce if it is a fix, and where to look. Required "
         "to close a task, and kept on the task so it can be read later.",
     )
+
+
+class SwitchReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    to: Literal["claude", "codex", "pi"] = Field(description="The harness to move the agent to.")
+    model: str | None = Field(default=None, description="Optional model for the new harness.")
+    max_chars: int = Field(default=handoff.DEFAULT_MAX_CHARS, ge=2000, le=2_000_000,
+                           description="How much conversation to carry over, in characters.")
+    force: bool = Field(default=False, description="Switch even when the agent is already on that harness.")
+    dry_run: bool = Field(default=False, description="Report the plan without writing or launching.")
 
 
 class SpawnReq(BaseModel):
@@ -2094,6 +2105,56 @@ def create_app(
             "ok": True, "user_id": user_id, "tmux_pane": pane,
             "already_stopped": False,
         }
+
+    @app.post("/agents/{user_id}/switch")
+    def agents_switch(user_id: str, req: SwitchReq, _: None = Depends(_require_owner)):
+        """Move an agent to another harness in its own pane, keeping its conversation.
+
+        Reads the source harness's transcript, writes a new resumable session in
+        the target's format, respawns the pane and launches the target harness
+        on that session. The source transcript is only read. Experimental: the
+        hub does this for agents on its own machine, where the pane and the
+        transcripts are.
+        """
+        recipient = db.get_recipient(conn, user_id)
+        if recipient is None:
+            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        row = dict(recipient)
+        node = _node_of(row)
+        if node is None:
+            raise HTTPException(status_code=409, detail={"error": f"node {row['node']} is not connected"})
+        if node is not fleet.local:
+            raise HTTPException(status_code=409, detail={
+                "error": f"{user_id} runs on {node.name}; switching needs the pane and the harness "
+                         f"transcripts, which are on that machine. Run it there."})
+        snap = _try_snapshot(node)
+        if snap is None:
+            raise HTTPException(status_code=409, detail={"error": f"{node.name} cannot be observed right now"})
+        if _stale(row, snap.server) or row["tmux_pane"] not in snap.live:
+            raise HTTPException(status_code=409, detail={
+                "error": f"{user_id} is not running; `buzz resume {user_id}` starts it again"})
+        cwd = row.get("cwd")
+        if not cwd:
+            place = restore.saved_place(restore.SNAPSHOT_DIR, row.get("agent_id") or "")
+            cwd = place[2]["cwd"] if place else None
+        item = handoff.plan({**row, "cwd": cwd}, req.to, req.model,
+                            max_chars=req.max_chars, force=req.force)
+        if item.skip:
+            raise HTTPException(status_code=409, detail={"error": item.skip, "plan": item.describe()})
+        if req.dry_run:
+            return {"ok": True, "applied": False, "plan": item.describe()}
+        error = handoff.apply(item)
+        if error:
+            raise HTTPException(status_code=502, detail={"error": error, "plan": item.describe()})
+        spec = tmux.HARNESS_SPAWN.get(req.to)
+        model = req.model if (spec and req.model in spec.models) else None
+        db.register(
+            conn, user_id, row["tmux_pane"], item.session_id, model, req.to,
+            submit_key=tmux.submit_key_for_flavor(req.to),
+            tmux_server=row.get("tmux_server"), pane_label=row.get("pane_label"), node=row.get("node"),
+        )
+        _refresh_watch(node.name)
+        return {"ok": True, "applied": True, "plan": item.describe()}
 
     @app.post("/agents/{user_id}/terminal")
     def agents_terminal(user_id: str, req: TerminalReq, _: None = Depends(_require_owner)):

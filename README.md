@@ -427,6 +427,36 @@ A task can carry up to ten files (10 MB each), added on the dashboard. They
 are included when the task is assigned, and agents on other machines get
 their own copy.
 
+## Switching an agent to another harness
+
+An agent can move to a different harness without losing its conversation, which
+is what you want when you run out of credits on one provider:
+
+```
+buzz switch otter --to claude            # prints the plan
+buzz switch otter --to pi --apply        # does it: same pane, same handle
+buzz switch otter --to codex --model gpt-6.1-sol --apply
+```
+
+The hub reads the agent's own transcript from the harness it is running, turns
+it into plain turns (tool calls and results become short bracketed notes), and
+writes the conversation into the target harness: a new resumable session for
+Claude (`~/.claude/projects/...`) and Pi (`~/.pi/agent/sessions/...`), and for
+Codex, whose rollout files are written by its app server, a markdown handoff
+file in the agent's folder that a fresh session is told to read. The source
+transcript is only ever read, so going back is always possible by switching
+again. `--max-chars` caps how much conversation travels (default 150k
+characters, roughly 37k tokens); the oldest turns are dropped first and the new
+session opens with a note saying so.
+
+The pane is respawned in place and the target harness launched on the new
+session, so the agent keeps its handle, pane and history. It needs the agent's
+pane on the hub's own machine: `POST /agents/{handle}/switch` with
+`{"to": "claude"|"codex"|"pi", "model": ..., "max_chars": ..., "dry_run": true}`,
+owner-only. Experimental: whatever the old harness was running in the pane ends
+with it, and a switch into a folder Claude has not seen before asks its trust
+question once.
+
 ## Teams and the supervisor
 
 A team is a named group of agents. Create one at the bottom of the sidebar's

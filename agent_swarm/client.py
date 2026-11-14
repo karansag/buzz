@@ -41,7 +41,7 @@ import httpx
 
 from pathlib import Path
 
-from . import bundle, config, restart, restore, tmux
+from . import bundle, config, handoff, restart, restore, tmux
 from .tmux import current_pane, local_node
 
 
@@ -67,6 +67,7 @@ SESSION_ENV = (
     ("claude", "CLAUDE_CODE_SESSION_ID"),
     ("codex", "CODEX_THREAD_ID"),
     ("codex", "CODEX_SESSION_ID"),
+    ("pi", "PI_SESSION_ID"),
 )
 
 
@@ -844,6 +845,22 @@ def cmd_spawn(args: argparse.Namespace) -> int:
     return 0 if r.is_success else 1
 
 
+def cmd_switch(args: argparse.Namespace) -> int:
+    """Move an agent to another harness, carrying its conversation over."""
+    payload = {"to": args.to, "model": args.model, "max_chars": args.max_chars,
+               "force": args.force, "dry_run": not args.apply}
+    r = httpx.post(f"{base_url()}/agents/{quote(args.handle, safe='')}/switch",
+                   json=payload, headers=_headers(), timeout=120)
+    body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"detail": r.text}
+    if not r.is_success:
+        detail = body.get("detail")
+        print(json.dumps(detail if isinstance(detail, dict) else {"error": detail or r.text}, indent=2),
+              file=sys.stderr)
+        return 1
+    print(json.dumps(body, indent=2))
+    return 0
+
+
 def cmd_stop(args: argparse.Namespace) -> int:
     r = httpx.post(f"{base_url()}/agents/{quote(args.handle, safe='')}/stop", headers=_headers(), timeout=15)
     print(r.text)
@@ -1191,6 +1208,18 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--cwd", help="start folder, one of that machine's AGENT_SWARM_SPAWN_DIRS "
                     "written the same way, e.g. ~/agents (default: the first of them)")
     sp.set_defaults(func=cmd_spawn)
+
+    swt = sub.add_parser(
+        "switch", help="move an agent to another harness (claude, codex, pi), keeping its conversation"
+    )
+    swt.add_argument("handle")
+    swt.add_argument("--to", required=True, help="the harness to move it to")
+    swt.add_argument("--model", help="model for the new harness, if it takes one of that harness's models")
+    swt.add_argument("--max-chars", type=int, default=handoff.DEFAULT_MAX_CHARS,
+                     help=f"how much transcript to carry over (default {handoff.DEFAULT_MAX_CHARS} characters)")
+    swt.add_argument("--force", action="store_true", help="switch even when it is already on that harness")
+    swt.add_argument("--apply", action="store_true", help="do it; without this, only print the plan")
+    swt.set_defaults(func=cmd_switch)
 
     stp = sub.add_parser("stop", help="kill an agent's tmux pane")
     stp.add_argument("handle")
