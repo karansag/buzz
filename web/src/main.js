@@ -2,7 +2,7 @@ import { agentPreview } from "./agent-preview.js";
 import { replySnippet } from "./replies.js";
 import { ReplyPreview } from "./reply-preview.js";
 import { OwnerNote } from "./owner-note.js";
-import { QuickSwitcher } from "./quick-switch.js";
+import { QuickSwitcher, noteOpened } from "./quick-switch.js";
 import { useAgentHistory } from "./agent-history.js";
 import { useConversationSearch, ConversationSearchBar, highlightSearch } from "./conversation-search.js";
 import { TaskTrash } from "./task-trash.js";
@@ -2149,6 +2149,8 @@ function App() {
   const onChats = route.startsWith(CHATS_ROUTE);
   const onTab = route.startsWith(TAB_ROUTE) ? decodeURIComponent(route.slice(TAB_ROUTE.length)) : null;
   const onOverview = !focusUser && !onHistory && !onChats && !onTab;
+  // Remember when each agent was opened; the agent switcher lists recent ones first.
+  useEffect(() => { if (focusUser) noteOpened(focusUser); }, [focusUser]);
   // A roster link may be several screens down on a phone. Bring the new
   // view into sight; polling and task-history filters must not move it.
   const previousView = useRef({ focusUser, onHistory });

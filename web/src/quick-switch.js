@@ -1,10 +1,28 @@
 import { agentPreview } from "./agent-preview.js";
 import { html } from "htm/preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Bee } from "./shared.js";
 import { Crown, queenSuffix } from "./queen.js";
 
-export function switchOptions(state, mode, query) {
+// When the owner last opened each agent, newest first in the agent switcher.
+// Kept per browser; the switcher works the same without storage.
+const OPENED_KEY = "agent-swarm:agent-opened";
+const OPENED_LIMIT = 200;
+
+export function readOpened() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(OPENED_KEY) || "{}");
+    return saved && typeof saved === "object" ? saved : {};
+  } catch { return {}; }
+}
+
+export function noteOpened(user) {
+  const opened = { ...readOpened(), [user]: Date.now() };
+  const kept = Object.entries(opened).sort((a, b) => b[1] - a[1]).slice(0, OPENED_LIMIT);
+  try { localStorage.setItem(OPENED_KEY, JSON.stringify(Object.fromEntries(kept))); } catch { /* not kept */ }
+}
+
+export function switchOptions(state, mode, query, opened = {}) {
   if (!state) return [];
   const teams = state.teams || [];
   const agents = state.recipients;
@@ -34,6 +52,7 @@ export function switchOptions(state, mode, query) {
   const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   return options.filter(o => words.every(w => o.search.toLowerCase().includes(w)))
     .sort((a, b) => Number(!a.target) - Number(!b.target)
+      || (mode === "agents" ? (opened[b.name] || 0) - (opened[a.name] || 0) : 0)
       || Number(!a.target?.pane_alive) - Number(!b.target?.pane_alive)
       || a.name.localeCompare(b.name));
 }
@@ -64,7 +83,9 @@ export function QuickSwitcher({ state, navigate }) {
   useLayoutEffect(() => {
     if (mode) { if (!dialog.current.open) dialog.current.showModal(); input.current?.focus(); }
   }, [mode]);
-  const options = switchOptions(state, mode, query);
+  // Read once per opening so the order does not shift while the dialog is up.
+  const opened = useMemo(() => mode ? readOpened() : {}, [mode]);
+  const options = switchOptions(state, mode, query, opened);
   const enabled = options.filter(o => o.target);
   const current = enabled.find(o => o.id === selected) || enabled[0];
   useLayoutEffect(() => {

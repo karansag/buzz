@@ -3108,3 +3108,53 @@ test('an agent stopped by an error shows a red ! on its bee, with the error on h
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
+
+test('agent switcher lists recently opened agents first and works without storage', async () => {
+  const {page,state,errors}=await setup(1440,900,false);
+  const names=async()=>page.locator('dialog[open] [role=option] b').allInnerTexts();
+  // The visit is saved after the agent view renders, not when the hash changes.
+  const seen=u=>u in JSON.parse(localStorage.getItem('agent-swarm:agent-opened')||'{}');
+  const openSwitcher=async()=>{
+    await page.locator('.quick-switch-launchers > button:not([disabled])').last().waitFor();
+    await page.keyboard.press('Control+k');
+    await page.getByRole('dialog',{name:'Switch agent'}).waitFor();
+  };
+  try {
+    await page.goto(base+'#/');
+    await openSwitcher();
+    const before=await names();
+    await page.keyboard.press('Escape');
+    const [first,second,third]=[before.at(-1),before.at(-2),before[0]];
+    for (const user of [first,second]) {
+      await page.goto(base+'#/agent/'+encodeURIComponent(user));
+      await page.waitForFunction(seen,user);
+    }
+    await openSwitcher();
+    let order=await names();
+    assert.deepEqual(order.slice(0,2),[second,first]);
+    // Agents never opened keep the old order after the opened ones.
+    assert.deepEqual(order.slice(2),before.filter(u=>u!==first&&u!==second));
+    // Opening from the switcher counts too, and the order survives a reload.
+    await page.locator('dialog[open]').getByRole('combobox').fill(third);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(seen,third);
+    await page.reload();
+    await openSwitcher();
+    order=await names();
+    assert.deepEqual(order.slice(0,3),[third,second,first]);
+    await page.keyboard.press('Escape');
+    // Broken or blocked storage falls back to the plain order.
+    await page.evaluate(()=>localStorage.setItem('agent-swarm:agent-opened','not json'));
+    await page.reload();
+    await openSwitcher();
+    assert.deepEqual(await names(),before);
+    await page.keyboard.press('Escape');
+    await page.addInitScript(()=>{
+      Object.defineProperty(window,'localStorage',{get(){throw new Error('blocked');}});
+    });
+    await page.reload();
+    await openSwitcher();
+    assert.deepEqual(await names(),before);
+    assert.deepEqual(errors,[]);
+  } finally {await page.close();}
+});
