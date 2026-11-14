@@ -17,6 +17,7 @@
     buzz spawn [--flavor claude|codex|pi|hermes] [--model M] [--node N]
     buzz stop HANDLE   # kill that agent's tmux pane
     buzz model HANDLE... --to MODEL | --team --to MODEL   # switch agents' models (owner or their queen)
+    buzz switch HANDLE --to claude|codex|pi [--model M] [--apply]   # move it to another harness, keeping the conversation
     buzz snapshot      # save this machine's tmux layout and the agent in each pane
     buzz restore [--from FILE] [--apply] [--stagger SECONDS]   # after a reboot
     buzz restart HANDLE... | --all [--flavor F] [--force] [--apply]   # e.g. after a harness upgrade
