@@ -3060,14 +3060,19 @@ test('the model label switches a Codex agent and shows why a switch failed', asy
     const label = page.locator('button.model-label').first();
     assert.match(await label.getAttribute('title'), /^Switch this agent's model/);
     await label.click();
-    const input = page.getByRole('combobox', { name: 'Model label for stoat' });
-    await input.fill('gpt-6-luna');
+    // A real dropdown lists every known model, not just ones matching the box.
+    const pick = page.getByRole('combobox', { name: 'Model for stoat' });
+    assert.equal(await pick.evaluate(el => el.tagName), 'SELECT');
+    assert.deepEqual(await pick.locator('option').allTextContents(), ['gpt-6.1-sol', 'gpt-6-luna', 'other…']);
+    await pick.selectOption('gpt-6-luna');
     await page.getByRole('button', { name: 'switch', exact: true }).click();
     await page.locator('button.model-label', { hasText: 'gpt-6-luna' }).first().waitFor();
     assert.deepEqual(sent, [{ model: 'gpt-6-luna' }]);
 
     fail = true;
     await page.locator('button.model-label').first().click();
+    await pick.selectOption({ label: 'other…' });
+    const input = page.getByRole('textbox', { name: 'Model for stoat' });
     await input.fill('gpt-6.1-sol');
     await input.press('Enter');
     const message = await answer(page);

@@ -212,18 +212,20 @@ function shortModel(model, flavor) {
 // also keeps the label in step when /model is typed in the pane. Other
 // harnesses keep a display-only label.
 const SWITCHABLE = ["claude", "codex", "pi"];
+const OTHER_MODEL = "\u0000other";
 
 function ModelLabel({ r, refresh }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [known, setKnown] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [other, setOther] = useState(false);
   const inputRef = useRef(null);
-  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing, other]);
   const flavor = (r.flavor || "generic").toLowerCase();
-  const listId = `models-${r.user_id}`;
   const start = () => {
     setValue(r.model || "");
+    setOther(false);
     setEditing(true);
     fetch("/api/spawn-options")
       .then(res => res.json())
@@ -261,15 +263,27 @@ function ModelLabel({ r, refresh }) {
       ${r.model ? html`<b>${r.model}</b>` : html`<span class="unset">set model</span>`} <span class="pen">✎</span>
     </button>`;
   }
+  // A real <select> of the known models: a datalist arrow did nothing on
+  // desktop once the box held a value, and mobile hid it. "other…" opens a
+  // text box for a model the list does not offer.
+  const options = [...new Set([...(r.model ? [r.model] : []), ...known])];
+  const typing = other || options.length === 0;
+  const keys = e => {
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+    if (e.key === "Escape") setEditing(false);
+  };
   return html`<span class="model-edit">
-    <input type="text" value=${value} list=${listId} placeholder="e.g. claude-opus-4-7"
-      aria-label=${`Model label for ${r.user_id}`} disabled=${busy} ref=${inputRef}
-      onInput=${e => setValue(e.target.value)}
-      onKeyDown=${e => {
-        if (e.key === "Enter") { e.preventDefault(); save(); }
-        if (e.key === "Escape") setEditing(false);
-      }} />
-    <datalist id=${listId}>${known.map(m => html`<option key=${m} value=${m} />`)}</datalist>
+    ${typing
+      ? html`<input type="text" value=${value} placeholder="e.g. claude-opus-4-7"
+          aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
+          onInput=${e => setValue(e.target.value)} onKeyDown=${keys} />`
+      : html`<select value=${value} aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
+          onChange=${e => e.target.value === OTHER_MODEL ? (setOther(true), setValue("")) : setValue(e.target.value)}
+          onKeyDown=${keys}>
+          ${!value && html`<option value="" disabled>pick a model</option>`}
+          ${options.map(m => html`<option key=${m} value=${m}>${m}</option>`)}
+          <option value=${OTHER_MODEL}>other…</option>
+        </select>`}
     <button type="button" class="mini" disabled=${busy} onClick=${save}>${busy
       ? (switchable ? "switching…" : "saving…")
       : (switchable ? "switch" : "save")}</button>
