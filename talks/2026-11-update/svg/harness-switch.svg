@@ -7,8 +7,8 @@
 <line x1="232" y1="330" x2="568" y2="330" stroke="#3a3127" stroke-width="3" marker-start="url(#ar)" marker-end="url(#ar)"/>
 <line x1="592" y1="268" x2="468" y2="154" stroke="#3a3127" stroke-width="3" marker-start="url(#ar)" marker-end="url(#ar)"/>
 <g transform="translate(337.6 41.6) scale(2.4)">
-<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 10)"/>
-<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 32)"/>
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
 <ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
 <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
 <path d="M19 12v18M29 11v20" stroke="#d8905f" stroke-width="4"/>
@@ -17,8 +17,8 @@
 <rect x="348" y="2" width="104" height="34" rx="17" fill="#d8905f" stroke="#16120c" stroke-width="2"/>
 <text x="400" y="26" text-anchor="middle" font-size="20" font-weight="700" fill="#16120c">Claude</text>
 <g transform="translate(77.6 279.6) scale(2.4)">
-<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 10)"/>
-<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 32)"/>
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
 <ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
 <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
 <path d="M19 12v18M29 11v20" stroke="#56b4e9" stroke-width="4"/>
@@ -27,8 +27,8 @@
 <rect x="88" y="384" width="104" height="34" rx="17" fill="#56b4e9" stroke="#16120c" stroke-width="2"/>
 <text x="140" y="408" text-anchor="middle" font-size="20" font-weight="700" fill="#16120c">Codex</text>
 <g transform="translate(597.6 279.6) scale(2.4)">
-<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 10)"/>
-<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 32)"/>
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
 <ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
 <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
 <path d="M19 12v18M29 11v20" stroke="#3cb44b" stroke-width="4"/>

@@ -7,8 +7,8 @@
 <rect x="30" y="70" width="320" height="320" rx="18" fill="none" stroke="#6b5a45" stroke-width="2.5" stroke-dasharray="10 8"/>
 <text x="190" y="104" text-anchor="middle" font-size="22" font-weight="600" fill="#5a4a38">karans-linux</text>
 <g transform="translate(68.4 126.4) scale(1.6)">
-<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 10)"/>
-<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 32)"/>
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
 <ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
 <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
 <path d="M19 12v18M29 11v20" stroke="#d8905f" stroke-width="4"/>
@@ -17,8 +17,8 @@
 <text x="110" y="212" text-anchor="middle" font-size="17" font-weight="600" fill="#3a3127">Claude</text>
 <line x1="110" y1="222" x2="150" y2="290" stroke="#3a3127" stroke-width="2.5"/>
 <g transform="translate(228.4 126.4) scale(1.6)">
-<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 10)"/>
-<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 32)"/>
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
 <ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
 <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
 <path d="M19 12v18M29 11v20" stroke="#56b4e9" stroke-width="4"/>
@@ -33,8 +33,8 @@
 <rect x="450" y="70" width="320" height="320" rx="18" fill="none" stroke="#6b5a45" stroke-width="2.5" stroke-dasharray="10 8"/>
 <text x="610" y="104" text-anchor="middle" font-size="22" font-weight="600" fill="#5a4a38">your Mac</text>
 <g transform="translate(488.4 126.4) scale(1.6)">
-<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 10)"/>
-<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 32)"/>
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
 <ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
 <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
 <path d="M19 12v18M29 11v20" stroke="#d8905f" stroke-width="4"/>
@@ -43,8 +43,8 @@
 <text x="530" y="212" text-anchor="middle" font-size="17" font-weight="600" fill="#3a3127">Claude</text>
 <line x1="530" y1="222" x2="570" y2="290" stroke="#3a3127" stroke-width="2.5"/>
 <g transform="translate(648.4 126.4) scale(1.6)">
-<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 10)"/>
-<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 32)"/>
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
 <ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
 <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
 <path d="M19 12v18M29 11v20" stroke="#3cb44b" stroke-width="4"/>
