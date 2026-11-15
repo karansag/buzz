@@ -604,6 +604,53 @@ test('Alt+H goes back to the overview from any page, keeping the draft', async (
   } finally { await page.close(); }
 });
 
+const focusedTitle = page => page.evaluate(() => document.activeElement?.classList.contains('task-title')
+  && document.activeElement.getBoundingClientRect().height > 0);
+
+for (const [width, touch] of [[390, true], [1500, false]]) {
+  test(`Alt+T focuses the create-task box from the overview, an agent page, chats and a tab at ${width}px`, async () => {
+    const { page, state, errors } = await setup(width, 900, touch);
+    state.tabs = ['usage'];
+    await page.route('**/tabs/usage/', r => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>AI Usage</title><input id=q>' }));
+    try {
+      await page.goto(base + '#/');
+      await page.waitForSelector('.task-composer');
+      await page.keyboard.press('Alt+KeyT');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('task-title'));
+      assert.ok(await focusedTitle(page));
+      // From the reply box on an agent page: that agent's folded box opens.
+      await page.goto(base + '#/agent/stoat');
+      const reply = page.locator('.thread .composer textarea').first();
+      await reply.fill('half-written reply');
+      await reply.focus();
+      await page.keyboard.press('Alt+KeyT');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('task-title'));
+      assert.ok(await focusedTitle(page));
+      assert.equal(await page.locator('details.task-compose-fold').evaluate(d => d.open), true);
+      assert.equal(await reply.inputValue(), 'half-written reply');
+      // Pages without a box go to the overview first.
+      await page.goto(base + '#/chats');
+      await page.waitForSelector('nav.views a.on');
+      await page.keyboard.press('Alt+KeyT');
+      await page.waitForFunction(() => location.hash === '#/');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('task-title'));
+      assert.ok(await focusedTitle(page));
+      // From inside a tab's page.
+      await page.goto(base + '#/tab/usage');
+      await page.frameLocator('iframe.tab-frame').locator('#q').click();
+      await page.keyboard.press('Alt+KeyT');
+      await page.waitForFunction(() => location.hash === '#/');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('task-title'));
+      // An open agent switcher keeps its keys.
+      await page.keyboard.press('Control+KeyK');
+      await page.waitForSelector('.quick-switch[open]');
+      await page.keyboard.press('Alt+KeyT');
+      assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('task-title')), false);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
 test('a tab from AGENT_SWARM_TABS shows its page and passes shortcuts up', async () => {
   const { page, state, errors } = await setup(1500, 900, false);
   state.tabs = ['usage'];

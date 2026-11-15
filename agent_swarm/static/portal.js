@@ -12743,6 +12743,21 @@ function TaskCard({ t, agentIds, teams, blockers, refresh }) {
   </div>`;
 }
 var DONE_ON_BOARD = 10;
+var taskFocusPending = false;
+function focusTaskBox() {
+	const input = document.querySelector(".task-title");
+	if (!input) return false;
+	const fold = input.closest("details.task-compose-fold");
+	if (fold) fold.open = true;
+	input.focus({ preventScroll: true });
+	input.scrollIntoView({ block: "center" });
+	return true;
+}
+function requestTaskFocus() {
+	if (focusTaskBox()) return;
+	taskFocusPending = true;
+	location.hash = "#/";
+}
 function TaskComposer({ state, refresh, user = "", folded = false }) {
 	const draftKey = `agent-swarm:task-draft:${user || "board"}`;
 	const [draft] = d(() => {
@@ -12776,6 +12791,9 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
 		assignee,
 		files
 	]);
+	h(() => {
+		if (taskFocusPending && focusTaskBox()) taskFocusPending = false;
+	}, []);
 	const agents = state.recipients.filter((r) => r.pane_alive || r.user_id === user || r.user_id === assignee);
 	const teams = state.teams || [];
 	const targetExists = !assignee || (assignee.startsWith("t:") ? teams.some((t) => `t:${t.id}` === assignee) : agents.some((r) => r.user_id === assignee));
@@ -14463,6 +14481,10 @@ function App() {
 			if (e.code === "KeyH" && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.isComposing && !document.querySelector(".quick-switch[open]") && location.hash !== "#/" && location.hash !== "") {
 				e.preventDefault();
 				location.hash = "#/";
+			}
+			if (e.code === "KeyT" && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.isComposing && !document.querySelector(".quick-switch[open]")) {
+				e.preventDefault();
+				requestTaskFocus();
 			}
 			const modifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 			const by = e.code === "BracketRight" ? 1 : e.code === "BracketLeft" ? -1 : 0;

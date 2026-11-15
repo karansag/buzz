@@ -555,6 +555,25 @@ function TaskCard({ t, agentIds, teams, blockers, refresh }) {
 
 const DONE_ON_BOARD = 10;
 
+// Alt+T: focus the page's create-task box. A page without one (chats,
+// history, a tab) goes to the overview, whose board mounts the box and
+// takes the pending request on its first render.
+let taskFocusPending = false;
+function focusTaskBox() {
+  const input = document.querySelector(".task-title");
+  if (!input) return false;
+  const fold = input.closest("details.task-compose-fold");
+  if (fold) fold.open = true;
+  input.focus({ preventScroll: true });
+  input.scrollIntoView({ block: "center" });
+  return true;
+}
+function requestTaskFocus() {
+  if (focusTaskBox()) return;
+  taskFocusPending = true;
+  location.hash = "#/";
+}
+
 // `folded` shows a one-line "+ create a task" that opens the form; it starts
 // open when an unsent draft is waiting.
 function TaskComposer({ state, refresh, user = "", folded = false }) {
@@ -575,6 +594,9 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
       else localStorage.removeItem(draftKey);
     } catch { /* draft storage is best effort */ }
   }, [draftKey, title, description, assignee, files]);
+  useEffect(() => {
+    if (taskFocusPending && focusTaskBox()) taskFocusPending = false;
+  }, []);
   const agents = state.recipients.filter(r => r.pane_alive || r.user_id === user || r.user_id === assignee);
   const teams = state.teams || [];
   const targetExists = !assignee || (assignee.startsWith("t:")
@@ -2235,6 +2257,14 @@ function App() {
           && location.hash !== "#/" && location.hash !== "") {
         e.preventDefault();
         location.hash = "#/";
+      }
+      // Alt+T jumps to the create-task box, even while typing. Matched by
+      // physical key (Option+T types a character on a Mac); preventDefault
+      // keeps Firefox from opening its Tools menu.
+      if (e.code === "KeyT" && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
+          && !e.isComposing && !document.querySelector(".quick-switch[open]")) {
+        e.preventDefault();
+        requestTaskFocus();
       }
       // Cmd+Shift+[ / ] (Ctrl+Shift elsewhere) step through the header's
       // views. Browsers keep these keys for their own tabs; the Mac app and

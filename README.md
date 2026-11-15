@@ -284,7 +284,9 @@ On desktop, **Cmd+B** on Mac or **Ctrl+B** elsewhere toggles the agent sidebar. 
 
 Teammates are listed at the top of the page; Alt+[ and Alt+] move between
 them. **Alt+H** (Option+H on Mac) goes back to the overview from any page,
-including from the reply box; unsent drafts are kept. **Cmd+Shift+[** and **Cmd+Shift+]**
+including from the reply box; unsent drafts are kept. **Alt+T** (Option+T on Mac) jumps to
+the create-task box and focuses it: the agent's own box on an agent page, the board's box
+elsewhere (it goes to the overview first). **Cmd+Shift+[** and **Cmd+Shift+]**
 (Ctrl+Shift elsewhere) step through overview, chats, task history, and then any
 configured extra tabs. Browsers keep these keys for their own tabs, so they work in
 the Mac app and in an installed app window (Chrome's install, Safari's Add

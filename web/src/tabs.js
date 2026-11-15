@@ -1,7 +1,7 @@
 import { html } from "htm/preact";
 
 // Keys pressed inside the page would otherwise never reach the dashboard,
-// so shortcuts with a modifier (Alt+H, Cmd/Ctrl+K, Cmd/Ctrl+B) are passed up.
+// so shortcuts with a modifier (Alt+H, Alt+T, Cmd/Ctrl+K, Cmd/Ctrl+B) are passed up.
 function forwardShortcuts(frame) {
   let win;
   try { win = frame.contentWindow; win.document; } catch { return; } // another origin
