@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" font-family="Inter, -apple-system, Helvetica, Arial, sans-serif">
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#3a3127"/></marker>
+<marker id="ab" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2f6fb0"/></marker>
+</defs>
+
+<rect x="20" y="14" width="760" height="232" rx="20" fill="none" stroke="#6b5a45" stroke-width="2.5" stroke-dasharray="10 8"/>
+<text x="44" y="46" text-anchor="start" font-size="22" font-weight="700" fill="#5a4a38">shared hub</text>
+<text x="756" y="44" text-anchor="end" font-size="14" font-weight="400" fill="#6b5a45" font-family="Menlo, SF Mono, monospace" xml:space="preserve">company VM · GCP / CoreWeave</text>
+<line x1="400" y1="104" x2="170" y2="140" stroke="#3a3127" stroke-width="2.5" stroke-opacity=".55"/>
+<line x1="400" y1="104" x2="400" y2="140" stroke="#3a3127" stroke-width="2.5" stroke-opacity=".55"/>
+<line x1="400" y1="104" x2="630" y2="140" stroke="#3a3127" stroke-width="2.5" stroke-opacity=".55"/>
+<polygon points="434.6,92.0 400.0,112.0 365.4,92.0 365.4,52.0 400.0,32.0 434.6,52.0" fill="#f2a93b" stroke="#16120c" stroke-width="4"/>
+<text x="400" y="79" text-anchor="middle" font-size="20" font-weight="700" fill="#16120c">hub</text>
+<line x1="222" y1="168" x2="344" y2="168" stroke="#2f6fb0" stroke-width="3" stroke-dasharray="9 7" marker-start="url(#ab)" marker-end="url(#ab)"/>
+<line x1="456" y1="168" x2="578" y2="168" stroke="#2f6fb0" stroke-width="3" stroke-dasharray="9 7" marker-start="url(#ab)" marker-end="url(#ab)"/>
+<g transform="translate(128.4 134.4) scale(1.6)">
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
+<ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
+<path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
+<path d="M19 12v18M29 11v20" stroke="#d8905f" stroke-width="4"/>
+<circle cx="44" cy="21" r="6" fill="#16120c"/><circle cx="46" cy="19" r="1.3" fill="#f0e6d2"/>
+<circle cx="46" cy="7" r="9" fill="#3a3127" stroke="#16120c" stroke-width="1.5"/><path d="M43 7v-2.5a3 3 0 0 1 6 0V7" fill="none" stroke="#f2a93b" stroke-width="1.6"/><rect x="41.5" y="6.5" width="9" height="6.5" rx="1.2" fill="#f2a93b"/>
+</g>
+<text x="170" y="222" text-anchor="middle" font-size="17" font-weight="700" fill="#16120c">karan's delegate</text>
+<line x1="170" y1="232" x2="170" y2="302" stroke="#3a3127" stroke-width="3" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<rect x="75" y="298" width="190" height="112" rx="12" fill="#fbf8f2" stroke="#3a3127" stroke-width="3"/>
+<circle cx="170" cy="340" r="34" fill="none" stroke="#2f6fb0" stroke-width="2.5" stroke-dasharray="6 5"/>
+<g transform="translate(142.7 317.9) scale(1.05)">
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
+<ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
+<path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
+<path d="M19 12v18M29 11v20" stroke="#d8905f" stroke-width="4"/>
+<circle cx="44" cy="21" r="6" fill="#16120c"/><circle cx="46" cy="19" r="1.3" fill="#f0e6d2"/>
+</g>
+<g transform="translate(213.8 337.3) scale(0.7)">
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
+<ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
+<path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
+<path d="M19 12v18M29 11v20" stroke="#56b4e9" stroke-width="4"/>
+<circle cx="44" cy="21" r="6" fill="#16120c"/><circle cx="46" cy="19" r="1.3" fill="#f0e6d2"/>
+</g>
+<text x="170" y="394" text-anchor="middle" font-size="17" font-weight="600" fill="#3a3127">karan's laptop</text>
+<g transform="translate(358.4 134.4) scale(1.6)">
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
+<ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
+<path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
+<path d="M19 12v18M29 11v20" stroke="#56b4e9" stroke-width="4"/>
+<circle cx="44" cy="21" r="6" fill="#16120c"/><circle cx="46" cy="19" r="1.3" fill="#f0e6d2"/>
+<circle cx="46" cy="7" r="9" fill="#3a3127" stroke="#16120c" stroke-width="1.5"/><path d="M43 7v-2.5a3 3 0 0 1 6 0V7" fill="none" stroke="#f2a93b" stroke-width="1.6"/><rect x="41.5" y="6.5" width="9" height="6.5" rx="1.2" fill="#f2a93b"/>
+</g>
+<text x="400" y="222" text-anchor="middle" font-size="17" font-weight="700" fill="#16120c">alice's delegate</text>
+<line x1="400" y1="232" x2="400" y2="302" stroke="#3a3127" stroke-width="3" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<rect x="305" y="298" width="190" height="112" rx="12" fill="#fbf8f2" stroke="#3a3127" stroke-width="3"/>
+<circle cx="400" cy="340" r="34" fill="none" stroke="#2f6fb0" stroke-width="2.5" stroke-dasharray="6 5"/>
+<g transform="translate(372.7 317.9) scale(1.05)">
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
+<ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
+<path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
+<path d="M19 12v18M29 11v20" stroke="#56b4e9" stroke-width="4"/>
+<circle cx="44" cy="21" r="6" fill="#16120c"/><circle cx="46" cy="19" r="1.3" fill="#f0e6d2"/>
+</g>
+<g transform="translate(443.8 337.3) scale(0.7)">
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
+<ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
+<path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
+<path d="M19 12v18M29 11v20" stroke="#3cb44b" stroke-width="4"/>
+<circle cx="44" cy="21" r="6" fill="#16120c"/><circle cx="46" cy="19" r="1.3" fill="#f0e6d2"/>
+</g>
+<text x="400" y="394" text-anchor="middle" font-size="17" font-weight="600" fill="#3a3127">alice's laptop</text>
+<g transform="translate(588.4 134.4) scale(1.6)">
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
+<ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
+<path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
+<path d="M19 12v18M29 11v20" stroke="#3cb44b" stroke-width="4"/>
+<circle cx="44" cy="21" r="6" fill="#16120c"/><circle cx="46" cy="19" r="1.3" fill="#f0e6d2"/>
+<circle cx="46" cy="7" r="9" fill="#3a3127" stroke="#16120c" stroke-width="1.5"/><path d="M43 7v-2.5a3 3 0 0 1 6 0V7" fill="none" stroke="#f2a93b" stroke-width="1.6"/><rect x="41.5" y="6.5" width="9" height="6.5" rx="1.2" fill="#f2a93b"/>
+</g>
+<text x="630" y="222" text-anchor="middle" font-size="17" font-weight="700" fill="#16120c">bob's delegate</text>
+<line x1="630" y1="232" x2="630" y2="302" stroke="#3a3127" stroke-width="3" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<rect x="535" y="298" width="190" height="112" rx="12" fill="#fbf8f2" stroke="#3a3127" stroke-width="3"/>
+<circle cx="630" cy="340" r="34" fill="none" stroke="#2f6fb0" stroke-width="2.5" stroke-dasharray="6 5"/>
+<g transform="translate(602.7 317.9) scale(1.05)">
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
+<ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
+<path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
+<path d="M19 12v18M29 11v20" stroke="#d8905f" stroke-width="4"/>
+<circle cx="44" cy="21" r="6" fill="#16120c"/><circle cx="46" cy="19" r="1.3" fill="#f0e6d2"/>
+</g>
+<g transform="translate(673.8 337.3) scale(0.7)">
+<ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(25 23 10)"/>
+<ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" stroke="#3a3127" stroke-width=".8" transform="rotate(-25 23 32)"/>
+<ellipse cx="26" cy="21" rx="19" ry="10" fill="#edba83" stroke="#16120c" stroke-width="1"/>
+<path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7"/>
+<path d="M19 12v18M29 11v20" stroke="#3cb44b" stroke-width="4"/>
+<circle cx="44" cy="21" r="6" fill="#16120c"/><circle cx="46" cy="19" r="1.3" fill="#f0e6d2"/>
+</g>
+<text x="630" y="394" text-anchor="middle" font-size="17" font-weight="600" fill="#3a3127">bob's laptop</text>
+<text x="184" y="262" text-anchor="start" font-size="14" font-weight="600" fill="#6b5a45" font-family="Menlo, SF Mono, monospace" xml:space="preserve">MCP channel</text>
+<text x="184" y="282" text-anchor="start" font-size="14" font-weight="400" fill="#6b5a45" font-family="Menlo, SF Mono, monospace" xml:space="preserve">connects out</text>
+<text x="400" y="440" text-anchor="middle" font-size="15" font-weight="500" fill="#3a3127">delegates talk to each other on the server · only your own delegate reaches your machine</text>
+</svg>
