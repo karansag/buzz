@@ -83,8 +83,29 @@ def test_picker_rows_skip_marks_and_find_the_cursor():
               "   ❯ 2.  Sonnet 5.5 ✔           Most efficient\n"
               "     ▸   More models\n")
     rows = ms.picker_rows(screen, "Select model")
-    assert [(r.number, r.label, r.cursor) for r in rows] == [(1, "Default", False), (2, "Sonnet 5.5", True)]
+    assert [(r.number, r.label, r.cursor, r.more) for r in rows] == [
+        (1, "Default", False, False), (2, "Sonnet 5.5", True, False), (3, "More models", False, True)]
     assert ms.picker_rows(screen, "Select Model and Effort") is None
+
+
+def test_picker_rows_read_a_scrolled_claude_picker():
+    # Claude Code 2.1.325 in a short pane: a wrapped label, "↑" for rows
+    # hidden above, and "… +N models" for rows folded below.
+    top = ("   Select model\n   Switch between Claude models.\n\n"
+           "     1.  Default (recommended)  Sonnet 5.5 · Efficient for routine\n"
+           "                                tasks\n"
+           "   ❯ 2.  Opus 5.5               For complex work and everyday tasks\n"
+           "      … +4 models\n\n   ◐ Medium effort (default) ←/→ to adjust\n")
+    rows = ms.picker_rows(top, "Select model")
+    assert [(r.number, r.label, r.cursor) for r in rows] == [(1, "Default", False), (2, "Opus 5.5", True)]
+    assert ms.rows_folded_below(top, "Select model")
+    bottom = ("   Select model\n\n"
+              "   ↑ 5.  Haiku 5.5              Fastest for quick answers\n"
+              "   ❯ ▸   More models\n\n\n   ◐ Medium effort (default) ←/→ to adjust\n")
+    rows = ms.picker_rows(bottom, "Select model")
+    assert [(r.number, r.label, r.cursor, r.more) for r in rows] == [
+        (5, "Haiku 5.5", False, False), (6, "More models", True, True)]
+    assert not ms.rows_folded_below(bottom, "Select model")
 
 
 @pytest.mark.parametrize("wanted,label,hit", [
@@ -108,8 +129,10 @@ def test_codex_rows_match_slugs_exactly():
 class FakeHarness:
     """A pane that answers /model the way the real harness does."""
 
-    def __init__(self, flavor, model, open_picker=True, effort="medium"):
+    def __init__(self, flavor, model, open_picker=True, effort="medium", window=None):
         self.flavor, self.model, self.open_picker, self.effort = flavor, model, open_picker, effort
+        # Claude in a short pane shows only `window` rows of its picker.
+        self.window, self.top = window, 0
         self.screen_name = "prompt"
         self.cursor = 0
         self.keys, self.typed = [], []
@@ -124,6 +147,8 @@ class FakeHarness:
         if text == "/model" and self.open_picker:
             self.screen_name = "models"
             self.cursor = self.rows().index(self.current_row())
+            if self.window:
+                self.top = max(0, self.cursor - self.window + 1)
         return nodes.Result("ok")
 
     def send_key(self, op_id, pane, tmux_server, key):
@@ -148,12 +173,14 @@ class FakeHarness:
             self.effort = rows[self.cursor].split(" ")[0].lower()
             self.saved_default = key == "Enter"
             self.screen_name = "prompt"
+        if self.window:
+            self.top = min(max(self.top, self.cursor - self.window + 1), self.cursor)
         return nodes.Result("ok")
 
     def rows(self):
         if self.screen_name == "effort":
             return ["Low", "Medium (default)", "High"]
-        return CLAUDE_ROWS if self.flavor == "claude" else CODEX_ROWS
+        return CLAUDE_ROWS + ["▸ More models"] if self.flavor == "claude" else CODEX_ROWS
 
     def current_row(self):
         return next(r for r in self.rows() if r.startswith(self.model))
@@ -164,8 +191,20 @@ class FakeHarness:
         if self.screen_name in ("models", "effort"):
             lines.append("  " + (titles[self.flavor] if self.screen_name == "models" else ms.CODEX_EFFORT_TITLE))
             mark = "❯" if self.flavor == "claude" else "›"
-            for i, row in enumerate(self.rows()):
-                lines.append(f"  {mark if i == self.cursor else ' '} {i + 1}. {row}   description")
+            rows = self.rows()
+            shown = range(len(rows))
+            if self.window and self.screen_name == "models":
+                shown = range(self.top, min(self.top + self.window, len(rows)))
+            for i in shown:
+                lead = mark if i == self.cursor else "↑" if i == self.top and self.top > 0 else " "
+                if rows[i].startswith("▸"):
+                    lines.append(f"  {lead} {rows[i]}")
+                else:
+                    lines.append(f"  {lead} {i + 1}. {rows[i]}   description")
+                if self.window and i == 0:
+                    lines.append("                              that wraps")
+            if (hidden := len(rows) - shown.stop) > 0:
+                lines.append(f"     … +{hidden} model{'s' if hidden > 1 else ''}")
             lines.append("  enter select · esc back")
         elif self.flavor == "claude":
             lines += ["❯ ", f"  /home/x  [{self.model} | wk:95%]"]
@@ -188,6 +227,35 @@ def test_claude_switch_moves_the_cursor_and_applies_for_this_session_only():
     assert fake.typed == [("/model", False)]
     assert fake.keys == ["Up", "Up", "s"]
     assert not fake.saved_default
+
+
+def test_claude_switch_scrolls_down_to_a_folded_row():
+    # The owner's case: Opus is current, the pane shows rows 1-2 and folds
+    # "… +4 models", and Sonnet (row 4) is hidden below.
+    fake = FakeHarness("claude", "Opus 5.5", window=2)
+    fake.screen_name, fake.cursor = "models", 1
+    assert "… +4 models" in fake.render() and "Sonnet" not in fake.render()
+    fake.screen_name = "prompt"
+    assert ms.switch(_pane(fake), "sonnet", sleep=no_sleep) == "claude-sonnet-5-5"
+    assert fake.keys == ["Down", "Down", "s"]
+    assert not fake.saved_default
+
+
+def test_claude_switch_scrolls_up_to_a_row_hidden_above():
+    # Haiku is current; Opus sits above the visible rows. The switch looks
+    # below first, finds only "More models", then walks up.
+    fake = FakeHarness("claude", "Haiku 5.5", window=2)
+    assert ms.switch(_pane(fake), "opus", sleep=no_sleep) == "claude-opus-5-5"
+    assert fake.keys == ["Down", "Up", "Up", "Up", "Up", "s"]
+
+
+def test_claude_switch_never_picks_more_models():
+    fake = FakeHarness("claude", "Opus 5.5", window=2)
+    with pytest.raises(ms.SwitchFailed, match=r"it lists: Default, Opus 5.5, Fable 5.2, Sonnet 5.5, Haiku 5.5\)$") as failed:
+        ms.switch(_pane(fake), "nonsense", sleep=no_sleep)
+    assert "More" not in str(failed.value)
+    assert fake.keys[-1] == "Escape" and "s" not in fake.keys and "Enter" not in fake.keys
+    assert fake.model == "Opus 5.5"
 
 
 def test_codex_switch_keeps_the_agents_reasoning_level_for_this_session_only():

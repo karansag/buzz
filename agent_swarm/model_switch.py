@@ -4,7 +4,11 @@ Each harness shows its model in its own way, and changes it in its own way:
 
 - Claude Code: `/model` opens a numbered picker ("Select model"). Up/Down
   move the cursor and `s` applies the pick for this session only (Enter would
-  also save it as the default for every new session).
+  also save it as the default for every new session). In a short pane the
+  list scrolls: it shows a few rows around the cursor, marks a row with
+  hidden rows above it "↑ 3.", and folds the rest below into "… +4 models".
+  A long label can wrap onto a second line. The last row, "▸ More models",
+  has no number and opens a submenu; the switch never picks it.
 - Codex: `/model` opens a numbered picker ("Select Model and Effort"). Enter
   picks the model, then a reasoning-level screen opens, where `s` applies it
   for this session only (Enter would save it to config.toml).
@@ -39,6 +43,8 @@ STEP_TIMEOUT = 8.0
 POLL = 0.25
 # Status lines and pickers live at the bottom of the screen.
 FOOTER_LINES = 6
+# Most cursor moves a scrolled picker gets to bring a hidden row into view.
+MAX_SCROLL = 30
 
 # --- reading the model off the screen -------------------------------------
 
@@ -200,28 +206,54 @@ class Row:
     label: str
     cursor: bool
     default: bool = False
+    more: bool = False  # Claude's "▸ More models" submenu row, never a model
 
 
 # "❯ 4.  Sonnet 5.5 ✔           Most efficient ..." / "› 1. GPT-6.1-Sol (current)  Latest ..."
-_ROW = re.compile(r"^\s*([›❯>])?\s*(\d+)\.\s+(\S.*?)(?:\s{2,}.*)?$")
+# A scrolled Claude picker puts "↑" or "↓" where the cursor would be.
+_ROW = re.compile(r"^\s*(?:([›❯>])|[↑↓])?\s*(\d+)\.\s+(\S.*?)(?:\s{2,}.*)?$")
+_MORE_ROW = re.compile(r"^\s*([›❯>])?\s*▸\s+(\S.*?)\s*$")
+# "… +4 models": rows below the visible part of a scrolled picker.
+_FOLDED = re.compile(r"^\s*…\s*\+\d+ models?\s*$")
 _MARKS = re.compile(r"\s*(✔|\((?:current|default|recommended)\))")
 
 
-def picker_rows(screen: str, title: str) -> list[Row] | None:
-    """The numbered rows under the last `title` line, or None if no such picker shows."""
+def _picker_lines(screen: str, title: str) -> list[str] | None:
     lines = screen.splitlines()
     starts = [i for i, ln in enumerate(lines) if title.lower() in ln.lower()]
-    if not starts:
+    return lines[starts[-1] + 1:] if starts else None
+
+
+def picker_rows(screen: str, title: str) -> list[Row] | None:
+    """The rows under the last `title` line, or None if no such picker shows.
+
+    Only the rows on screen; `rows_folded_below` says whether more follow.
+    """
+    lines = _picker_lines(screen, title)
+    if lines is None:
         return None
-    rows = []
-    for line in lines[starts[-1] + 1:]:
+    rows: list[Row] = []
+    label_column = None
+    for line in lines:
         m = _ROW.match(line)
         if m:
             label = _MARKS.sub("", m.group(3)).strip()
             rows.append(Row(int(m.group(2)), label, bool(m.group(1)), "(default)" in m.group(3)))
+            label_column = m.start(3)
+        elif rows and (more := _MORE_ROW.match(line)):
+            rows.append(Row(rows[-1].number + 1, more.group(2), bool(more.group(1)), more=True))
+            label_column = None
+        elif label_column is not None and len(line) - len(line.lstrip()) > label_column:
+            continue  # the second line of a wrapped label or description
         elif rows and line.strip():
             break
     return rows
+
+
+def rows_folded_below(screen: str, title: str) -> bool:
+    """Whether the picker folds rows below the visible ones ("… +4 models")."""
+    lines = _picker_lines(screen, title) or []
+    return any(_FOLDED.match(line) for line in lines)
 
 
 def row_matches(flavor: str, wanted: str, label: str) -> bool:
@@ -322,26 +354,49 @@ def _select(
         rows = picker_rows(screen, title)
         return rows if rows and any(r.cursor for r in rows) else None
 
-    rows = wait_for(pane, rows_with_cursor, f"the {title!r} picker", sleep=sleep)
-    target = choose(rows)
-    if target is None:
-        pane.key("Escape")
-        raise SwitchFailed(f"{what} is not in the picker (it lists: {', '.join(r.label for r in rows)})")
-    for _ in range(len(rows) + 1):
+    def move(key: str, rows: list[Row]) -> tuple[list[Row], str]:
         cursor = next(r for r in rows if r.cursor)
-        if cursor.number == target.number:
-            return
-        pane.key("Down" if target.number > cursor.number else "Up")
+        pane.key(key)
         try:
-            rows = wait_for(
+            return wait_for(
                 pane,
                 lambda s: (r := rows_with_cursor(s)) and not any(
-                    c.cursor and c.number == cursor.number for c in r) and r,
+                    c.cursor and c.number == cursor.number for c in r) and (r, s),
                 "the picker's cursor to move", sleep=sleep,
             )
         except SwitchFailed:
             pane.key("Escape")
             raise
+
+    def choose_model(rows: list[Row]) -> Row | None:
+        return choose([r for r in rows if not r.more])
+
+    rows, screen = wait_for(pane, lambda s: (r := rows_with_cursor(s)) and (r, s),
+                            f"the {title!r} picker", sleep=sleep)
+    seen = {r.number: r.label for r in rows if not r.more}
+    target = choose_model(rows)
+    # A scrolled picker shows only some rows. Walk down while rows are
+    # folded below, then up while the top rows are hidden, until the wanted
+    # row comes into view.
+    for key, hidden in (
+        ("Down", lambda rows, screen: rows_folded_below(screen, title)),
+        ("Up", lambda rows, screen: min(r.number for r in rows) > 1),
+    ):
+        for _ in range(MAX_SCROLL):
+            if target is not None or not hidden(rows, screen):
+                break
+            rows, screen = move(key, rows)
+            seen.update((r.number, r.label) for r in rows if not r.more)
+            target = choose_model(rows)
+    if target is None:
+        pane.key("Escape")
+        listed = ", ".join(seen[n] for n in sorted(seen))
+        raise SwitchFailed(f"{what} is not in the picker (it lists: {listed})")
+    for _ in range(len(seen) + 1):
+        cursor = next(r for r in rows if r.cursor)
+        if cursor.number == target.number:
+            return
+        rows, screen = move("Down" if target.number > cursor.number else "Up", rows)
     pane.key("Escape")
     raise SwitchFailed(f"the cursor did not reach {target.label}")
 
