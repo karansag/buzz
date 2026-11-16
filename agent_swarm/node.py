@@ -331,7 +331,8 @@ class Executor:
             r = self.local.kill(op_id, a["pane"], a.get("tmux_server"))
             return protocol.result(op_id, r.status, r.error)
         if kind == "send_key":
-            r = self.local.send_key(op_id, a["pane"], a.get("tmux_server"), a["key"])
+            r = self.local.send_key(op_id, a["pane"], a.get("tmux_server"), a["key"],
+                                    **({"literal": True} if a.get("literal") else {}))
             return protocol.result(op_id, r.status, r.error)
         if kind == "tag_pane":
             r = self.local.tag_pane(op_id, a["pane"], a.get("tmux_server"), a["handle"])

@@ -785,12 +785,13 @@ def kill_pane(pane: str) -> tuple[bool, str | None]:
 TERMINAL_KEYS = ("Escape", "Up", "Down", "Enter", "Tab", "C-c", "C-b")
 
 
-def send_key(pane: str, key: str) -> tuple[bool, str | None]:
-    """Press one key in a pane. Returns (ok, error) when tmux answered;
+def send_key(pane: str, key: str, literal: bool = False) -> tuple[bool, str | None]:
+    """Press one key in a pane, or with literal=True type `key` as text
+    without submitting it. Returns (ok, error) when tmux answered;
     raises Uncertain when it did not, since the key may have landed."""
     try:
         subprocess.run(
-            ["tmux", "send-keys", "-t", pane, key],
+            ["tmux", "send-keys", "-t", pane, *(["-l"] if literal else []), key],
             capture_output=True, text=True, check=True, timeout=3,
         )
     except subprocess.CalledProcessError as e:

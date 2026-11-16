@@ -8,7 +8,12 @@ Each harness shows its model in its own way, and changes it in its own way:
 - Codex: `/model` opens a numbered picker ("Select Model and Effort"). Enter
   picks the model, then a reasoning-level screen opens, where `s` applies it
   for this session only (Enter would save it to config.toml).
-- Pi: `/model provider/id` switches directly, without saving a default.
+- Pi: `/model` opens a filtered picker. It first lists only the owner's
+  saved models ("scoped"); Tab shows Pi's whole catalog ("all"). Typing the
+  full "provider/id" narrows the list, Enter picks the row under the cursor
+  for this session only (Ctrl+S would save it as the default). `/model
+  provider/id` is not used: Pi's autocomplete can swap a near match from the
+  saved list in for the typed id.
 
 A switch drives that UI through the node (paste, keys, screen captures), so it
 works for agents on any machine, and checks every step on the screen before
@@ -271,6 +276,12 @@ class Pane:
         if r.status != "ok":
             raise SwitchFailed(f"could not press {key}: {r.error or r.status}")
 
+    def text(self, text: str) -> None:
+        """Type `text` without submitting it."""
+        r = self.node.send_key(nodes.new_op_id(), self.pane, self.tmux_server, text, literal=True)
+        if r.status != "ok":
+            raise SwitchFailed(f"could not type {text!r}: {r.error or r.status}")
+
 
 def wait_for(
     pane: Pane, check: Callable[[str], object], what: str,
@@ -335,6 +346,111 @@ def _select(
     raise SwitchFailed(f"the cursor did not reach {target.label}")
 
 
+# Pi's picker: "Scope: all | scoped", "tab scope (all/scoped)", the query
+# line "> text", then rows "→ ✓ meta/x [openrouter]" (→ is the cursor, ✓ the
+# current model; a local model may add its name in parentheses, and the
+# default model ends with "· default").
+PI_PICKER = "tab scope (all/scoped)"
+_PI_ROW = re.compile(r"^\s*(→)?\s*(?:✓\s*)?(\S.*?)(?: \([^()]*\))? \[([^\]\s]+)\](?:\s+·.*)?\s*$")
+
+
+def pi_picker(screen: str) -> tuple[str, list[Row]] | None:
+    """Pi's open model picker as (query, rows), or None if it is not open.
+
+    Rows are labelled "provider/id" and numbered from 1 in screen order.
+    """
+    lines = screen.splitlines()
+    starts = [i for i, ln in enumerate(lines) if PI_PICKER in ln]
+    if not starts:
+        return None
+    query, rows = None, []
+    for line in lines[starts[-1] + 1:]:
+        if query is None:
+            if line.lstrip().startswith(">"):
+                query = line.lstrip()[1:].strip()
+            continue
+        if m := _PI_ROW.match(line):
+            rows.append(Row(len(rows) + 1, f"{m.group(3)}/{m.group(2)}", bool(m.group(1))))
+        elif rows and line.strip():
+            break
+    return (query, rows) if query is not None else None
+
+
+def _pi_select(pane: Pane, wanted: str, sleep: Callable[[float], None]) -> None:
+    """Pick `wanted` ("provider/id") in Pi's model picker and press Enter.
+
+    Looks in the saved models first, then in the whole catalog. Closes the
+    picker with Escape if the model is in neither.
+    """
+    # A picker left open would take "/model" as its search, and Enter would
+    # pick whatever row that matches.
+    if pi_picker(pane.screen()):
+        pane.key("Escape")
+        wait_for(pane, lambda s: not pi_picker(s), "Pi's old picker to close", sleep=sleep)
+
+    def fresh(screen: str) -> bool:
+        # Only a just-opened picker has an empty search; text typed anywhere
+        # else would be sent to the model as a message.
+        found = pi_picker(screen)
+        return bool(found) and found[0] == ""
+
+    # Pi's command autocomplete can take the first Enter. No automatic
+    # retry: a second Enter in the open picker would pick its current row.
+    pane.type("/model", retry_submit=False)
+    try:
+        wait_for(pane, fresh, "Pi's model picker", timeout=2.0, sleep=sleep)
+    except SwitchFailed:
+        pane.key("Enter")
+        wait_for(pane, fresh, "Pi's model picker", sleep=sleep)
+    pane.text(wanted)
+
+    def settled(screen: str):
+        # The list once it is filtered by the whole query, cursor drawn.
+        found = pi_picker(screen)
+        if found and found[0] == wanted and (not found[1] or any(r.cursor for r in found[1])):
+            return found[1] or "empty"
+        return None
+
+    def exact(rows) -> Row | None:
+        return next((r for r in rows or [] if r.label.lower() == wanted.lower()), None)
+
+    def escape(message: str, screen: str | None = None):
+        pane.key("Escape")
+        raise SwitchFailed(message, screen)
+
+    try:
+        rows = wait_for(pane, settled, f"Pi's picker to list {wanted}", sleep=sleep)
+    except SwitchFailed as e:
+        escape(str(e), e.screen)
+    if exact(rows if rows != "empty" else []) is None:
+        # Not saved: Tab switches the list to Pi's whole catalog. Only color
+        # marks which list shows, so wait a moment for the row to appear.
+        pane.key("Tab")
+        try:
+            rows = wait_for(pane, lambda s: (r := settled(s)) and r != "empty" and exact(r) and r,
+                            f"{wanted} in Pi's full catalog", timeout=2.0, sleep=sleep)
+        except SwitchFailed as e:
+            escape(f"Pi does not list {wanted}, in its saved models or its whole catalog. If the model is "
+                   "new, restart the agent so Pi reloads its catalog.", e.screen)
+    target = exact(rows)
+    for _ in range(len(rows) + 1):
+        cursor = next(r for r in rows if r.cursor)
+        if cursor.number == target.number:
+            pane.key("Enter")
+            return
+        pane.key("Down" if target.number > cursor.number else "Up")
+        try:
+            rows = wait_for(
+                pane,
+                lambda s: (r := settled(s)) and r != "empty" and not any(
+                    c.cursor and c.number == cursor.number for c in r) and r,
+                "the picker's cursor to move", sleep=sleep,
+            )
+        except SwitchFailed as e:
+            escape(str(e), e.screen)
+    escape(f"the cursor did not reach {wanted}")
+
+
 def codex_effort(screen: str) -> str | None:
     """The reasoning level on Codex's status line ("medium"), if it shows one."""
     lines = [ln for ln in screen.splitlines() if ln.strip()]
@@ -363,9 +479,7 @@ def switch(pane: Pane, wanted: str, sleep: Callable[[float], None] = time.sleep)
     picker is open, because in Claude Code and Codex it interrupts a turn.
     """
     if pane.flavor == "pi":
-        # Pi's command autocomplete can take the first Enter; the retried
-        # submit sends the command.
-        pane.type(f"/model {wanted}", retry_submit=True)
+        _pi_select(pane, wanted, sleep)
     elif pane.flavor in PICKERS:
         title, apply_key = PICKERS[pane.flavor]
         effort = codex_effort(pane.screen()) if pane.flavor == "codex" else None

@@ -159,7 +159,7 @@ class Node(Protocol):
     ) -> Result: ...
     def spawn(self, op_id: str, command: str | None, cwd: str | None = None, resume: bool = False) -> Spawned: ...
     def kill(self, op_id: str, pane: str, tmux_server: str | None) -> Result: ...
-    def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str) -> Result: ...
+    def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str, literal: bool = False) -> Result: ...
     def tag_pane(self, op_id: str, pane: str, tmux_server: str | None, handle: str) -> Result: ...
     def rename_window(self, op_id: str, pane: str, tmux_server: str | None, name: str) -> Result: ...
 
@@ -309,11 +309,11 @@ class LocalNode:
             return Result("unknown", str(e))
         return Result("ok" if ok else "failed", err)
 
-    def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str) -> Result:
+    def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str, literal: bool = False) -> Result:
         if stale := _stale_server(tmux_server):
             return Result("failed", stale)
         try:
-            ok, err = tmux.send_key(pane, key)
+            ok, err = tmux.send_key(pane, key, literal=True) if literal else tmux.send_key(pane, key)
         except tmux.Uncertain as e:
             return Result("unknown", str(e))
         return Result("ok" if ok else "failed", err)
@@ -604,8 +604,11 @@ class RemoteNode:
         r = self._call("kill", COMMAND_TTL, op_id=op_id, pane=pane, tmux_server=tmux_server)
         return Result(r.get("status", "unknown"), r.get("error"))
 
-    def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str) -> Result:
-        r = self._call("send_key", COMMAND_TTL, op_id=op_id, pane=pane, tmux_server=tmux_server, key=key)
+    def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str, literal: bool = False) -> Result:
+        # A node older than `literal` ignores it and sends the text as key
+        # names, which tmux types as-is for text that names no key.
+        r = self._call("send_key", COMMAND_TTL, op_id=op_id, pane=pane, tmux_server=tmux_server, key=key,
+                       **({"literal": True} if literal else {}))
         return Result(r.get("status", "unknown"), r.get("error"))
 
     def tag_pane(self, op_id: str, pane: str, tmux_server: str | None, handle: str) -> Result:

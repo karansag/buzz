@@ -121,9 +121,7 @@ class FakeHarness:
 
     def deliver(self, op_id, pane, tmux_server, text, **kw):
         self.typed.append((text, kw.get("retry_submit")))
-        if self.flavor == "pi" and text.startswith("/model "):
-            self.model = text.split(" ", 1)[1]
-        elif text == "/model" and self.open_picker:
+        if text == "/model" and self.open_picker:
             self.screen_name = "models"
             self.cursor = self.rows().index(self.current_row())
         return nodes.Result("ok")
@@ -161,9 +159,6 @@ class FakeHarness:
         return next(r for r in self.rows() if r.startswith(self.model))
 
     def render(self):
-        if self.flavor == "pi":
-            provider, model = self.model.split("/", 1)
-            return f"~/x\n0.0%/1.0M (auto)      ({provider}) {model} • high\n"
         lines = ["some conversation"]
         titles = {"claude": "Select model", "codex": "Select Model and Effort"}
         if self.screen_name in ("models", "effort"):
@@ -210,11 +205,133 @@ def test_codex_takes_the_models_default_level_when_the_old_one_is_not_offered():
     assert fake.effort == "medium"
 
 
-def test_pi_switch_types_the_model_and_retries_the_submit():
-    fake = FakeHarness("pi", "openrouter/meta/muse")
-    assert ms.switch(_pane(fake), "openrouter/deepseek/flash", sleep=no_sleep) == "openrouter/deepseek/flash"
-    assert fake.typed == [("/model openrouter/deepseek/flash", True)]
-    assert fake.keys == []
+class FakePi:
+    """Pi's /model picker: saved models first, Tab for the whole catalog.
+
+    Like Pi's command autocomplete, the first Enter after "/model" can be
+    taken by the completion menu instead of running the command.
+    """
+
+    flavor = "pi"
+
+    def __init__(self, model, saved, catalog, autocomplete=True):
+        self.model, self.saved, self.catalog = model, saved, catalog
+        self.autocomplete = autocomplete
+        self.open, self.scope, self.query, self.cursor = False, "scoped", "", 0
+        self.keys, self.typed = [], []
+
+    def capture(self, pane, tmux_server, colors=False):
+        return self.render(), None
+
+    def deliver(self, op_id, pane, tmux_server, text, **kw):
+        self.typed.append((text, kw.get("retry_submit")))
+        if text == "/model" and not self.autocomplete:
+            self.open_picker()
+        return nodes.Result("ok")
+
+    def open_picker(self):
+        self.open, self.scope, self.query = True, "scoped", ""
+        self.cursor = max(0, self.rows().index(self.model)) if self.model in self.rows() else 0
+
+    def send_key(self, op_id, pane, tmux_server, key, literal=False):
+        self.keys.append(("text", key) if literal else key)
+        rows = self.rows()
+        if literal:
+            self.query += key
+            self.cursor = 0
+        elif not self.open:
+            if key == "Enter":
+                self.open_picker()
+        elif key == "Tab":
+            self.scope = "all" if self.scope == "scoped" else "scoped"
+            self.cursor = 0
+        elif key == "Down":
+            self.cursor = min(self.cursor + 1, len(rows) - 1)
+        elif key == "Up":
+            self.cursor = max(self.cursor - 1, 0)
+        elif key == "Escape":
+            self.open = False
+        elif key == "Enter" and rows:
+            self.model, self.open = rows[self.cursor], False
+        return nodes.Result("ok")
+
+    def rows(self):
+        pool = self.saved if self.scope == "scoped" else self.catalog
+        words = self.query.lower().replace("/", " ").split()
+        return [m for m in pool if all(w in m.lower() for w in words)]
+
+    def render(self):
+        provider, model = self.model.split("/", 1)
+        lines = ["earlier output"]
+        if self.open:
+            lines += ["Scope: all | scoped", "tab scope (all/scoped)", "", f"> {self.query}", ""]
+            rows = self.rows()
+            for i, row in enumerate(rows):
+                p, m = row.split("/", 1)
+                lines.append(f"{'→' if i == self.cursor else ' '} {'✓ ' if row == self.model else '  '}{m} [{p}]")
+            if not rows:
+                lines.append("  No matching models")
+            lines += ["", "  Enter to select · Ctrl+S to set as default · Escape/Ctrl+C to cancel"]
+        lines += ["~/x", f"0.0%/1.0M (auto)      ({provider}) {model} • high"]
+        return "\n".join(lines) + "\n"
+
+
+PI_SAVED = ["openai-codex/gpt-6.1-sol", "openrouter/meta/muse-spark-1.3", "openrouter/thinkingmachines/inkling-2-small"]
+PI_CATALOG = PI_SAVED + ["openrouter/thinkingmachines/inkling-small", "openrouter/thinkingmachines/inkling-small:batch"]
+
+
+def test_pi_switch_picks_the_exact_saved_model_in_the_picker():
+    fake = FakePi("openai-codex/gpt-6.1-sol", PI_SAVED, PI_CATALOG)
+    wanted = "openrouter/thinkingmachines/inkling-2-small"
+    assert ms.switch(_pane(fake), wanted, sleep=no_sleep) == wanted
+    # No automatic resubmit: the Enter that autocomplete took is pressed once more.
+    assert fake.typed == [("/model", False)]
+    assert fake.keys == ["Enter", ("text", wanted), "Enter"]
+
+
+def test_pi_switch_looks_in_the_whole_catalog_for_a_model_that_is_not_saved():
+    # Pi's /model autocomplete would have swapped in the saved near match
+    # inkling-2-small; the picker only takes an exact row.
+    fake = FakePi("openai-codex/gpt-6.1-sol", PI_SAVED, PI_CATALOG, autocomplete=False)
+    wanted = "openrouter/thinkingmachines/inkling-small"
+    assert ms.switch(_pane(fake), wanted, sleep=no_sleep) == wanted
+    assert fake.keys == [("text", wanted), "Tab", "Enter"]
+
+
+def test_pi_switch_moves_past_near_matches_to_the_exact_row():
+    catalog = ["openrouter/thinkingmachines/inkling-small:batch", "openrouter/thinkingmachines/inkling-small"]
+    fake = FakePi("openai-codex/gpt-6.1-sol", [], catalog, autocomplete=False)
+    assert ms.switch(_pane(fake), "openrouter/thinkingmachines/inkling-small", sleep=no_sleep)
+    assert fake.keys[-2:] == ["Down", "Enter"]
+
+
+def test_pi_switch_to_an_unknown_model_closes_the_picker_and_says_to_restart():
+    fake = FakePi("openai-codex/gpt-6.1-sol", PI_SAVED, PI_CATALOG, autocomplete=False)
+    with pytest.raises(ms.SwitchFailed, match="does not list openrouter/x/new.*restart the agent"):
+        ms.switch(_pane(fake), "openrouter/x/new", sleep=no_sleep)
+    assert fake.keys[-1] == "Escape" and not fake.open
+    assert fake.model == "openai-codex/gpt-6.1-sol"
+
+
+def test_pi_switch_closes_a_picker_left_open_first():
+    fake = FakePi("openai-codex/gpt-6.1-sol", PI_SAVED, PI_CATALOG, autocomplete=False)
+    fake.open_picker()
+    fake.query = "inkling"
+    wanted = "openrouter/meta/muse-spark-1.3"
+    assert ms.switch(_pane(fake), wanted, sleep=no_sleep) == wanted
+    assert fake.keys == ["Escape", ("text", wanted), "Enter"]
+
+
+def test_pi_picker_reads_local_models_with_a_display_name():
+    screen = ("tab scope (all/scoped)\n\n> \n\n"
+              "    gpt-6.1-sol [openai-codex] · default\n"
+              "→ ✓ thinkingmachines/inkling-2-small [openrouter]\n"
+              "    /mnt/m/b.gguf (Ternary Bonsai 2 27B Local) [local-llama]\n  (10/11)\n")
+    query, rows = ms.pi_picker(screen)
+    assert query == ""
+    assert [(r.label, r.cursor) for r in rows] == [
+        ("openai-codex/gpt-6.1-sol", False),
+        ("openrouter/thinkingmachines/inkling-2-small", True), ("local-llama//mnt/m/b.gguf", False)]
 
 
 def test_a_model_missing_from_the_picker_closes_it_and_says_what_is_there():
