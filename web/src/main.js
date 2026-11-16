@@ -2313,6 +2313,11 @@ function App() {
       setMachine(null);
       location.hash = focusHash(user);
     }} />
+    ${!compact && html`<button type="button" ref=${toggleRef} class=${`mini roster-toggle ${rosterOpen ? "is-open" : ""}`}
+      aria-pressed=${rosterOpen} aria-expanded=${rosterOpen} aria-controls="agent-sidebar" onClick=${toggleRoster}
+      title=${`Toggle agent sidebar (${rosterShortcut})`} aria-keyshortcuts=${mac ? "Meta+b" : "Control+b"}>
+      sidebar ${state?.recipients?.filter(r => r.pane_alive).length ?? 0} <kbd>${rosterShortcut}</kbd>
+    </button>`}
     <div class="right">
       <${EnableNotifications} />
       <span><span class=${`beacon ${connected ? "" : "down"}`}></span>${connected ? "watching" : "server unreachable"}</span>
@@ -2331,11 +2336,6 @@ function App() {
     <div class="main-col">
     ${header}
     ${onOverview && html`<${MachineBar} state=${state} machine=${machine} selectMachine=${setMachine} />`}
-    ${!compact && html`<button type="button" ref=${toggleRef} class=${`roster-toggle ${rosterOpen ? "is-open" : ""}`}
-      aria-expanded=${rosterOpen} aria-controls="agent-sidebar" onClick=${toggleRoster}
-      title=${`Toggle agent sidebar (${rosterShortcut})`} aria-keyshortcuts=${mac ? "Meta+b" : "Control+b"}>
-      ${rosterOpen ? "Agents ›" : "‹ Agents"} · ${state.recipients.filter(r => r.pane_alive).length} · ${rosterShortcut}
-    </button>`}
     <div class="stage">
       ${focusUser
         ? html`<${FocusView} key=${focusUser} user=${focusUser} messageId=${agentRoute?.messageId ?? null}

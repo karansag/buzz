@@ -503,11 +503,38 @@ test('desktop: the roster runs to the top and the header stops at its edge', asy
     const header = await page.locator('header.top').boundingBox();
     assert.ok(roster.y <= 1);
     assert.ok(header.x + header.width <= roster.x + 1);
-    // The roster's own "Hide →" closes it; the floating tab would cover content.
-    assert.equal(await page.locator('.roster-toggle').isVisible(), false);
+    // Keep the sidebar control in the header while the drawer is open and closed.
+    const toggle = page.locator('.roster-toggle');
+    assert.equal(await toggle.isVisible(), true);
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
     await page.getByRole('button', { name: 'Hide agents' }).click();
-    await page.locator('.roster-toggle').click();
+    await page.waitForSelector('.roster-toggle[aria-expanded="false"]');
+    assert.equal(await toggle.isVisible(), true);
+    assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
+    await toggle.click();
     await page.waitForSelector('.roster-drawer.is-open');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('desktop: the header sidebar toggle does not overlap conversation controls', async () => {
+  const { page, errors } = await setup(1500, 900, false);
+  try {
+    await page.goto(base + '#/agent/stoat');
+    await page.waitForSelector('.thread-focus-toggle');
+    const toggle = page.locator('.roster-toggle');
+    const controls = page.locator('.thread-focus-toggle, .thread-focus[aria-label="Search conversation"]');
+    const toggleBox = await toggle.boundingBox();
+    const controlBoxes = await controls.evaluateAll(els => els.map(e => e.getBoundingClientRect().toJSON()));
+    for (const control of controlBoxes) {
+      const overlaps = !(toggleBox.x + toggleBox.width <= control.x || control.x + control.width <= toggleBox.x
+        || toggleBox.y + toggleBox.height <= control.y || control.y + control.height <= toggleBox.y);
+      assert.equal(overlaps, false, '.roster-toggle overlaps a conversation control');
+    }
+    // The header button is in flow, not fixed, so it stays left of the sidebar.
+    const header = await page.locator('header.top').boundingBox();
+    assert.ok(toggleBox.x >= header.x && toggleBox.x + toggleBox.width <= header.x + header.width);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });

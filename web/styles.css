@@ -72,6 +72,7 @@
   nav.views { display: flex; gap: 4px; }
   /* Once the links wrap under the title, line their text up with its edge. */
   @media (max-width: 600px) { nav.views { margin-left: -10px; } }
+  @media (max-width: 1100px) { header.top { gap: 10px; padding-left: 16px; padding-right: 16px; } }
   nav.views a {
     color: var(--cream-dim); text-decoration: none; font-size: 11px; letter-spacing: .12em;
     text-transform: uppercase; padding: 3px 10px; border: 1px solid transparent; border-radius: 20px;
@@ -752,16 +753,17 @@ main.dashboard-layout.roster-open { grid-template-columns: minmax(0,1fr) 340px; 
 .roster-drawer aside.roster { position: static; max-height: 100dvh; overflow-y: auto; border-left: 1px solid var(--line); border-top: 0; }
 .roster-heading { display: flex; align-items: baseline; gap: 12px; }
 .roster-heading h2 { flex: 1; }
-.roster-toggle { position: fixed; right: 0; top: 48%; z-index: 22; padding: 10px 8px; color: var(--cream); background: var(--panel-2); border: 1px solid var(--honey-dim); border-radius: 8px 0 0 8px; font: inherit; cursor: pointer; transition: right .22s ease; }
-/* While the roster is open its own "Hide →" closes it; the floating tab
-   would only cover page content. */
-.roster-toggle.is-open { display: none; }
+/* The collapsed roster is a normal header chip, matching teams and agents. */
+.roster-toggle { flex: none; text-transform: none; letter-spacing: 0; }
+.roster-toggle:hover, .roster-toggle:focus-visible { color: var(--cream); }
+.roster-toggle[aria-pressed=true] { border-color: var(--honey-dim); background: rgba(242,169,59,.07); color: var(--cream); }
+.roster-toggle kbd { font-size: inherit; font: inherit; opacity: .75; margin-left: 4px; }
 @media (max-width: 1000px), (max-width: 1200px) and (pointer: coarse) {
   /* No roster drawer here: the overview's agents panel holds the roster. */
   main.dashboard-layout, main.dashboard-layout.roster-open { grid-template-columns: minmax(0,1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
-  main.dashboard-layout, .roster-drawer, .roster-toggle { transition: none; }
+  main.dashboard-layout, .roster-drawer { transition: none; }
 }
 
 /* One persistent, bright activity halo in both the hive and roster bees. */
