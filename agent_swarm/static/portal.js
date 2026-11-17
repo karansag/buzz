@@ -12157,6 +12157,88 @@ function stepTeammate(members, user, by) {
 	return ids[(Math.max(0, ids.indexOf(user)) + by + ids.length) % ids.length];
 }
 //#endregion
+//#region web/src/pins.js
+async function setPinned(id, pinned, refresh) {
+	try {
+		const r = await fetch(`/api/messages/${id}/pin`, {
+			method: "POST",
+			headers: JSONH,
+			body: JSON.stringify({ pinned })
+		});
+		if (!r.ok) throw new Error(String(r.status));
+	} catch {
+		showNotice(pinned ? "Could not pin the message. Please try again." : "Could not unpin the message. Please try again.");
+		return;
+	}
+	refresh?.();
+}
+var flat = (text, width) => {
+	const one = (text || "").replace(/[*`~]+|^#+\s|^>\s?/gm, "").replace(/\s+/g, " ").trim();
+	return one.length > width ? `${one.slice(0, width)}…` : one;
+};
+var pinPage = (m) => m.sender === "owner" ? m.recipient : m.recipient === "owner" ? m.sender : m.recipient;
+var pinHref = (m) => `#/agent/${encodeURIComponent(pinPage(m))}?m=${m.id}`;
+var pinsOf = (pins, a, b) => (pins || []).filter((m) => pairKey(m.sender, m.recipient) === pairKey(a, b));
+function PinStrip({ pins, open }) {
+	if (!pins.length) return null;
+	return m$1`<div class="pin-strip" role="list" aria-label="Pinned messages">
+    ${pins.map((m) => m$1`<button type="button" role="listitem" key=${m.id} class="pin-chip" onClick=${() => open(m)}
+        title="Open the pinned message">
+      <span aria-hidden="true">📌</span> <b>${disp(m.sender)}</b> <span class="pin-text">${flat(m.content, 140) || "(attachment)"}</span>
+    </button>`)}
+  </div>`;
+}
+function PinDialog({ m, now, close, refresh, inChat = null }) {
+	const ref = A(null);
+	h(() => {
+		const dialog = ref.current;
+		const previous = document.activeElement;
+		dialog.showModal();
+		return () => {
+			if (previous?.isConnected) previous.focus();
+		};
+	}, []);
+	const onKey = (e) => {
+		if (e.key === "Escape") e.stopPropagation();
+	};
+	return m$1`<dialog ref=${ref} class="page-dialog pin-dialog" aria-label="Pinned message"
+      onClose=${close} onKeyDown=${onKey} onClick=${(e) => {
+		if (e.target === ref.current) ref.current.close();
+	}}>
+    <div class="pin-dialog-head"><span aria-hidden="true">📌</span> ${disp(m.sender)} <span class="swap">→</span> ${disp(m.recipient)} <span class="age">· ${rel(m.ts, now)}</span></div>
+    <div class="pin-dialog-body">
+      ${m.content && m$1`<div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}
+      ${m.attachments?.length > 0 && m$1`<div class="msg-images">${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}</div>`}
+    </div>
+    <div class="page-dialog-actions">
+      <button type="button" class="mini" onClick=${() => {
+		setPinned(m.id, false, refresh);
+		ref.current.close();
+	}}>unpin</button>
+      ${inChat && m$1`<button type="button" class="mini" onClick=${() => {
+		ref.current.close();
+		inChat(m);
+	}}>show in chat</button>`}
+      <button type="button" class="act" autofocus onClick=${() => ref.current.close()}>close</button>
+    </div>
+  </dialog>`;
+}
+function PinnedList({ pins, now, refresh }) {
+	if (!pins?.length) return null;
+	return m$1`<section class="pinned-list" aria-label="Pinned messages">
+    <h2>pinned <span class="count">· ${pins.length}</span></h2>
+    <ul>
+      ${pins.map((m) => m$1`<li key=${m.id}>
+        <a href=${pinHref(m)} title="Go to this message in its chat">
+          <span class="pin-who"><span aria-hidden="true">📌</span> ${disp(m.sender)} <span class="swap">→</span> ${disp(m.recipient)} <span class="age">· ${rel(m.ts, now)}</span></span>
+          <span class="pin-text">${flat(m.content, 240) || "(attachment)"}</span>
+        </a>
+        <button type="button" class="mini" aria-label=${`Unpin message ${m.id}`} onClick=${() => setPinned(m.id, false, refresh)}>unpin</button>
+      </li>`)}
+    </ul>
+  </section>`;
+}
+//#endregion
 //#region web/src/chats.js
 function ownerChats(messages, query = "") {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -13567,7 +13649,7 @@ function sentByViewer(sender, a, b, page) {
 var JUMP_SHOW_PX = 160;
 var OLDER_PX = 300;
 var gapLabel = ({ count, after, before }) => `${count} message${count === 1 ? "" : "s"} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
-function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null }) {
+function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null, pins = [] }) {
 	_(() => {
 		if (search?.open) setExpanded(true);
 	}, [search?.open]);
@@ -13581,6 +13663,8 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	const [awayFrom, setAwayFrom] = d(null);
 	const [replyTo, setReplyTo] = d(null);
 	const [menu, setMenu] = d(null);
+	const [openPin, setOpenPin] = d(null);
+	const pinned = new Set(pins.map((m) => m.id));
 	const canReply = (m) => !!recipient && !m.pending && typeof m.id === "number";
 	const openMenu = (e, m) => {
 		if (e.shiftKey || !canReply(m)) return;
@@ -13588,7 +13672,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		setMenu({
 			m,
 			x: Math.min(e.clientX, innerWidth - 160),
-			y: Math.min(e.clientY, innerHeight - 90)
+			y: Math.min(e.clientY, innerHeight - 124)
 		});
 	};
 	_(() => {
@@ -13882,6 +13966,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     </div>
     <div id=${bodyId} class="thread-body" hidden=${!expanded}>
     ${search && m$1`<${ConversationSearchBar} search=${search} />`}
+    <${PinStrip} pins=${pins} open=${setOpenPin} />
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
       ${older?.more && m$1`<button type="button" key="older" class="mini older-history" disabled=${older.busy} onClick=${older.load}>
@@ -13901,7 +13986,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             dangerouslySetInnerHTML=${{ __html: highlightSearch(renderMarkdown(shellNewlines(m.content)), search?.words || []) }} />`}${m.attachments?.length > 0 && m$1`<div class=${`msg-images ${m.content ? "" : "only"}`}>
             ${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}
           </div>`}</div>
-          <div class="tag">${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}${disp(m.sender)}${m.context && m$1` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && m$1` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && m$1` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && m$1` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && m$1` <button type="button" class="msg-reply"
+          <div class="tag">${pinned.has(m.id) && m$1`<span class="pin-mark" role="img" aria-label="pinned" title="Pinned">📌</span> `}${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}${disp(m.sender)}${m.context && m$1` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && m$1` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && m$1` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && m$1` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && m$1` <button type="button" class="msg-reply"
             title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}</div>
         </div>`)}
       ${recipient && m$1`<div class="jump-dock">${awayFrom !== null && m$1`<button type="button" class="jump-bottom" onClick=${jumpToBottom}
@@ -13920,7 +14005,16 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		navigator.clipboard?.writeText(menu.m.content || "");
 		setMenu(null);
 	}}>Copy text</button>
+      <button type="button" role="menuitem" onClick=${() => {
+		setPinned(menu.m.id, !pinned.has(menu.m.id), refresh);
+		setMenu(null);
+	}}>
+        ${pinned.has(menu.m.id) ? "Unpin" : "📌 Pin"}</button>
     </div>`}
+    ${openPin && m$1`<${PinDialog} m=${pins.find((p) => p.id === openPin.id) || openPin} now=${now} refresh=${refresh}
+      close=${() => setOpenPin(null)} inChat=${(m) => {
+		location.hash = pinHref(m);
+	}} />`}
     <button type="button" class="history-resizer" role="separator" aria-orientation="horizontal"
       aria-label="Resize conversation history"
       aria-valuemin="120" aria-valuemax=${resizeBounds().max}
@@ -14035,7 +14129,7 @@ function marked(text, words) {
 	const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
 	return text.split(re).map((part, i) => i % 2 ? m$1`<mark>${part}</mark>` : part);
 }
-function ChatsView({ state, unreadFor }) {
+function ChatsView({ state, unreadFor, refresh }) {
 	const [view, setView] = d(() => {
 		const selected = chatsParams().get("view");
 		return ["agents", "queens"].includes(selected) ? selected : "you";
@@ -14045,6 +14139,7 @@ function ChatsView({ state, unreadFor }) {
 		history.replaceState(null, "", v === "you" ? CHATS_ROUTE : `${CHATS_ROUTE}?view=${v}`);
 	};
 	return m$1`<div class="chats">
+    <${PinnedList} pins=${state.pins} now=${state.now} refresh=${refresh} />
     <div class="agents-view-switch chats-switch" role="group" aria-label="Which chats">
       <button type="button" aria-pressed=${view === "you"} onClick=${() => pick("you")}>with you</button>
       <button type="button" aria-pressed=${view === "queens"} onClick=${() => pick("queens")}>you and queens</button>
@@ -14275,7 +14370,8 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
 			more: history.more,
 			busy: history.busy,
 			load: history.loadOlder
-		}} />`;
+		}}
+      pins=${pinsOf(state.pins, a, b)} />`;
 	};
 	return m$1`<div>
     <div class="focus-top">
@@ -14591,7 +14687,7 @@ function App() {
     ${onOverview && m$1`<${MachineBar} state=${state} machine=${machine} selectMachine=${setMachine} />`}
     <div class="stage">
       ${focusUser ? m$1`<${FocusView} key=${focusUser} user=${focusUser} messageId=${agentRoute?.messageId ?? null}
-            state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor} />` : onHistory ? m$1`<${HistoryView} state=${state} refresh=${poll} />` : onChats ? m$1`<${ChatsView} state=${state} unreadFor=${unreadFor} />` : onTab !== null ? m$1`<${TabView} name=${onTab} tabs=${state.tabs || []} />` : m$1`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
+            state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor} />` : onHistory ? m$1`<${HistoryView} state=${state} refresh=${poll} />` : onChats ? m$1`<${ChatsView} state=${state} unreadFor=${unreadFor} refresh=${poll} />` : onTab !== null ? m$1`<${TabView} name=${onTab} tabs=${state.tabs || []} />` : m$1`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
     </div>
     </div>
     ${!compact && m$1`<div id="agent-sidebar" class=${`roster-drawer ${rosterOpen ? "is-open" : ""}`} inert=${!rosterOpen} aria-hidden=${!rosterOpen}>

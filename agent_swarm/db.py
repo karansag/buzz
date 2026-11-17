@@ -101,6 +101,12 @@ CREATE TABLE IF NOT EXISTS summaries (
     ts          REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_summaries_user_ts ON summaries(user_id, ts);
+
+-- Messages the owner pinned in the dashboard.
+CREATE TABLE IF NOT EXISTS pins (
+    message_id  INTEGER PRIMARY KEY,
+    pinned_at   REAL NOT NULL
+);
 """
 
 SUMMARY_SOURCES = ("agent", "title", "owner")
@@ -1003,6 +1009,30 @@ def get_message(conn: sqlite3.Connection, message_id: int) -> dict | None:
     return _messages(conn, [row])[0] if row else None
 
 
+@_serialized
+def set_pinned(conn: sqlite3.Connection, message_id: int, pinned: bool) -> bool:
+    """Pin or unpin a message. False if there is no such message."""
+    if conn.execute("SELECT 1 FROM messages WHERE id=?", (message_id,)).fetchone() is None:
+        return False
+    with conn:
+        if pinned:
+            conn.execute("INSERT OR IGNORE INTO pins(message_id, pinned_at) VALUES(?, ?)",
+                         (message_id, time.time()))
+        else:
+            conn.execute("DELETE FROM pins WHERE message_id=?", (message_id,))
+    return True
+
+
+@_serialized
+def list_pins(conn: sqlite3.Connection) -> list[dict]:
+    """Pinned messages, newest pin first, each with its `pinned_at`."""
+    rows = conn.execute(
+        "SELECT m.*, p.pinned_at FROM pins p JOIN messages m ON m.id = p.message_id "
+        "ORDER BY p.pinned_at DESC"
+    ).fetchall()
+    return _messages(conn, rows)
+
+
 def message_by_client_id(conn: sqlite3.Connection, sender: str, client_id: str) -> dict | None:
     row = conn.execute(
         "SELECT * FROM messages WHERE sender=? AND client_id=?", (sender, client_id)
@@ -1199,8 +1229,10 @@ def newest_message_id(conn: sqlite3.Connection) -> int:
 
 @_serialized
 def delete_messages_before(conn: sqlite3.Connection, cutoff: float) -> int:
-    """Delete messages sent before `cutoff`; return how many were removed."""
-    cur = conn.execute("DELETE FROM messages WHERE ts < ?", (cutoff,))
+    """Delete unpinned messages sent before `cutoff`; return how many were removed."""
+    cur = conn.execute(
+        "DELETE FROM messages WHERE ts < ? AND id NOT IN (SELECT message_id FROM pins)", (cutoff,)
+    )
     conn.commit()
     return cur.rowcount
 

@@ -4,6 +4,7 @@ Delivery is monkeypatched to avoid touching real tmux.
 """
 
 import asyncio
+import time
 from pathlib import Path
 
 import pytest
@@ -626,6 +627,33 @@ def test_owner_send_delivers_to_pane_and_records(client):
     msgs = client.get("/messages", params={"user": user}).json()["messages"]
     assert msgs[0]["sender"] == "owner"
     assert msgs[0]["content"] == "status update please"
+
+
+def test_owner_pins_and_unpins_messages(client):
+    user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
+    first = client.post("/owner/send", json={"recipient": user, "content": "keep this"}).json()["message_id"]
+    second = client.post("/owner/send", json={"recipient": user, "content": "and this"}).json()["message_id"]
+    assert client.get("/api/state").json()["pins"] == []
+    assert client.post(f"/api/messages/{first}/pin", json={"pinned": True}).status_code == 200
+    r = client.post(f"/api/messages/{second}/pin", json={"pinned": True})
+    assert [m["id"] for m in r.json()["pins"]] == [second, first]  # newest pin first
+    # Pinning twice keeps one pin.
+    client.post(f"/api/messages/{first}/pin", json={"pinned": True})
+    pins = client.get("/api/state").json()["pins"]
+    assert [(m["id"], m["content"], m["recipient"]) for m in pins] == [
+        (second, "and this", user), (first, "keep this", user)]
+    assert all(m["pinned_at"] for m in pins)
+    client.post(f"/api/messages/{second}/pin", json={"pinned": False})
+    assert [m["id"] for m in client.get("/api/state").json()["pins"]] == [first]
+    assert client.post("/api/messages/99999/pin", json={"pinned": True}).status_code == 404
+
+
+def test_pruning_old_messages_keeps_pinned_ones(tmp_path):
+    conn = db.connect(tmp_path / "pins.db")
+    old = [db.record_message(conn, "owner", "jax", None, f"old {i}", "delivered") for i in range(2)]
+    db.set_pinned(conn, old[0], True)
+    assert db.delete_messages_before(conn, time.time() + 60) == 1
+    assert [m["id"] for m in db.list_pins(conn)] == [old[0]]
 
 
 def test_owner_send_preserves_multiline_content_and_context(client):

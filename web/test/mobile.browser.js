@@ -398,6 +398,66 @@ test('a conversation expands to fill the window and back (button, shortcut, Esc)
   } finally { await page.close(); }
 });
 
+test('pinned messages: pin from the menu, open from the strip, list on the chats page', async () => {
+  const { page, state, errors } = await setup(1280, 800, false);
+  state.pins = [];
+  state.messages.push(
+    { id: 501, sender: 'stoat', recipient: 'owner', content: 'The pinned plan:\n\n- step one\n- step two', ts: state.now - 30, status: 'delivered', attachments: [] },
+    ...Array.from({ length: 40 }, (_, i) => ({ id: 502 + i, sender: i % 2 ? 'owner' : 'stoat', recipient: i % 2 ? 'stoat' : 'owner', content: `filler ${i}`, ts: state.now - 29 + i, status: 'delivered', attachments: [] })),
+  );
+  const posts = [];
+  await page.route('**/api/messages/*/pin', async r => {
+    const id = Number(new URL(r.request().url()).pathname.split('/')[3]);
+    const { pinned } = r.request().postDataJSON();
+    posts.push([id, pinned]);
+    state.pins = state.pins.filter(m => m.id !== id);
+    if (pinned) state.pins.unshift({ ...state.messages.find(m => m.id === id), pinned_at: state.now });
+    await r.fulfill({ json: { ok: true, pins: state.pins } });
+  });
+  try {
+    await page.goto(base + '#/agent/stoat');
+    const message = page.locator('.thread .msg[data-message-id="501"]');
+    await message.waitFor();
+    // Scroll it into view first: a menu closes when the chat scrolls.
+    await message.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await message.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '📌 Pin' }).click();
+    const chip = page.locator('.thread .pin-strip .pin-chip');
+    await chip.waitFor();
+    assert.deepEqual(posts, [[501, true]]);
+    assert.match(await chip.textContent(), /stoat\s+The pinned plan: - step one - step two/);
+    assert.equal(await message.locator('.pin-mark').count(), 1);
+    // The pin opens on its own; the chat stays where it was.
+    const box = page.locator('.thread .msgs').first();
+    const top = await box.evaluate(el => el.scrollTop);
+    await chip.click();
+    const dialog = page.locator('dialog.pin-dialog[open]');
+    await dialog.waitFor();
+    assert.equal(await dialog.locator('.md li').count(), 2);
+    assert.equal(await box.evaluate(el => el.scrollTop), top);
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'detached' });
+    assert.equal(await page.locator('.thread.focused').count(), 0);
+    // The chats page lists it; a click goes to the message in its chat.
+    await page.goto(base + '#/chats');
+    const listed = page.locator('.pinned-list li');
+    await listed.waitFor();
+    assert.match(await listed.textContent(), /The pinned plan/);
+    await listed.locator('a').click();
+    await page.waitForFunction(() => location.hash === '#/agent/stoat?m=501');
+    await page.locator('.thread .msg[data-message-id="501"]').waitFor();
+    // Unpin from the menu.
+    // Let the jump's scroll and highlight settle: a scroll closes the menu.
+    await page.waitForTimeout(1200);
+    await page.locator('.thread .msg[data-message-id="501"]').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Unpin' }).click();
+    await chip.waitFor({ state: 'detached' });
+    assert.deepEqual(posts, [[501, true], [501, false]]);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 test('each agent page reopens its chat focused or not, as it was left', async () => {
   const { page, errors } = await setup(1280, 800);
   try {

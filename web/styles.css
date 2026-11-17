@@ -579,6 +579,28 @@
   .msg-menu { position: fixed; z-index: 50; display: flex; flex-direction: column; min-width: 140px; padding: 4px; background: var(--ink-2); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 20px rgb(0 0 0 / .4); }
   .msg-menu button { font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; background: transparent; border: none; border-radius: 4px; color: var(--cream); cursor: pointer; }
   .msg-menu button:hover, .msg-menu button:focus-visible { background: var(--ink); color: var(--honey); }
+  /* Pinned messages: a thin strip above a chat's messages, one line per pin. */
+  .pin-strip { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 6px; scrollbar-width: thin; }
+  .pin-chip {
+    flex: 0 1 auto; max-width: min(420px, 80%); min-width: 0; display: flex; align-items: baseline; gap: 4px;
+    padding: 2px 10px; font: inherit; font-size: 12px; line-height: 1.6; white-space: nowrap;
+    background: var(--ink-2); color: var(--cream-dim); border: 1px solid var(--honey-dim); border-radius: 999px; cursor: pointer;
+  }
+  .pin-chip:hover, .pin-chip:focus-visible { color: var(--cream); border-color: var(--honey); }
+  .pin-chip b { color: var(--honey); font-weight: 600; flex: none; }
+  .pin-chip .pin-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .pin-mark { font-size: 11px; }
+  dialog.pin-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); display: flex; flex-direction: column; }
+  dialog.pin-dialog:not([open]) { display: none; }
+  .pin-dialog-head { margin-bottom: 10px; color: var(--cream-dim); font-size: 13px; }
+  .pin-dialog-body { overflow: auto; min-height: 0; margin-bottom: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+  .pinned-list { margin-bottom: 18px; }
+  .pinned-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .pinned-list li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--ink-2); }
+  .pinned-list a { flex: 1; min-width: 0; display: grid; gap: 2px; color: var(--cream); text-decoration: none; }
+  .pinned-list a:hover .pin-text, .pinned-list a:focus-visible .pin-text { color: var(--honey); }
+  .pinned-list .pin-who { font-size: 12px; color: var(--cream-dim); }
+  .pinned-list .pin-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
   .compose-reply { display: flex; align-items: center; gap: 8px; justify-content: space-between; font-size: 12px; color: var(--cream-dim); border-left: 2px solid var(--honey-dim); padding: 2px 8px; margin-bottom: 6px; overflow-wrap: anywhere; }
   .compose-reply b { color: var(--honey); }
   .msg.from-owner .bubble { border-color: var(--honey-dim); background: rgba(242,169,59,.14); }

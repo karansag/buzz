@@ -185,6 +185,11 @@ class PruneReq(BaseModel):
     )
 
 
+class PinReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pinned: bool
+
+
 class OwnerNoteReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(max_length=1000)
@@ -1720,6 +1725,12 @@ def create_app(
             raise HTTPException(status_code=422, detail="Use only one of before, after or around")
         return db.agent_messages_page(conn, user_id, limit, before, after, around)
 
+    @app.post("/api/messages/{message_id}/pin")
+    def pin_message(message_id: int, req: PinReq, _: None = Depends(_require_owner)):
+        if not db.set_pinned(conn, message_id, req.pinned):
+            raise HTTPException(status_code=404, detail={"error": f"no message {message_id}"})
+        return {"ok": True, "pins": db.list_pins(conn)}
+
     @app.get("/api/agents/{user_id}/messages/count")
     def agent_messages_count(user_id: str, after: int = Query(..., ge=0), before: int = Query(..., ge=1),
                              _: None = Depends(_require_owner)):
@@ -2624,6 +2635,7 @@ def create_app(
             "recipients": recipients,
             "nodes": [local, *enrolled],
             "messages": msgs,
+            "pins": db.list_pins(conn),
             "tasks": db.list_tasks(conn),
             "teams": db.list_teams(conn),
             "supervisor": db.get_supervisor(conn),
