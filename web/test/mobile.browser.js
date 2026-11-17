@@ -398,6 +398,33 @@ test('a conversation expands to fill the window and back (button, shortcut, Esc)
   } finally { await page.close(); }
 });
 
+test('each agent page reopens its chat focused or not, as it was left', async () => {
+  const { page, errors } = await setup(1280, 800);
+  try {
+    const focused = () => page.locator('.thread.focused').count();
+    await page.goto(base + '#/agent/stoat');
+    await page.waitForSelector('.thread');
+    assert.equal(await focused(), 0);
+    await page.keyboard.press('Control+Shift+L');
+    await page.waitForSelector('.thread.focused');
+    await page.goto(base + `#/agent/${names[1]}`);
+    await page.waitForSelector('.thread');
+    assert.equal(await focused(), 0, 'an agent never focused opens normally');
+    await page.goto(base + '#/agent/stoat');
+    await page.waitForSelector('.thread.focused');
+    await page.reload();
+    await page.waitForSelector('.thread.focused');
+    await page.keyboard.press('Escape');
+    assert.equal(await focused(), 0);
+    await page.goto(base + `#/agent/${names[1]}`);
+    await page.waitForSelector('.thread');
+    await page.goto(base + '#/agent/stoat');
+    await page.waitForSelector('.thread');
+    assert.equal(await focused(), 0, 'leaving focus mode is saved too');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 for (const [width, height] of [[320,568], [390,844], [430,932], [844,390]]) {
   test(`mobile focused chat gives messages most of the screen at ${width}x${height}`, async () => {
     const { page, state, errors } = await setup(width, height);

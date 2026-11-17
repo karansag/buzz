@@ -1292,6 +1292,19 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 // Text size in focus mode, in px; A− / A+ step it and the choice is kept.
 const FOCUS_FONT = { min: 12, max: 26, start: 16, step: 2 };
 const FOCUS_FONT_KEY = "agent-swarm:focus-font";
+// Focus mode per agent page, {agent: true|false}: the owner's chat with an
+// agent opens the way it was left.
+const THREAD_FOCUS_KEY = "agent-swarm:thread-focus";
+const savedFocus = (agent) => {
+  try { return JSON.parse(localStorage.getItem(THREAD_FOCUS_KEY) || "{}")[agent]; } catch { return undefined; }
+};
+const saveFocus = (agent, on) => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(THREAD_FOCUS_KEY) || "{}");
+    saved[agent] = on;
+    localStorage.setItem(THREAD_FOCUS_KEY, JSON.stringify(saved));
+  } catch { /* not kept */ }
+};
 // How long a scroll anchor is held across the reflows that follow a layout
 // change in focus mode (a phone's viewport sizing, a font swapping in).
 const FOCUS_HOLD_MS = 500;
@@ -1360,8 +1373,10 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   const [expanded, setExpanded] = useState(!!recipient);
   // Focus mode: the thread fills the window for reading. The owner's thread
   // also answers to Cmd/Ctrl+Shift+L, including from the reply box; Esc leaves.
-  // A teammate switch made in focus mode lands in focus mode.
-  const [focused, setFocused] = useState(() => !!(recipient && switchCarry?.focus));
+  // It opens the way the owner last left this agent's chat; an agent with
+  // nothing saved follows the page switched from, so a teammate switch made
+  // in focus mode lands in focus mode.
+  const [focused, setFocused] = useState(() => !!recipient && (savedFocus(recipient) ?? !!switchCarry?.focus));
   const threadRef = useRef(null);
   const focusMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const focusShortcut = focusMac ? "⌘⇧L" : "Ctrl+Shift+L";
@@ -1484,6 +1499,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     rememberScroll();
     setExpanded(true);
     setFocused(next);
+    if (recipient) saveFocus(recipient, next);
   };
   const toggleFocus = () => setFocus(!focused);
   useEffect(() => {
