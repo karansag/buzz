@@ -1955,14 +1955,15 @@ test('detail history survives global feed eviction, pages older, and preserves s
     await page.getByText('archived-message-349', { exact: true }).waitFor();
     assert.equal(await page.getByText(/Nothing yet/).count(), 0);
     const box = page.locator('.thread .msgs').first();
-    await box.evaluate(el => { el.scrollTop = 250; });
-    await page.waitForTimeout(100);
-    const before = await box.evaluate(el => ({ top:el.scrollTop, height:el.scrollHeight }));
-    await page.getByRole('button', { name: 'Load older messages', exact: true }).click();
+    const olderButton = page.locator('.thread .msgs .older-history');
+    assert.equal(await olderButton.count(), 1);
+    // Scrolling up near the top loads the older page by itself, in place.
+    const before = await box.evaluate(el => { el.scrollTop = 250; return { top:el.scrollTop, height:el.scrollHeight }; });
     await page.getByText('archived-message-10', { exact: true }).waitFor({state:'attached'});
     const after = await box.evaluate(el => ({ top:el.scrollTop, height:el.scrollHeight }));
-    assert.ok(Math.abs((after.top-before.top)-(after.height-before.height)) < 2);
-    assert.equal(await page.getByRole('button', { name: 'Load older messages', exact: true }).count(), 0);
+    assert.ok(Math.abs((after.top-before.top)-(after.height-before.height)) < 2,
+      `the reader moved: ${JSON.stringify({ before, after })}`);
+    assert.equal(await olderButton.count(), 0);
     history.push({ ...history[0], id: 350, ts: state.now, content: 'new scoped message' });
     await page.getByText('new scoped message', { exact: true }).waitFor({state:'attached'});
     await page.evaluate(() => { location.hash = '#/agent/ferret'; });

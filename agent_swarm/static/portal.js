@@ -13565,8 +13565,9 @@ function sentByViewer(sender, a, b, page) {
 	return sender !== a;
 }
 var JUMP_SHOW_PX = 160;
+var OLDER_PX = 300;
 var gapLabel = ({ count, after, before }) => `${count} message${count === 1 ? "" : "s"} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
-function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null }) {
+function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null }) {
 	_(() => {
 		if (search?.open) setExpanded(true);
 	}, [search?.open]);
@@ -13807,8 +13808,17 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		});
 	};
 	const newSinceAway = awayFrom === null ? 0 : msgs.filter((m) => typeof m.id === "number" && m.id > awayFrom && m.sender !== "owner").length;
+	const nearTop = A(false);
+	const wantOlder = (el) => {
+		nearTop.current = el.scrollTop < OLDER_PX;
+		if (nearTop.current && older?.more && !older.busy) older.load();
+	};
+	h(() => {
+		if (nearTop.current && boxRef.current && expanded) wantOlder(boxRef.current);
+	}, [older?.busy, older?.more]);
 	const onScroll = (e) => {
 		if (!expanded) return;
+		wantOlder(e.currentTarget);
 		noteAway(e.currentTarget);
 		savedScroll.current = e.currentTarget.scrollTop;
 		if (previousHistory.current) previousHistory.current.top = e.currentTarget.scrollTop;
@@ -13874,6 +13884,8 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     ${search && m$1`<${ConversationSearchBar} search=${search} />`}
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
+      ${older?.more && m$1`<button type="button" key="older" class="mini older-history" disabled=${older.busy} onClick=${older.load}>
+        ${older.busy ? "Loading older messages…" : "Scroll up or click for older messages"}</button>`}
       ${msgs.map((m) => m$1`${gapAt.has(m.id) && m$1`<div key=${`gap-${m.id}`} class="msg-gap" role="note">
         <span>${gapLabel(gapAt.get(m.id))}</span>
         ${loadGap && m$1`<button type="button" class="mini" onClick=${() => loadGap(gapAt.get(m.id))}>load them</button>`}</div>`}
@@ -14258,7 +14270,12 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       freshIds=${freshIds} now=${state.now} refresh=${refresh}
       search=${a === "owner" || b === "owner" ? conversationSearch : null}
       jumpTo=${msgs === jumpThread ? jumpId : null}
-      gaps=${history.gaps} loadGap=${history.loadGap} />`;
+      gaps=${history.gaps} loadGap=${history.loadGap}
+      older=${{
+			more: history.more,
+			busy: history.busy,
+			load: history.loadOlder
+		}} />`;
 	};
 	return m$1`<div>
     <div class="focus-top">
@@ -14301,7 +14318,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       ${`${gapLabel(gap)}.`}
       <button type="button" class="mini" disabled=${history.busy} onClick=${() => history.loadGap(gap)}>
         ${history.busy ? "Loading…" : "load the missing messages"}</button></p>`)}
-    ${history.more && m$1`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
+    ${!hasOwnerThread && history.more && m$1`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
       ${history.busy ? "Loading older messages…" : "Load older messages"}</button>`}
     ${hasOwnerThread ? renderThread(groups.get(ownerThread)) : m$1`<div class="thread">
       <${ConversationSearchBar} search=${conversationSearch} />
