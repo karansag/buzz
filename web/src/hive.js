@@ -140,6 +140,10 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
   const taskCellsRef = useRef([]);
   const taskStatusesRef = useRef(null);
   const pendingShipmentsRef = useRef([]);
+  // Bee errands: name -> { queue: [{ kind: "fetch" | "ship", id }], leg }.
+  // A fetch flies to the task's comb cell and home with it; a ship flies
+  // the comb to the shipped corner and home empty.
+  const flightsRef = useRef(new Map());
   const shipmentsRef = useRef([]);
   const dragTaskRef = useRef(null);
   const dragBeeRef = useRef(null);
@@ -176,7 +180,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
 
   useEffect(() => {
     if (compact) {
-      pendingRef.current = []; pendingShipmentsRef.current = [];
+      pendingRef.current = []; pendingShipmentsRef.current = []; flightsRef.current.clear();
       return;
     }
     const canvas = canvasRef.current;
@@ -234,6 +238,47 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
       return { x: v*v*a.x + 2*v*u*c.x + u*u*b.x,
         y: v*v*a.y + 2*v*u*c.y + u*u*b.y };
     };
+    // Move a bee along its current errand. The bee's home spot for this
+    // frame is already in bee.x/y; a flight replaces it with a point on a
+    // curve, so hover and drag hit testing follow the drawn bee.
+    const flyErrand = (bee, now, corner, taskById) => {
+      const f = flightsRef.current.get(bee.name);
+      if (!f) return;
+      const home = { x: bee.x, y: bee.y };
+      // Take off from where the bee was last drawn: the change that sent it
+      // also changes its hover pace, which would move its home spot.
+      const last = beesRef.current.get(bee.name);
+      for (let guard = 0; guard < 4; guard++) {
+        const e = f.queue[0];
+        if (!e) { flightsRef.current.delete(bee.name); return; }
+        if (!f.leg) f.leg = { n: 0, start: now, from: { ...(f.at || (last ? { x: last.x, y: last.y } : home)) } };
+        const task = taskById.get(e.id);
+        // A fetch whose task left this bee on the way out turns for home.
+        if (f.leg.n === 0 && e.kind === "fetch" && (!task || task.assignee !== bee.name || task.status === "done"))
+          f.leg = { n: 1, start: now, from: { ...(f.at || home) }, empty: true };
+        // The comb can reflow while the bee is out; aim at where the cell is drawn now.
+        const cell = e.kind === "fetch" && (taskCellsRef.current.find(c => c.task.id === e.id) || e.cell);
+        const to = f.leg.n === 0 ? (cell || corner) : home;
+        const dist = Math.hypot(to.x - f.leg.from.x, to.y - f.leg.from.y);
+        const ms = 1500 + Math.min(1000, dist * 2.5);
+        const u = (now - f.leg.start) / ms;
+        if (u >= 1) {
+          if (f.leg.n === 0) f.leg = { n: 1, start: f.leg.start + ms, from: { ...to } };
+          else { f.queue.shift(); f.leg = null; f.at = null; }
+          continue;
+        }
+        const ease = u * u * (3 - 2 * u);
+        const c = { x: (f.leg.from.x + to.x) / 2, y: Math.max(14, Math.min(f.leg.from.y, to.y) - 40) };
+        const p = point(f.leg.from, to, c, ease);
+        const ahead = point(f.leg.from, to, c, Math.min(1, ease + .02));
+        bee.x = p.x; bee.y = p.y; f.at = p;
+        if (Math.hypot(ahead.x - p.x, ahead.y - p.y) > .01) { bee.dx = ahead.x - p.x; bee.dy = ahead.y - p.y; }
+        bee.busy = true;
+        const carrying = !f.leg.empty && (e.kind === "fetch") === (f.leg.n === 1);
+        if (carrying && task) bee.cargo = task;
+        return;
+      }
+    };
     const draw = (now, still = false) => {
       const width = ensureSize();
       const data = stateRef.current;
@@ -245,8 +290,46 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
 
       const center = { x: width / 2, y: 118 };
       const ownerNode = { x: width / 2, y: 235 };
-      const done = (data.tasks || []).filter(t => t.status === "done").length;
       const doneX = width - 28;
+      const corner = { x: doneX, y: 28 };
+
+      // Errands. Detect them from what the last frame drew: a task that sat
+      // in the comb and is now carried by a live bee gets fetched; a task
+      // that just went done with a live assignee gets shipped by that bee.
+      const flights = flightsRef.current;
+      const taskById = new Map((data.tasks || []).map(t => [t.id, t]));
+      for (const name of flights.keys()) if (!live.has(name)) flights.delete(name);
+      const errand = (name) => {
+        if (!flights.has(name)) flights.set(name, { queue: [], leg: null });
+        return flights.get(name);
+      };
+      const queued = (kind, id) => [...flights.values()].some(f => f.queue.some(e => e.kind === kind && e.id === id));
+      const shipments = [];
+      if (still) flights.clear();
+      else {
+        const lastCells = new Map(taskCellsRef.current.map(c => [c.task.id, { x: c.x, y: c.y }]));
+        for (const task of data.tasks || []) {
+          if (task.status === "done" || !task.assignee || !live.has(task.assignee)) continue;
+          const cell = lastCells.get(task.id);
+          if (cell && !queued("fetch", task.id))
+            errand(task.assignee).queue.push({ kind: "fetch", id: task.id, cell });
+        }
+        for (const task of pendingShipmentsRef.current.splice(0)) {
+          if (task.assignee && live.has(task.assignee))
+            errand(task.assignee).queue.push({ kind: "ship", id: task.id });
+          else shipments.push(task);
+        }
+      }
+      // A fetch still on its way out leaves the task in the comb; a ship
+      // still on its way out has not reached the shipped count.
+      const inComb = new Set(), unshipped = new Set();
+      for (const f of flights.values())
+        f.queue.forEach((e, i) => {
+          const out = i > 0 || !f.leg || f.leg.n === 0;
+          if (out && e.kind === "fetch") inComb.add(e.id);
+          if (out && e.kind === "ship") unshipped.add(e.id);
+        });
+      const done = (data.tasks || []).filter(t => t.status === "done" && !unshipped.has(t.id)).length;
       hex(doneX - 7, 34, 11, "rgba(143,191,111,.07)", "#567546");
       hex(doneX, 28, 14, "rgba(143,191,111,.15)", "#8fbf6f");
       ctx.fillStyle = "#8fbf6f"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
@@ -342,9 +425,9 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
       }
 
       const waiting = (data.tasks || []).filter(t =>
-        t.status !== "done" && (!t.assignee || !live.has(t.assignee)));
+        t.status !== "done" && (!t.assignee || !live.has(t.assignee) || inComb.has(t.id)));
       const carriedCount = (data.tasks || []).filter(t =>
-        t.status !== "done" && t.assignee && live.has(t.assignee)).length;
+        t.status !== "done" && t.assignee && live.has(t.assignee) && !inComb.has(t.id)).length;
       const visible = waiting.slice(0, 15);
       const cols = Math.min(5, Math.max(1, Math.ceil(Math.sqrt(visible.length || 1))));
       const rows = Math.ceil(visible.length / cols);
@@ -409,6 +492,13 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
       ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
       ctx.fillText("owner", ownerNode.x, 253);
 
+      // The task a bee is flying home with (a fetch's return leg) or out to
+      // the shipped corner (a ship's first leg); drawn under the bee.
+      const carried = (name, id) => {
+        const f = flights.get(name);
+        const e = f?.leg && f.queue[0];
+        return !!e && e.id === id && (e.kind === "fetch") === (f.leg.n === 1);
+      };
       const beeData = grouped.map((r, i) => {
         const name = r.user_id;
         const seed = hue(name);
@@ -416,13 +506,16 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
         const mine = (data.tasks || []).filter(t => t.assignee === name && t.status !== "done")
           .sort((a, b) => (a.status === "picked_up" ? -1 : 1) - (b.status === "picked_up" ? -1 : 1)
             || b.updated_at - a.updated_at);
-        const picked = mine.find(t => t.status === "picked_up");
-        const assigned = !picked && mine.find(t => t.status === "open");
+        // A task still in the comb or in flight is not drawn on the bee yet,
+        // but already sets its pace, so the bee does not jump when it lands.
+        const held = mine.filter(t => !inComb.has(t.id) && !carried(name, t.id));
+        const picked = held.find(t => t.status === "picked_up");
+        const assigned = !picked && held.find(t => t.status === "open");
         const primary = picked || assigned;
-        const extras = mine.filter(t => !primary || t.id !== primary.id);
+        const extras = held.filter(t => !primary || t.id !== primary.id);
         const phase = seed / 57;
         const working = agentStatus(r) === "working";
-        const busy = !!picked || working;
+        const busy = mine.some(t => t.status === "picked_up") || working;
         const speed = busy ? 2.5 : 1;
         const clustered = r.team_id && positioned.has(r.team_id);
         const amp = (busy ? 26 : 18) * (clustered ? .55 : 1);
@@ -451,7 +544,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
           bee.x = out.x; bee.y = out.y;
         }
         bee.x = Math.max(16, Math.min(width - 16, bee.x));
-        bee.y = Math.max(34, Math.min(bee.picked || bee.working ? 208 : 224, bee.y));
+        bee.y = Math.max(34, Math.min(bee.busy ? 208 : 224, bee.y));
       }
       // The waggle dance: every bee leaves its spot, flies a shared
       // figure eight with a shimmy across the middle, and flies back.
@@ -490,6 +583,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
           });
         }
       }
+      if (!still) for (const bee of beeData) flyErrand(bee, now, corner, taskById);
       for (const bee of beeData) {
         const { r, name, harness, x, y, dx, dy, q, picked, assigned, primary, extras, working, busy, dancing } = bee;
         const doing = r.summaries?.find(s => s.source !== "owner");
@@ -526,6 +620,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
         ctx.fillStyle = "#16120c"; ctx.beginPath(); ctx.arc(11, 0, 3.5, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
         if (picked) token(picked, x, y + 16);
+        if (bee.cargo) token(bee.cargo, x + (picked ? -16 : 0), y + 16);
         extras.slice(0, 4).forEach((task, j) => {
           const a = -1.15 + j * .75;
           token(task, x + Math.cos(a) * 25, y + Math.sin(a) * 22);
@@ -537,7 +632,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
         }
         // Body and machine caption share one identity color. The harness
         // remains a distinct, neutral glyph beside the handle.
-        const labelY = y + (picked ? 35 : working ? 34 : 19);
+        const labelY = y + (picked || bee.cargo ? 35 : working ? 34 : 19);
         ctx.font = "10px ui-monospace, monospace";
         ctx.textBaseline = "alphabetic";
         const markGap = 3;
@@ -652,11 +747,11 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
         }
       }
 
-      if (!still && pendingShipmentsRef.current.length) {
+      // A done task with no live bee to carry it flies to the corner alone.
+      if (shipments.length) {
         const born = now;
-        shipmentsRef.current.push(...pendingShipmentsRef.current.splice(0).map(task => ({
-          born, task, a: { ...(bees.get(task.assignee) || ownerNode) },
-          b: { x: doneX, y: 28 },
+        shipmentsRef.current.push(...shipments.map(task => ({
+          born, task, a: { ...(bees.get(task.assignee) || ownerNode) }, b: corner,
         })));
       } else if (still) pendingShipmentsRef.current.length = 0;
       shipmentsRef.current = shipmentsRef.current.filter(s => now - s.born < 1100);
@@ -1003,6 +1098,8 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
       teamBoxes: () => teamBoxesRef.current,
       taskCells: () => taskCellsRef.current,
       dancing: () => danceRef.current !== null,
+      errands: () => [...flightsRef.current].map(([name, f]) =>
+        ({ name, queue: f.queue.map(e => `${e.kind}:${e.id}`), leg: f.leg && f.leg.n })),
     };
     canvas.addEventListener("mousemove", move); canvas.addEventListener("mouseleave", leave);
     canvas.addEventListener("click", click);

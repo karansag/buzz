@@ -2358,6 +2358,88 @@ test('waggle dance button sends every bee round a figure eight, then home', asyn
   } finally { await page.close(); }
 });
 
+test('a bee fetches a task from the comb, carries it home, then ships it to the corner', async () => {
+  const { page, state, errors } = await setup(1440, 900, false);
+  try {
+    await page.goto(base);
+    await page.waitForFunction(() => window.__hive?.taskCells().some(c => c.task.id === 74) && window.__hive.bees().has('ferret'));
+    // Let the comb settle around the team outlines before reading the cell.
+    await page.waitForTimeout(500);
+    const cell = await page.evaluate(() => { const c = window.__hive.taskCells().find(c => c.task.id === 74); return { x: c.x, y: c.y }; });
+    const home = await page.evaluate(() => { const b = window.__hive.bees().get('ferret'); return { x: b.x, y: b.y }; });
+    // Sample ferret's drawn spot (the one hover and drag test against) and its errands.
+    const track = (ms) => page.evaluate(async (ms) => {
+      const out = [];
+      for (const end = performance.now() + ms; performance.now() < end;) {
+        const b = window.__hive.bees().get('ferret');
+        out.push({ x: b.x, y: b.y, errands: window.__hive.errands(),
+          inComb: window.__hive.taskCells().some(c => c.task.id === 74) });
+        await new Promise(r => setTimeout(r, 50));
+      }
+      return out;
+    }, ms);
+    const near = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+    // No jumps: between two samples 50 ms apart the bee moves a short way.
+    const smooth = (track) => Math.max(...track.slice(1).map((s, i) => near(s, track[i])));
+    Object.assign(state.tasks.find(t => t.id === 74), { assignee: 'ferret', status: 'picked_up' });
+    const fetch = await track(9000);
+    const started = fetch.findIndex(s => s.errands.some(e => e.queue.includes('fetch:74')));
+    assert.ok(started >= 0, 'ferret never set off for #74');
+    const atCell = fetch.findIndex(s => near(s, cell) < 10);
+    assert.ok(atCell > started, `ferret never reached the comb cell (closest ${Math.min(...fetch.map(s => near(s, cell))).toFixed(1)}px)`);
+    // The comb holds #74 until ferret takes it, then ferret carries it home.
+    const taken = fetch.findIndex(s => !s.inComb);
+    assert.ok(taken >= atCell && near(fetch[taken], cell) < 6, `taken at sample ${taken}, ${near(fetch[taken], cell).toFixed(1)}px from the cell`);
+    assert.ok(fetch.slice(taken).every(s => !s.inComb));
+    const last = fetch.at(-1);
+    assert.deepEqual(last.errands, []);
+    assert.ok(smooth(fetch) < 18, `ferret jumped ${smooth(fetch).toFixed(1)}px`);
+    assert.ok(near(last, home) < 60, `ferret ended ${near(last, home).toFixed(1)}px from home`);
+    // Each leg takes 1.5-2.5 s at 50 ms a sample.
+    const back = fetch.findIndex((s, i) => i > atCell && s.errands.length === 0);
+    assert.ok(atCell - started >= 25 && atCell - started <= 55, `out leg ${atCell - started} samples`);
+    assert.ok(back - atCell >= 25 && back - atCell <= 55, `home leg ${back - atCell} samples`);
+
+    const corner = await page.evaluate(() => ({ x: document.querySelector('.hive-panel canvas').clientWidth - 28, y: 28 }));
+    Object.assign(state.tasks.find(t => t.id === 74), { status: 'done' });
+    const ship = await track(9000);
+    const shipping = ship.findIndex(s => s.errands.some(e => e.queue.includes('ship:74')));
+    assert.ok(shipping >= 0, 'ferret never set off to ship #74');
+    const atCorner = ship.findIndex(s => near(s, corner) < 10);
+    assert.ok(atCorner > shipping, `ferret never reached the shipped corner (closest ${Math.min(...ship.map(s => near(s, corner))).toFixed(1)}px)`);
+    assert.deepEqual(ship.at(-1).errands, []);
+    assert.ok(near(ship.at(-1), home) < 60);
+    assert.ok(smooth(ship) < 18, `ferret jumped ${smooth(ship).toFixed(1)}px`);
+    if (process.env.TASK476_FRAMES) {
+      Object.assign(state.tasks.find(t => t.id === 74), { status: 'open', assignee: null });
+      await page.waitForFunction(() => window.__hive.taskCells().some(c => c.task.id === 74));
+      Object.assign(state.tasks.find(t => t.id === 74), { assignee: 'ferret', status: 'picked_up' });
+      await page.waitForFunction(() => window.__hive.errands().length > 0, null, { timeout: 4000 });
+      for (let i = 0; i < 8; i++) {
+        await page.locator('.hive-panel canvas').screenshot({ path: `${process.env.TASK476_FRAMES}/frame-${i}.png` });
+        await page.waitForTimeout(500);
+      }
+    }
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('with reduced motion a bee takes and ships a task without flying', async () => {
+  const { page, state, errors } = await setup(1440, 900, false);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  try {
+    await page.goto(base);
+    await page.waitForFunction(() => window.__hive?.taskCells().some(c => c.task.id === 74));
+    Object.assign(state.tasks.find(t => t.id === 74), { assignee: 'ferret', status: 'picked_up' });
+    await page.waitForFunction(() => !window.__hive.taskCells().some(c => c.task.id === 74), null, { timeout: 6000 });
+    assert.deepEqual(await page.evaluate(() => window.__hive.errands()), []);
+    Object.assign(state.tasks.find(t => t.id === 74), { status: 'done' });
+    await page.waitForTimeout(2500);
+    assert.deepEqual(await page.evaluate(() => window.__hive.errands()), []);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 test('task history tiles edit, complete, and reopen a task', async () => {
   const { page, state, errors } = await setup(390,844);
   const patches = [];
