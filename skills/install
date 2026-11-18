@@ -3,6 +3,7 @@
 # the harnesses scan, so edits in the repo reach every agent:
 #   ~/.agents/skills  Codex and Pi
 #   ~/.claude/skills  Claude Code
+#   ~/.gemini/config/skills Antigravity CLI
 # An old copy at a target is moved to a backup beside the skills directory,
 # never inside it, where it would load twice. Links an earlier version of this
 # script left in ~/.codex/skills or ~/.pi/agent/skills are removed for the
@@ -38,6 +39,7 @@ for skill in "$repo_skills"/*/; do
   name="$(basename "$skill")"
   link "${skill%/}" "${HOME}/.agents/skills"
   link "${skill%/}" "${HOME}/.claude/skills"
+  link "${skill%/}" "${HOME}/.gemini/config/skills"
   unlink_old "${CODEX_HOME:-${HOME}/.codex}/skills/$name"
   unlink_old "${PI_CODING_AGENT_DIR:-${HOME}/.pi/agent}/skills/$name"
 done

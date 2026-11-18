@@ -4,6 +4,7 @@
   Claude Code  SessionStart hook in ~/.claude/settings.json
   Codex        SessionStart hook in ~/.codex/hooks.json (trust it once via /hooks)
   Pi           extension linked at ~/.pi/agent/extensions/agent-swarm
+  Antigravity  SessionStart hook in ~/.gemini/config/hooks.json
 
 Each runs `buzz autoregister`, which registers the session only when
 its harness runs straight in its own tmux pane. JSON files are backed up to
@@ -21,6 +22,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 HOME = Path.home()
 STAMP = time.strftime("%Y%m%d-%H%M%S") + f"-{time.time_ns()}"
+NAME = "agent-swarm"
 
 
 def is_our_hook(command: str) -> bool:
@@ -63,6 +65,45 @@ def edit_hooks(path: Path, remove: bool, command: str | None) -> None:
     print(f"{path}: {'removed' if remove else 'added'} SessionStart hook")
 
 
+def is_our_agent_hook(handler: object) -> bool:
+    return isinstance(handler, dict) and is_our_hook(handler.get("command", ""))
+
+
+def edit_agy_hooks(path: Path, remove: bool, command: str | None) -> None:
+    """Antigravity CLI keeps each hook's handlers beside a name in its own file.
+
+    `SessionStart` handlers sit in a flat list (matchers are for tool events
+    only), and a handler's timeout is in seconds.
+    """
+    original = json.loads(path.read_text()) if path.exists() else {}
+    if not isinstance(original, dict):
+        sys.exit(f"{path} must contain a JSON object")
+    config = dict(original)
+    before = original.get(NAME)
+    ours = dict(before) if isinstance(before, dict) else {}
+    handlers = ours.get("SessionStart")
+    handlers = handlers if isinstance(handlers, list) else []
+    kept = [h for h in handlers if not is_our_agent_hook(h)]
+    if remove:
+        ours = {**ours, "SessionStart": kept}
+    else:
+        ours = {**ours, "SessionStart": [*kept, {"type": "command", "command": command, "timeout": 15}]}
+    if not ours["SessionStart"]:
+        del ours["SessionStart"]
+    if ours:
+        config[NAME] = ours
+    else:
+        config.pop(NAME, None)
+    if config == original:
+        print(f"{path}: unchanged")
+        return
+    if path.exists():
+        shutil.copy2(path, f"{path}.bak-{STAMP}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2) + "\n")
+    print(f"{path}: {'removed' if remove else 'added'} SessionStart hook")
+
+
 def link_pi(remove: bool) -> None:
     agent_dir = Path(os.environ.get("PI_CODING_AGENT_DIR") or HOME / ".pi/agent")
     dest = agent_dir / "extensions/agent-swarm"
@@ -90,6 +131,9 @@ def main() -> None:
         command = f"{shlex.quote(os.path.abspath(executable))} autoregister --hook"
     edit_hooks(HOME / ".claude/settings.json", remove, command)
     edit_hooks(Path(os.environ.get("CODEX_HOME") or HOME / ".codex") / "hooks.json", remove, command)
+    # Antigravity CLI reads its own hooks.json, with SessionStart handlers
+    # flat (no matcher group) and a timeout in seconds.
+    edit_agy_hooks(HOME / ".gemini" / "config" / "hooks.json", remove, command)
     link_pi(remove)
     if not remove:
         print("Codex skips new hooks until trusted: run /hooks in Codex once and trust it.")

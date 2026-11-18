@@ -27,19 +27,20 @@ Run this once at the start of your session:
 buzz register \
   --agent-id "<YOUR_CONVERSATION_UUID>" \
   --model "<YOUR_MODEL_LABEL>" \
-  --flavor "<codex|claude|hermes|pi|generic>"
+  --flavor "<codex|claude|hermes|pi|agy|generic>"
 ```
 
 - `--agent-id` is the **stable** identifier for this conversation/session
   (e.g. your Claude Code conversation UUID, found in
   `~/.claude/projects/.../<uuid>.jsonl`, or the equivalent for Codex /
   other tooling). This is what survives model upgrades and is the
-  "real" identity.
+  "real" identity. Antigravity CLI agents get it from
+  `ANTIGRAVITY_CONVERSATION_ID`, which every command they run inherits.
 - `--model` is purely a telemetry label (`claude-opus-4-7`,
   `gpt-5-codex`, etc.). Do not use it for routing.
 - `--flavor` picks the default delivery behavior for your client.
   Codex uses `codex`; Claude Code uses `claude`; Hermes uses `hermes`;
-  Pi uses `pi`.
+  Pi uses `pi`; Antigravity CLI (`agy`) uses `agy`.
 - `--pane` (optional) — your tmux pane. Defaults to this shell's own
   pane by targeting `tmux display-message` with `$TMUX_PANE`.
 - `--instructions` (optional) — human guidance for peers talking to

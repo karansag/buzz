@@ -72,17 +72,18 @@ buzz-server
 `uv pip install -e .` instead, prefix the commands with `uv run`.
 
 Open <http://127.0.0.1:8765/>. Then install the register skill, which
-Claude Code, Codex, and Pi share:
+Claude Code, Codex, Pi, and Antigravity CLI share:
 
 ```bash
 skills/install
 ```
 
-It links `skills/agent-swarm-register` into `~/.claude/skills` (Claude Code)
-and `~/.agents/skills` (Codex and Pi), so later edits in the repo reach every
-agent. An old copy already there is moved aside to `<skills dir>.bak-<time>/`.
-Links an earlier installer left in `~/.codex/skills` or `~/.pi/agent/skills`
-are removed, so no harness sees the skill twice.
+It links `skills/agent-swarm-register` into `~/.claude/skills` (Claude Code),
+`~/.agents/skills` (Codex and Pi) and `~/.gemini/config/skills` (Antigravity
+CLI, agy), so later edits in the repo reach every agent. An old copy already
+there is moved aside to `<skills dir>.bak-<time>/`. Links an earlier version
+of this installer left in `~/.codex/skills` or `~/.pi/agent/skills` are
+removed, so no harness sees the skill twice.
 
 Now tell any running agent "register yourself with agent-swarm". It gets a
 short handle such as `stoat` and shows up on the dashboard. To have agents
@@ -99,7 +100,7 @@ The CLI works out the harness from the processes it runs under, and so the
 delivery flavor. It reads the model from `PI_MODEL` for Pi and from
 `~/.codex/config.toml` for Codex. Claude Code does not expose its model, so
 pass `--model` there. For another program, pass `--flavor` (`claude`,
-`codex`, `pi`, `hermes`, or `generic`).
+`codex`, `pi`, `agy`, `hermes`, or `generic`).
 
 Then:
 
@@ -148,6 +149,16 @@ preserving unrelated handlers.
 - Codex: a `SessionStart` hook in `~/.codex/hooks.json`. Codex skips a new
   hook until you trust it once with `/hooks`.
 - Pi: an extension linked at `~/.pi/agent/extensions/agent-swarm`.
+- Antigravity (`agy`): a `SessionStart` hook in `~/.gemini/config/hooks.json`.
+  Antigravity reads `AGENTS.md` and `GEMINI.md` from the workspace root and
+  its parents to the repository root (and from `~/.gemini/`), and its hooks
+  use `hooks.json` with timeouts in seconds.
+
+Antigravity agents register when the harness owns the tmux pane. The
+installer writes `~/.gemini/config/hooks.json`; it does not change other
+settings or read credentials. Antigravity's hook receives `conversationId`
+and `modelName` through the session hook payload and can inject the protocol
+brief as a system message.
 
 Each runs `buzz autoregister`. It registers only when the harness runs
 straight in its own tmux pane: walking up from the harness to the pane's
@@ -711,7 +722,7 @@ else running in the pane, such as background shells, is lost.
 ## CLI reference
 
 ```bash
-buzz register [--model <id>] [--flavor <claude|codex|pi|hermes|generic>] [--agent-id <id>]
+buzz register [--model <id>] [--flavor <claude|codex|pi|agy|hermes|generic>] [--agent-id <id>]
                      [--name <handle>] [--pane <id>] [--instructions <text>]
                      [--message-prefix <text>] [--submit-key <key>]
 buzz autoregister [--verbose]       # what the startup hooks run
@@ -726,7 +737,7 @@ buzz task-create <title> [--description <text>] [--assignee <handle>] [--depends
 buzz task-update <id> [--status <s>] [--assignee <h>] [--worktree <path>] [--depends-on 3,5] [--note <text>]
 buzz digest [--minutes N | --after-message ID] [--json]
 buzz supervisor [<handle> --objective <text> | --clear]
-buzz spawn [--flavor claude|codex|pi|hermes] [--model <m>] [--node <machine>] [--cwd <folder>]
+buzz spawn [--flavor claude|codex|pi|agy|hermes] [--model <m>] [--node <machine>] [--cwd <folder>]
 buzz stop <handle>
 buzz prune [--include-shells]   # forget agents whose pane is gone
 buzz snapshot             # save tmux layout + each pane's agent session

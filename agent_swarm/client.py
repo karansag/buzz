@@ -428,6 +428,9 @@ def cmd_autoregister(args: argparse.Namespace) -> int:
     # The hook's own input names the new session. The environment may be an
     # outer session's: a nested `codex exec` inherits its parent's thread id.
     session = hook.get("session_id") if isinstance(hook.get("session_id"), str) else None
+    if not session and isinstance(hook.get("conversationId"), str):
+        # Antigravity CLI names the session conversationId.
+        session = hook["conversationId"]
     if not session:
         try:
             env_harness, env_session = harness_session()
@@ -439,6 +442,9 @@ def cmd_autoregister(args: argparse.Namespace) -> int:
     if session:
         payload["agent_id"] = session
     model = hook.get("model") if isinstance(hook.get("model"), str) else None
+    if not model and isinstance(hook.get("modelName"), str):
+        # Antigravity CLI names the model modelName.
+        model = hook["modelName"]
     model = model or harness_model(harness)
     if model:
         payload["model"] = model
@@ -456,8 +462,12 @@ def cmd_autoregister(args: argparse.Namespace) -> int:
         return skip("hub returned no protocol brief")
     brief = short_brief(response["protocol_brief"])
     if args.hook:
-        # Claude Code and Codex both add this to the session's context.
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": brief}}))
+        if harness == "agy":
+            # Antigravity CLI injects this as an out-of-band system message.
+            print(json.dumps({"injectSteps": [{"systemMessage": {"systemMessage": brief}}]}))
+        else:
+            # Claude Code and Codex both add this to the session's context.
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": brief}}))
     else:
         print(brief)
     return 0

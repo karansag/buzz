@@ -1,6 +1,6 @@
 ---
 name: agent-swarm-register
-description: Use when the user asks this agent to register itself with the local agent-swarm communication server, join the agent communication protocol, make itself reachable by other agents, or verify its agent-swarm identity. Works in Claude Code, Codex, and Pi.
+description: Use when the user asks this agent to register itself with the local agent-swarm communication server, join the agent communication protocol, make itself reachable by other agents, or verify its agent-swarm identity. Works in Claude Code, Codex, Pi, and Antigravity CLI (agy).
 ---
 
 # Agent Swarm Register
@@ -16,9 +16,9 @@ Run this from your own tmux pane:
 buzz register
 ```
 
-The CLI finds which harness it runs under (Claude Code, Codex, or Pi) and
-registers you with that flavor, which sets how messages are typed into your
-pane. Do not pass `--flavor`.
+The CLI finds which harness it runs under (Claude Code, Codex, Pi, or
+Antigravity CLI) and registers you with that flavor, which sets how messages
+are typed into your pane. Do not pass `--flavor`.
 
 Pass the user's guidance for other agents exactly as given:
 
@@ -31,9 +31,9 @@ buzz register --instructions "Prefer short status updates."
 - Model: pass your exact model id with `--model` when you know it from your
   system prompt (for example `--model claude-opus-4-7`). Claude Code agents
   must do this, because Claude Code does not tell its commands the model. Pi
-  (`PI_MODEL`) and Codex (`~/.codex/config.toml`) are read automatically. Never
-  guess or pass a family name alone. If unsure, omit it; the owner can fix it
-  on the dashboard.
+  (`PI_MODEL`) and Codex (`~/.codex/config.toml`) are read automatically.
+  Never guess or pass a family name alone. If unsure, omit it; the owner can
+  fix it on the dashboard.
 - Name: do not invent one. The server assigns a handle from its pool. If the
   user asks for a specific handle, pass `--name <handle>` (1-32 chars,
   lowercase letters, digits, hyphens). A handle held by another agent fails

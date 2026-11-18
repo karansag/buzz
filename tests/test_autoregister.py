@@ -111,6 +111,20 @@ def _run(monkeypatch, capsys, hook: dict | None):
     return capsys.readouterr()
 
 
+def test_antigravity_hook_injects_its_brief_and_registers_its_conversation(monkeypatch, capsys):
+    # Antigravity CLI names the session and model differently from the others,
+    # and it reads the brief from injectSteps instead of hookSpecificOutput.
+    monkeypatch.setenv("TMUX_PANE", "%5")
+    monkeypatch.setattr(client, "own_pane_harness", lambda pane: ("agy", ""))
+    posts = _hub(monkeypatch)
+    out = _run(monkeypatch, capsys, {"conversationId": "agy-session", "modelName": "gemini-3-agy"})
+    assert posts == [{"tmux_pane": "%5", "node": "laptop", "flavor": "agy",
+                      "agent_id": "agy-session", "model": "gemini-3-agy"}]
+    brief = ("You are registered as 'otter'.\nCurrently registered peers:\n"
+             "  (2 registered; `buzz recipients` lists them)\nEnd.")
+    assert json.loads(out.out) == {"injectSteps": [{"systemMessage": {"systemMessage": brief}}]}
+
+
 def test_hook_registers_with_the_hooks_session_and_model(monkeypatch, capsys):
     # The env holds an outer session's id; the hook input names the new one.
     monkeypatch.setenv("TMUX_PANE", "%5")
@@ -201,10 +215,17 @@ def test_install_adds_each_hook_once_and_remove_undoes_it(tmp_path):
     assert len(codex["hooks"]["SessionStart"]) == 1
     ext = tmp_path / ".pi/agent/extensions/agent-swarm"
     assert ext.is_symlink() and (ext / "index.ts").exists()
+    agy = json.loads((tmp_path / ".gemini/config/hooks.json").read_text())
+    handlers = [h for group in agy.values() for h in group.get("SessionStart", [])]
+    assert len(handlers) == 1
+    assert shlex.split(handlers[0]["command"]) == [os.path.abspath(shutil.which("buzz")), "autoregister", "--hook"]
+    assert handlers[0]["timeout"] == 15
     assert list(tmp_path.glob(".claude/settings.json.bak-*"))
     _install(tmp_path, "--remove")
     assert json.loads(settings.read_text()) == {"model": "opus", "hooks": {"Stop": [{"hooks": [{"command": "x"}]}]}}
     assert not ext.exists() and not ext.is_symlink()
+    agy = json.loads((tmp_path / ".gemini/config/hooks.json").read_text())
+    assert "agent-swarm" not in agy
 
 
 def test_install_and_remove_preserve_handlers_sharing_our_group(tmp_path):
