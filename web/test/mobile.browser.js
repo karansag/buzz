@@ -1092,6 +1092,36 @@ for (const width of [390, 1500]) {
   });
 }
 
+test('dragging a team down one place lands it just below its neighbour', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  state.teams[0].name = 'payments';
+  for (const [id, name] of [[2, 'research'], [3, 'ops']]) state.teams.push({ id, name, queen: null, members: [] });
+  const reorders = [];
+  await page.route('**/teams/reorder', route => {
+    const body = route.request().postDataJSON();
+    reorders.push(body);
+    state.teams = body.order.map(id => state.teams.find(t => t.id === id));
+    return route.fulfill({ json: { ok: true, teams: state.teams } });
+  });
+  try {
+    await page.goto(base + '#/');
+    const scope = '#agent-sidebar';
+    await page.waitForSelector(`${scope} .team-bees-group[data-team-id="3"]`);
+    const handle = await page.locator(`${scope} [data-team-id="1"] .team-bees-drag`).boundingBox();
+    const middle = await page.locator(`${scope} [data-team-id="2"]`).boundingBox();
+    const reordered = page.waitForResponse(r => r.url().includes('/teams/reorder'));
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    // Just past the middle of "research", above "ops".
+    await page.mouse.move(handle.x + handle.width / 2, middle.y + middle.height * .75, { steps: 5 });
+    assert.equal(await page.locator(`${scope} [data-team-id="3"].reorder-before`).count(), 1);
+    await page.mouse.up();
+    await reordered;
+    assert.deepEqual(reorders, [{ order: [2, 1, 3] }]);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 for (const width of [320, 1500]) {
   test(`queen chats at ${width}px filter current leads, search history, and survive reload`, async () => {
     const { page, state, errors } = await setup(width, 900, width < 500);

@@ -812,9 +812,12 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       ? groups
       : groups.filter(g => g.teamId !== null || g.members.length || g.gone.length);
   const teamGroups = groups.filter(g => g.teamId !== null);
-  const insertionIndex = (clientY) => {
+  // Where the dragged team lands among the others: how many of the other
+  // teams sit above the pointer. The dragged team itself does not count.
+  const insertionIndex = (clientY, draggedId) => {
     let at = 0;
     for (const group of teamGroups) {
+      if (group.teamId === draggedId) continue;
       const el = teamRowsRef.current.get(group.teamId);
       if (!el) continue;
       const rect = el.getBoundingClientRect();
@@ -838,7 +841,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
   const moveTeamDrag = (e) => {
     if (!teamDrag) return;
     e.preventDefault();
-    setTeamDrag(drag => drag ? { ...drag, target: insertionIndex(e.clientY) } : drag);
+    setTeamDrag(drag => drag ? { ...drag, target: insertionIndex(e.clientY, drag.id) } : drag);
   };
   const startTeamDrag = (e, group) => {
     if (reorderBusy || (e.button !== undefined && e.button !== 0)) return;
@@ -882,11 +885,12 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       });
     const team = g.teamId === null ? null : teams.find(t => t.id === g.teamId);
     const empty = !g.members.length && !g.gone.length;
-    const reorderClass = teamDrag && g.teamIndex === teamDrag.target
-      ? "reorder-before"
-      : teamDrag && teamDrag.target === teamGroups.length && g.teamIndex === teamGroups.length - 1
-        ? "reorder-after"
-        : "";
+    // The drop line: above the team the dragged one would go before, or
+    // below the last team when it would go to the end.
+    const others = teamDrag ? teamGroups.filter(t => t.teamId !== teamDrag.id) : [];
+    const reorderClass = !teamDrag || g.teamId === null ? ""
+      : others[teamDrag.target]?.teamId === g.teamId ? "reorder-before"
+        : teamDrag.target >= others.length && others.at(-1)?.teamId === g.teamId ? "reorder-after" : "";
     const teamRowRef = g.teamId === null ? undefined : (el) => {
       if (el) teamRowsRef.current.set(g.teamId, el);
       else teamRowsRef.current.delete(g.teamId);
