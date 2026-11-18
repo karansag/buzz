@@ -11,7 +11,7 @@ import { Bee, ERROR_RED, JSONH, STATE, WORKING_HALO, agentShown, agentStatus, fo
 import { COMPACT_LAYOUT, useMedia } from "./use-media.js";
 
 import { machineColor, machineName } from "./machines.js";
-import { Crown, queenSuffix } from "./queen.js";
+import { Crown, queenSuffix, teamOption } from "./queen.js";
 
 const TASK_CELL_RADIUS = 18;
 const TASK_CELL_CLEARANCE = TASK_CELL_RADIUS + 4;
@@ -109,7 +109,7 @@ function HiveTaskDetail({ task, state, refresh, onClose }) {
     <label class="hive-task-assignment">Assign to
       <select aria-label=${`Assign task #${task.id}`} value=${task.team_id ? `t:${task.team_id}` : task.assignee || ""} disabled=${busy || task.status === "done"} onChange=${assign}>
         <option value="">unassigned</option>
-        <optgroup label="Teams">${(state.teams || []).map(t => html`<option value=${`t:${t.id}`}>${t.name}</option>`)}</optgroup>
+        <optgroup label="Teams">${(state.teams || []).map(t => html`<option value=${`t:${t.id}`}>${teamOption(t)}</option>`)}</optgroup>
         <optgroup label="Agents">${agents.map(a => html`<option value=${a}>${a}${queenSuffix(state.teams, a)}</option>`)}</optgroup>
       </select>
     </label>

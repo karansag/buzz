@@ -387,3 +387,21 @@ def test_send_to_queen_after_the_queen_leaves_says_the_team_has_none(client):
     client.delete(f"/recipients/{queen}")
     r = client.post("/send", json={"tmux_pane": "0:0.0", "recipient": "queen:hivemind", "content": "hello?"})
     assert r.status_code == 409 and r.json()["detail"]["error"] == "team has no queen"
+
+
+def test_team_tasks_lists_members_and_team_work_by_name_or_id(client):
+    outsider, queen, team = _queen_team(client)
+    member = _register(client, pane="0:2.0")
+    client.post(f"/agents/{member}/team", json={"team_id": team["id"]})
+    ids = {}
+    for title, body in [("queen's", {"assignee": queen}), ("member's", {"assignee": member}),
+                        ("team's", {"team_id": team["id"]}), ("outside", {"assignee": outsider}),
+                        ("unassigned", {})]:
+        ids[title] = client.post("/tasks", json={"title": title, **body}).json()["task"]["id"]
+    for ref in ("hivemind", "HIVEMIND", str(team["id"])):
+        r = client.get(f"/teams/{ref}/tasks")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["team"] == {"id": team["id"], "name": "hivemind", "queen": queen}
+        assert sorted(t["id"] for t in body["tasks"]) == sorted(ids[k] for k in ("queen's", "member's", "team's"))
+    assert client.get("/teams/nope/tasks").status_code == 404

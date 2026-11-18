@@ -20,6 +20,12 @@ export function queenSuffix(teams, user) {
   return isQueen(teams, user) ? " · ♛ queen" : "";
 }
 
+// Plain text for a team's <option>: the hive mark sets a team apart from an
+// agent in the same list, the way the crown marks a queen.
+export function teamOption(team) {
+  return `⬢ ${team.name} · team`;
+}
+
 // ♛ with the role spelled out in the tooltip and for screen readers. `word`
 // adds the visible word "queen", and `teamName` spells out which team, for
 // the lists with room for it.

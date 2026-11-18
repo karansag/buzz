@@ -9452,6 +9452,9 @@ function isQueen(teams, user) {
 function queenSuffix(teams, user) {
 	return isQueen(teams, user) ? " · ♛ queen" : "";
 }
+function teamOption(team) {
+	return `⬢ ${team.name} · team`;
+}
 function Crown({ teams, user, word = false, teamName = false }) {
 	const team = queenTeam(teams, user);
 	if (!team) return null;
@@ -10444,7 +10447,7 @@ function HiveTaskDetail({ task, state, refresh, onClose }) {
     <label class="hive-task-assignment">Assign to
       <select aria-label=${`Assign task #${task.id}`} value=${task.team_id ? `t:${task.team_id}` : task.assignee || ""} disabled=${busy || task.status === "done"} onChange=${assign}>
         <option value="">unassigned</option>
-        <optgroup label="Teams">${(state.teams || []).map((t) => m$1`<option value=${`t:${t.id}`}>${t.name}</option>`)}</optgroup>
+        <optgroup label="Teams">${(state.teams || []).map((t) => m$1`<option value=${`t:${t.id}`}>${teamOption(t)}</option>`)}</optgroup>
         <optgroup label="Agents">${agents.map((a) => m$1`<option value=${a}>${a}${queenSuffix(state.teams, a)}</option>`)}</optgroup>
       </select>
     </label>
@@ -12950,7 +12953,7 @@ function TaskCard({ t, agentIds, teams, blockers, refresh }) {
         onChange=${onAssign}>
         <option value="">unassigned</option>
         ${teams.length > 0 && m$1`<optgroup label="teams">
-          ${teams.map((x) => m$1`<option key=${`t:${x.id}`} value=${`t:${x.id}`}>team ${x.name}</option>`)}
+          ${teams.map((x) => m$1`<option key=${`t:${x.id}`} value=${`t:${x.id}`}>${teamOption(x)}</option>`)}
         </optgroup>`}
         ${ids.map((a) => m$1`<option key=${a} value=${a}>${a}${queenSuffix(teams, a)}${agentIds.includes(a) ? "" : " (stopped)"}</option>`)}
       </select>
@@ -12985,7 +12988,9 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
 	});
 	const [title, setTitle] = d(draft.title || "");
 	const [description, setDescription] = d(draft.description || "");
-	const [assignee, setAssignee] = d(draft.assignee ?? user);
+	const ownTeam = queenTeam(state.teams || [], user);
+	const forWhom = ownTeam ? `team ${ownTeam.name}` : user;
+	const [assignee, setAssignee] = d(() => draft.assignee ?? (ownTeam ? `t:${ownTeam.id}` : user));
 	const [files, setFiles] = d(Array.isArray(draft.files) ? draft.files.filter((f) => typeof f === "string") : []);
 	const [status, setStatus] = d("");
 	const [busy, setBusy] = d(false);
@@ -13048,7 +13053,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
 		}
 	};
 	const form = m$1`<form class=${`task-composer ${attachments.dragging ? "dragging" : ""}`} onSubmit=${create} ...${busy ? {} : attachments.dropProps}>
-    ${!folded && m$1`<div class="task-compose-heading">${user ? `Create a task for ${user}` : "New task"}</div>`}
+    ${!folded && m$1`<div class="task-compose-heading">${user ? `Create a task for ${forWhom}` : "New task"}</div>`}
     <input class="task-title" aria-label="Task title" placeholder="What needs doing?" value=${title} disabled=${busy} onInput=${(e) => setTitle(e.target.value)} onPaste=${attachments.onPaste} required />
     <textarea aria-label="Task details" placeholder="Details, context, or steps to reproduce… (optional) · Enter to create · Shift + Enter for a new line" rows="2" value=${description} disabled=${busy} onInput=${(e) => setDescription(e.target.value)} onPaste=${attachments.onPaste}
       onKeyDown=${(e) => {
@@ -13058,7 +13063,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
     <div class="task-compose-actions"><label>Assign to <select aria-label="Task assignee" value=${assignee} disabled=${busy} onChange=${(e) => setAssignee(e.target.value)}>
       <option value="">Unassigned</option>
       ${!targetExists && m$1`<option value=${assignee} disabled>${assignee} (unavailable)</option>`}
-      ${teams.length > 0 && m$1`<optgroup label="Teams">${teams.map((t) => m$1`<option value=${`t:${t.id}`}>${t.name}</option>`)}</optgroup>`}
+      ${teams.length > 0 && m$1`<optgroup label="Teams">${teams.map((t) => m$1`<option value=${`t:${t.id}`}>${teamOption(t)}</option>`)}</optgroup>`}
       <optgroup label="Agents">${agents.map((r) => m$1`<option value=${r.user_id}>${r.user_id}${queenSuffix(teams, r.user_id)} · ${machineName(r.node)}${r.pane_alive ? "" : " (offline)"}</option>`)}</optgroup>
     </select></label><button class="act" disabled=${busy || attachments.uploading > 0 || !title.trim() || !targetExists}>${busy ? "Creating…" : "create task"}</button></div>
     ${!targetExists && m$1`<p class="task-compose-status">The selected assignee is unavailable. Choose another destination.</p>`}
@@ -13066,7 +13071,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
   </form>`;
 	if (!folded) return form;
 	return m$1`<details class="task-compose-fold" open=${!!(draft.title || draft.description || draft.files?.length)}>
-    <summary>+ create a task${user ? ` for ${user}` : ""}</summary>
+    <summary>+ create a task${user ? ` for ${forWhom}` : ""}</summary>
     ${form}
   </details>`;
 }
@@ -14560,7 +14565,10 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
 	const status = agentStatus(r);
 	const st = STATE[status] || STATE.unknown;
 	const detail = r.activity && r.activity.detail;
-	const myTasks = state.tasks.filter((t) => t.assignee === user);
+	const queened = (state.teams || []).filter((t) => t.queen === user);
+	const crewIds = /* @__PURE__ */ new Set([user, ...queened.flatMap((t) => t.members || [])]);
+	const teamIds = new Set(queened.map((t) => t.id));
+	const myTasks = state.tasks.filter((t) => crewIds.has(t.assignee) || teamIds.has(t.team_id));
 	const agentIds = state.recipients.filter((x) => x.pane_alive).map((x) => x.user_id);
 	const taskIds = agentIds.includes(user) ? agentIds : agentIds.concat(user);
 	const groups = /* @__PURE__ */ new Map();
@@ -14654,9 +14662,10 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       <span class="count"> · ${peerThreads.length}</span></button>
       <div id=${peerChatsId} hidden=${!showAgentChats}>${showAgentChats && peerThreads.map(renderThread)}</div>`}
     <h2 style="margin-top:26px">tasks ${myTasks.length > 0 && m$1`<span class="count">· ${myTasks.length}</span>`}
+      ${queened.length > 0 && m$1`<span class="count team-scope">· whole team</span>`}
       ${myTasks.length > 0 && m$1`<a class="h2-link" href=${historyHash({ agent: user })}>search ${user}'s history →</a>`}</h2>
     <${TaskComposer} key=${user} user=${user} state=${state} refresh=${refresh} folded />
-    ${myTasks.length === 0 ? m$1`<div class="empty">No tasks assigned to ${user} yet.</div>` : myTasks.map((t) => m$1`<${AgentTaskRow} key=${t.id} t=${t} taskIds=${taskIds}
+    ${myTasks.length === 0 ? m$1`<div class="empty">No tasks assigned to ${user}${queened.length ? " or their team" : ""} yet.</div>` : myTasks.map((t) => m$1`<${AgentTaskRow} key=${t.id} t=${t} taskIds=${taskIds}
           agentIds=${agentIds} teams=${state.teams} refresh=${refresh} />`)}
   </div>`;
 }

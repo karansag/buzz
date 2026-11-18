@@ -691,7 +691,8 @@ def cmd_unregister(args: argparse.Namespace) -> int:
 
 
 def cmd_tasks(args: argparse.Namespace) -> int:
-    r = httpx.get(f"{base_url()}/tasks", headers=_headers(), timeout=5)
+    path = f"/teams/{quote(args.team, safe='')}/tasks" if args.team else "/tasks"
+    r = httpx.get(f"{base_url()}{path}", headers=_headers(), timeout=5)
     if not r.is_success:
         print(r.text, file=sys.stderr)
         return 1
@@ -1124,6 +1125,8 @@ def main(argv: list[str] | None = None) -> int:
 
     tsk = sub.add_parser("tasks")
     tsk.add_argument("--status", choices=["open", "picked_up", "done"])
+    tsk.add_argument("--team", metavar="TEAM",
+                     help="only this team's tasks (name or id): its members' and the team's own")
     tsk.set_defaults(func=cmd_tasks)
 
     tcreate = sub.add_parser(

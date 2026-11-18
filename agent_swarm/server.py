@@ -609,7 +609,8 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         f"\n"
         f"The owner may group agents into teams, each with a queen who "
         f"coordinates that team's work. Tasks can be assigned to a team; "
-        f"they reach the queen, who parcels them out. The owner may also "
+        f"they reach the queen, who parcels them out; `buzz tasks --team "
+        f"<name or id>` lists a team's work. The owner may also "
         f"appoint one agent as swarm supervisor, the agent they ask about the "
         f"whole swarm; `buzz supervisor` says who, if anyone, holds it."
     )
@@ -1521,7 +1522,14 @@ def create_app(
         """
         if not spec.lower().startswith("queen:"):
             return spec, None
-        ref = spec[len("queen:"):].strip()
+        team = _find_team(spec[len("queen:"):].strip())
+        if not team["queen"]:
+            raise HTTPException(status_code=409, detail={
+                "error": "team has no queen", "team": team["name"], "team_id": team["id"]})
+        return team["queen"], {"id": team["id"], "name": team["name"]}
+
+    def _find_team(ref: str) -> dict:
+        """A team by name (case-insensitive) or id; 404 or 409 otherwise."""
         teams = db.list_teams(conn)
         named = [t for t in teams if t["name"].casefold() == ref.casefold()]
         found = named or [t for t in teams if ref.isdigit() and t["id"] == int(ref)]
@@ -1533,11 +1541,7 @@ def create_app(
             raise HTTPException(status_code=409, detail={
                 "error": "team name is ambiguous", "team": ref,
                 "detail": "use the team id: " + ", ".join(f"{t['id']} ({t['name']})" for t in found)})
-        team = found[0]
-        if not team["queen"]:
-            raise HTTPException(status_code=409, detail={
-                "error": "team has no queen", "team": team["name"], "team_id": team["id"]})
-        return team["queen"], {"id": team["id"], "name": team["name"]}
+        return found[0]
 
     def _deliver_as(
         sender: str,
@@ -1928,6 +1932,14 @@ def create_app(
     @app.get("/tasks")
     def tasks_list():
         return {"tasks": db.list_tasks(conn)}
+
+    @app.get("/teams/{team_ref}/tasks")
+    def team_tasks(team_ref: str):
+        """The team's work: tasks held by any member, and tasks assigned to the team."""
+        team = _find_team(team_ref)
+        members = set(team["members"])
+        tasks = [t for t in db.list_tasks(conn) if t["assignee"] in members or t["team_id"] == team["id"]]
+        return {"team": {"id": team["id"], "name": team["name"], "queen": team["queen"]}, "tasks": tasks}
 
     @app.post("/tasks")
     def tasks_create(req: TaskCreateReq, request: Request):

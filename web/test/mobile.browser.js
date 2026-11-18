@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
 import { preview } from 'vite';
 import { chromium } from 'playwright';
-import { mock, names, file, image } from './fixtures/mobile-state.js';
+import { mock, names, file, image, now } from './fixtures/mobile-state.js';
 
 let browser, server, base;
 before(async () => {
@@ -183,6 +183,30 @@ test('task completion has one note-aware action across board, agent, and honeyco
     await detail.getByRole('button', { name: 'Complete task' }).tap();
     await page.waitForFunction(() => document.querySelector('.hive-task-detail')?.textContent.includes('done'));
     assert.deepEqual(patches[5], { id: 74, status: 'done', note: 'Open the board and inspect task #74.' });
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test("a queen's page lists the team's tasks; a member's page lists only theirs", async () => {
+  const { page, state, errors } = await setup(1280, 900, false);
+  state.tasks.push({id:75,title:'Team-wide sweep',status:'open',team_id:1,created_at:now,updated_at:now,depends_on:[],attachments:[]},
+    {id:76,title:'Outside work',status:'open',assignee:names[5],created_at:now,updated_at:now,depends_on:[],attachments:[]});
+  const ids = () => page.$$eval('.trow .tid', els => els.map(e => e.textContent).sort());
+  try {
+    await page.goto(base + '#/agent/stoat');
+    await page.locator('.trow').first().waitFor();
+    assert.deepEqual(await ids(), ['#72', '#73', '#75']);
+    assert.match(await page.locator('h2', { hasText: 'whole team' }).textContent(), /tasks\s*· 3\s*· whole team/);
+    // A new task from a queen's page goes to her team, marked as a team.
+    assert.equal((await page.locator('.task-compose-fold summary').textContent()).trim(), '+ create a task for team agent-swarm');
+    const pick = page.locator('.task-composer select[aria-label="Task assignee"]');
+    assert.equal(await pick.inputValue(), 't:1');
+    assert.equal((await pick.locator('option:checked').textContent()).trim(), '⬢ agent-swarm · team');
+    await page.goto(base + `#/agent/${names[2]}`);
+    await page.waitForFunction(() => document.querySelectorAll('.trow').length === 1);
+    assert.deepEqual(await ids(), ['#72']);
+    assert.equal(await page.locator('h2', { hasText: 'whole team' }).count(), 0);
+    assert.equal(await page.locator('.task-composer select[aria-label="Task assignee"]').inputValue(), names[2]);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
@@ -1778,7 +1802,7 @@ for (const width of [390, 1500]) {
       assert.match(await dialog.getByRole('option').first().textContent(), /renamed crew/);
       await page.keyboard.press('Escape');
       await page.locator('.hive-task-picker select').selectOption('73');
-      assert.equal(await page.locator('.hive-task-detail').getByRole('combobox', { name: 'Assign task #73' }).locator('option[value="t:1"]').textContent(), 'renamed crew');
+      assert.equal(await page.locator('.hive-task-detail').getByRole('combobox', { name: 'Assign task #73' }).locator('option[value="t:1"]').textContent(), '⬢ renamed crew · team');
       assert.deepEqual(errors, []);
     } finally { await page.close(); }
   });

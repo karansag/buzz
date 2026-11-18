@@ -48,7 +48,7 @@ import { renderMarkdown } from "./markdown.js";
 import { parseAnsi, runStyle, trimAnsiEnd } from "./ansi.js";
 import "../styles.css";
 import { stepTeammate, teammates } from "./teammates.js";
-import { Crown, queenSuffix } from "./queen.js";
+import { Crown, queenSuffix, queenTeam, teamOption } from "./queen.js";
 import { shellNewlines } from "./newlines.js";
 import { PinDialog, PinStrip, PinnedList, pinHref, pinsOf, setPinned } from "./pins.js";
 import { agentThreads, ownerChats } from "./chats.js";
@@ -557,7 +557,7 @@ function TaskCard({ t, agentIds, teams, blockers, refresh }) {
         onChange=${onAssign}>
         <option value="">unassigned</option>
         ${teams.length > 0 && html`<optgroup label="teams">
-          ${teams.map(x => html`<option key=${`t:${x.id}`} value=${`t:${x.id}`}>team ${x.name}</option>`)}
+          ${teams.map(x => html`<option key=${`t:${x.id}`} value=${`t:${x.id}`}>${teamOption(x)}</option>`)}
         </optgroup>`}
         ${ids.map(a => html`<option key=${a} value=${a}>${a}${queenSuffix(teams, a)}${agentIds.includes(a) ? "" : " (stopped)"}</option>`)}
       </select>
@@ -596,7 +596,10 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
   });
   const [title, setTitle] = useState(draft.title || "");
   const [description, setDescription] = useState(draft.description || "");
-  const [assignee, setAssignee] = useState(draft.assignee ?? user);
+  // On a queen's page a new task goes to the team, which the queen parcels out.
+  const ownTeam = queenTeam(state.teams || [], user);
+  const forWhom = ownTeam ? `team ${ownTeam.name}` : user;
+  const [assignee, setAssignee] = useState(() => draft.assignee ?? (ownTeam ? `t:${ownTeam.id}` : user));
   const [files, setFiles] = useState(Array.isArray(draft.files) ? draft.files.filter(f => typeof f === "string") : []);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -636,7 +639,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
     } finally { setBusy(false); }
   };
   const form = html`<form class=${`task-composer ${attachments.dragging ? "dragging" : ""}`} onSubmit=${create} ...${busy ? {} : attachments.dropProps}>
-    ${!folded && html`<div class="task-compose-heading">${user ? `Create a task for ${user}` : "New task"}</div>`}
+    ${!folded && html`<div class="task-compose-heading">${user ? `Create a task for ${forWhom}` : "New task"}</div>`}
     <input class="task-title" aria-label="Task title" placeholder="What needs doing?" value=${title} disabled=${busy} onInput=${e => setTitle(e.target.value)} onPaste=${attachments.onPaste} required />
     <textarea aria-label="Task details" placeholder="Details, context, or steps to reproduce… (optional) · Enter to create · Shift + Enter for a new line" rows="2" value=${description} disabled=${busy} onInput=${e => setDescription(e.target.value)} onPaste=${attachments.onPaste}
       onKeyDown=${e => { if (e.key === "Enter" && !e.shiftKey && !(e.metaKey || e.ctrlKey) && !e.isComposing) create(e); }} />
@@ -644,7 +647,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
     <div class="task-compose-actions"><label>Assign to <select aria-label="Task assignee" value=${assignee} disabled=${busy} onChange=${e => setAssignee(e.target.value)}>
       <option value="">Unassigned</option>
       ${!targetExists && html`<option value=${assignee} disabled>${assignee} (unavailable)</option>`}
-      ${teams.length > 0 && html`<optgroup label="Teams">${teams.map(t => html`<option value=${`t:${t.id}`}>${t.name}</option>`)}</optgroup>`}
+      ${teams.length > 0 && html`<optgroup label="Teams">${teams.map(t => html`<option value=${`t:${t.id}`}>${teamOption(t)}</option>`)}</optgroup>`}
       <optgroup label="Agents">${agents.map(r => html`<option value=${r.user_id}>${r.user_id}${queenSuffix(teams, r.user_id)} · ${machineName(r.node)}${r.pane_alive ? "" : " (offline)"}</option>`)}</optgroup>
     </select></label><button class="act" disabled=${busy || attachments.uploading > 0 || !title.trim() || !targetExists}>${busy ? "Creating…" : "create task"}</button></div>
     ${!targetExists && html`<p class="task-compose-status">The selected assignee is unavailable. Choose another destination.</p>`}
@@ -652,7 +655,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
   </form>`;
   if (!folded) return form;
   return html`<details class="task-compose-fold" open=${!!(draft.title || draft.description || draft.files?.length)}>
-    <summary>+ create a task${user ? ` for ${user}` : ""}</summary>
+    <summary>+ create a task${user ? ` for ${forWhom}` : ""}</summary>
     ${form}
   </details>`;
 }
@@ -2105,7 +2108,12 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
   const status = agentStatus(r);
   const st = STATE[status] || STATE.unknown;
   const detail = r.activity && r.activity.detail;
-  const myTasks = state.tasks.filter(t => t.assignee === user);
+  // A queen's page lists the whole team's work: tasks held by any member,
+  // and tasks assigned to the team itself.
+  const queened = (state.teams || []).filter(t => t.queen === user);
+  const crewIds = new Set([user, ...queened.flatMap(t => t.members || [])]);
+  const teamIds = new Set(queened.map(t => t.id));
+  const myTasks = state.tasks.filter(t => crewIds.has(t.assignee) || teamIds.has(t.team_id));
   const agentIds = state.recipients.filter(x => x.pane_alive).map(x => x.user_id);
   const taskIds = agentIds.includes(user) ? agentIds : agentIds.concat(user);
   const groups = new Map();
@@ -2204,10 +2212,11 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       <span class="count"> · ${peerThreads.length}</span></button>
       <div id=${peerChatsId} hidden=${!showAgentChats}>${showAgentChats && peerThreads.map(renderThread)}</div>`}
     <h2 style="margin-top:26px">tasks ${myTasks.length > 0 && html`<span class="count">· ${myTasks.length}</span>`}
+      ${queened.length > 0 && html`<span class="count team-scope">· whole team</span>`}
       ${myTasks.length > 0 && html`<a class="h2-link" href=${historyHash({ agent: user })}>search ${user}'s history →</a>`}</h2>
     <${TaskComposer} key=${user} user=${user} state=${state} refresh=${refresh} folded />
     ${myTasks.length === 0
-      ? html`<div class="empty">No tasks assigned to ${user} yet.</div>`
+      ? html`<div class="empty">No tasks assigned to ${user}${queened.length ? " or their team" : ""} yet.</div>`
       : myTasks.map(t => html`<${AgentTaskRow} key=${t.id} t=${t} taskIds=${taskIds}
           agentIds=${agentIds} teams=${state.teams} refresh=${refresh} />`)}
   </div>`;

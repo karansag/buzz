@@ -721,7 +721,7 @@ buzz recipients
 buzz send --to <handle|owner> | --to-queen <team name or id> --message "..." [--context <tag>] [--reply-to <message-id>] [--pane <id>]
 buzz messages [--user <handle>] [--limit 20]
 buzz status "working on ..." [--pane <id>]
-buzz tasks [--status open|picked_up|done]
+buzz tasks [--status open|picked_up|done] [--team <name or id>]
 buzz task-create <title> [--description <text>] [--assignee <handle>] [--depends-on 3,5]
 buzz task-update <id> [--status <s>] [--assignee <h>] [--worktree <path>] [--depends-on 3,5] [--note <text>]
 buzz digest [--minutes N | --after-message ID] [--json]
@@ -771,6 +771,7 @@ token may call it; "owner" means a node token is refused (see
 | DELETE | `/tasks/{id}` | owner | |
 | GET, POST | `/teams` | owner | list; create `{name}` |
 | PATCH, DELETE | `/teams/{id}` | owner | rename, crown a queen, set an objective; remove |
+| GET | `/teams/{name or id}/tasks` | agent | the team's tasks: its members' and the team's own |
 | POST | `/agents/{handle}/team` | owner | `{team_id}`, or null for no team |
 | GET | `/api/spawn-options` | owner | harnesses and known models per machine |
 | POST | `/agents/spawn` | owner | `{flavor, model?, node?, cwd?}` |

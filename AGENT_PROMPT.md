@@ -278,6 +278,8 @@ All endpoints accept/return JSON. The CLI is a thin wrapper.
 - `GET  /teams` / `POST /teams` / `PATCH /teams/<id>` / `DELETE /teams/<id>` —
   team management; `PATCH` with `{queen, objective?}` crowns a queen and
   delivers the coordination prompt.
+- `GET /teams/<name or id>/tasks` — the team's tasks: those held by its members
+  and those assigned to the team (`buzz tasks --team <name or id>`).
 - `POST /agents/<handle>/team` — body: `{team_id}` (null to leave).
 - `GET /digest?after_message=<id>&minutes=<n>` — what changed, as text, with
   the cursor for the next call.
