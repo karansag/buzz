@@ -40,6 +40,11 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_recipient_ts
     ON messages(recipient, ts DESC);
+-- The newest messages overall (/api/state), and one conversation's pages
+-- walked from each side by id (see _CONVERSATION_PAGE).
+CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(ts);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender, id);
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_id ON messages(recipient, id);
 
 CREATE TABLE IF NOT EXISTS tasks (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,34 +124,115 @@ TASK_STATUSES = ("open", "picked_up", "done")
 _UNSET = object()
 
 
-# The server shares a connection between FastAPI worker threads and the
-# activity monitor. SQLite multi-thread builds require callers to serialize
-# access to a connection, including cursor iteration and whole transactions.
-# Reentrancy allows database helpers to call one another under the same lock.
-_connection_lock = threading.RLock()
+# Write functions take this lock, so the read-then-write steps inside each
+# one are atomic across the hub's threads. Reads skip it: each thread reads
+# through its own connection (see Connections), and WAL lets them run while
+# a write commits. Reentrant, so write helpers can call one another.
+_write_lock = threading.RLock()
+_write_depth = threading.local()
 
 
-def _serialized(func):
+def _writes(func):
+    """Run a write function under the lock. When the outermost one ends, its
+    thread's transaction is closed: rolled back if it raised, else committed.
+    An open transaction would hold SQLite's write lock and stall every other
+    thread's writes."""
     @wraps(func)
-    def locked(*args, **kwargs):
-        with _connection_lock:
-            return func(*args, **kwargs)
+    def locked(conn, *args, **kwargs):
+        with _write_lock:
+            depth = getattr(_write_depth, "n", 0)
+            _write_depth.n = depth + 1
+            try:
+                result = func(conn, *args, **kwargs)
+            except BaseException:
+                if depth == 0 and conn.in_transaction:
+                    conn.rollback()
+                raise
+            finally:
+                _write_depth.n = depth
+            if depth == 0 and conn.in_transaction:
+                conn.commit()
+            return result
     return locked
 
 
-@_serialized
-def connect(path: str | Path) -> sqlite3.Connection:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), check_same_thread=False)
+def _open(path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(str(path), check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.create_function("casefold", 1, lambda value: (value or "").casefold(), deterministic=True)
-    conn.executescript(SCHEMA)
-    _ensure_columns(conn)
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
-@_serialized
+class Connections:
+    """One SQLite connection per thread, all on one database file.
+
+    The hub's request threads, its event loop and its monitor each get their
+    own connection on first use, so one slow read no longer holds up the
+    rest. It stands in for a sqlite3.Connection: the db functions take it as
+    `conn`, and anything else is passed to the calling thread's connection.
+    """
+
+    def __init__(self, path: Path):
+        self.path = path
+        self._local = threading.local()
+        self._opened: list[sqlite3.Connection] = []
+        self._opened_lock = threading.Lock()
+
+    def _conn(self) -> sqlite3.Connection:
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = self._local.conn = _open(self.path)
+            with self._opened_lock:
+                self._opened.append(conn)
+        return conn
+
+    def execute(self, sql: str, params=()):
+        return self._conn().execute(sql, params)
+
+    def executemany(self, sql: str, params):
+        return self._conn().executemany(sql, params)
+
+    def executescript(self, sql: str):
+        return self._conn().executescript(sql)
+
+    def commit(self) -> None:
+        self._conn().commit()
+
+    def rollback(self) -> None:
+        self._conn().rollback()
+
+    def __enter__(self):
+        return self._conn().__enter__()
+
+    def __exit__(self, *exc):
+        return self._conn().__exit__(*exc)
+
+    def __getattr__(self, name: str):
+        return getattr(self._conn(), name)
+
+    def close(self) -> None:
+        """Close every thread's connection. Call it when no thread is using them."""
+        with self._opened_lock:
+            opened, self._opened = self._opened, []
+        for conn in opened:
+            conn.close()
+        self._local = threading.local()
+
+
+def connect(path: str | Path) -> Connections:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conns = Connections(path)
+    with _write_lock:
+        # WAL is a property of the file: set once, every later connection uses it.
+        conns.execute("PRAGMA journal_mode=WAL")
+        conns.executescript(SCHEMA)
+        _ensure_columns(conns)
+    return conns
+
+
+@_writes
 def register(
     conn: sqlite3.Connection,
     user_id: str,
@@ -208,7 +294,7 @@ def register(
     conn.commit()
 
 
-@_serialized
+@_writes
 def fill_missing_node(conn: sqlite3.Connection, node: str) -> int:
     """Stamp `node` on rows registered before nodes were recorded.
 
@@ -221,7 +307,7 @@ def fill_missing_node(conn: sqlite3.Connection, node: str) -> int:
     return cur.rowcount
 
 
-@_serialized
+@_writes
 def name_taken_by_other(
     conn: sqlite3.Connection,
     user_id: str,
@@ -252,7 +338,7 @@ def name_taken_by_other(
     )
 
 
-@_serialized
+@_writes
 def rename_recipient(conn: sqlite3.Connection, old_id: str, new_id: str) -> None:
     """Move a handle, carrying its message history, tasks and team role along.
 
@@ -272,7 +358,7 @@ def rename_recipient(conn: sqlite3.Connection, old_id: str, new_id: str) -> None
         conn.execute("UPDATE teams SET queen=? WHERE queen=?", (new_id, old_id))
 
 
-@_serialized
+@_writes
 def _ensure_columns(conn: sqlite3.Connection) -> None:
     """Add new optional columns to pre-existing DBs."""
     cols = {row[1] for row in conn.execute("PRAGMA table_info(recipients)")}
@@ -354,7 +440,6 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-@_serialized
 def lookup_pane(conn: sqlite3.Connection, user_id: str) -> str | None:
     row = conn.execute(
         "SELECT tmux_pane FROM recipients WHERE user_id=?", (user_id,)
@@ -362,7 +447,7 @@ def lookup_pane(conn: sqlite3.Connection, user_id: str) -> str | None:
     return row["tmux_pane"] if row else None
 
 
-@_serialized
+@_writes
 def lookup_user_by_pane(
     conn: sqlite3.Connection, node: str, tmux_pane: str, tmux_server: str | None = None
 ) -> str | None:
@@ -375,7 +460,6 @@ def lookup_user_by_pane(
     return row["user_id"] if row else None
 
 
-@_serialized
 def lookup_user_by_restored_label(
     conn: sqlite3.Connection,
     node: str,
@@ -404,7 +488,7 @@ def lookup_user_by_restored_label(
 UNBOUND = "unbound"
 
 
-@_serialized
+@_writes
 def legacy_pane_rows(conn: sqlite3.Connection) -> list[dict]:
     """Rows still addressed the old way (no tmux server recorded)."""
     _ensure_columns(conn)
@@ -414,7 +498,7 @@ def legacy_pane_rows(conn: sqlite3.Connection) -> list[dict]:
     )]
 
 
-@_serialized
+@_writes
 def bind_pane(
     conn: sqlite3.Connection,
     user_id: str,
@@ -430,7 +514,7 @@ def bind_pane(
     conn.commit()
 
 
-@_serialized
+@_writes
 def lookup_user_by_agent_id(
     conn: sqlite3.Connection, agent_id: str, node: str | None = None
 ) -> str | None:
@@ -452,7 +536,7 @@ def lookup_user_by_agent_id(
     return row["user_id"] if row else None
 
 
-@_serialized
+@_writes
 def adopt_agent_id(
     conn: sqlite3.Connection, user_id: str, agent_id: str, *,
     node: str, tmux_pane: str, tmux_server: str | None, replacing: str | None = None,
@@ -474,7 +558,7 @@ def adopt_agent_id(
     return cur.rowcount == 1
 
 
-@_serialized
+@_writes
 def get_recipient(conn: sqlite3.Connection, user_id: str) -> dict | None:
     _ensure_columns(conn)
     row = conn.execute(
@@ -485,7 +569,7 @@ def get_recipient(conn: sqlite3.Connection, user_id: str) -> dict | None:
     return dict(row) if row else None
 
 
-@_serialized
+@_writes
 def list_recipients(conn: sqlite3.Connection) -> list[dict]:
     _ensure_columns(conn)
     rows = conn.execute(
@@ -495,7 +579,7 @@ def list_recipients(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-@_serialized
+@_writes
 def delete_recipient(conn: sqlite3.Connection, user_id: str) -> bool:
     with conn:
         cur = conn.execute("DELETE FROM recipients WHERE user_id=?", (user_id,))
@@ -516,7 +600,6 @@ def _supervisor_row(conn: sqlite3.Connection) -> dict:
     return json.loads(row["value"]) if row else {}
 
 
-@_serialized
 def get_supervisor(conn: sqlite3.Connection) -> dict | None:
     """{user_id, objective, since, cursor} or None. `cursor` is the last
     message id the hub has nudged the supervisor about."""
@@ -524,7 +607,7 @@ def get_supervisor(conn: sqlite3.Connection) -> dict | None:
     return row or None
 
 
-@_serialized
+@_writes
 def set_supervisor(
     conn: sqlite3.Connection, user_id: str, objective: str, cursor: int
 ) -> dict:
@@ -542,7 +625,7 @@ def set_supervisor(
     return row
 
 
-@_serialized
+@_writes
 def set_supervisor_cursor(conn: sqlite3.Connection, cursor: int, nudged_at: float) -> None:
     row = _supervisor_row(conn)
     if not row:
@@ -552,7 +635,7 @@ def set_supervisor_cursor(conn: sqlite3.Connection, cursor: int, nudged_at: floa
         conn.execute("UPDATE meta SET value=? WHERE key=?", (json.dumps(row), SUPERVISOR_KEY))
 
 
-@_serialized
+@_writes
 def clear_supervisor(conn: sqlite3.Connection) -> dict | None:
     row = _supervisor_row(conn)
     with conn:
@@ -560,7 +643,7 @@ def clear_supervisor(conn: sqlite3.Connection) -> dict | None:
     return row or None
 
 
-@_serialized
+@_writes
 def record_summary(
     conn: sqlite3.Connection, user_id: str, text: str, source: str, ts: float | None = None
 ) -> bool:
@@ -591,20 +674,20 @@ def record_summary(
     return True
 
 
-@_serialized
+@_writes
 def set_cwd(conn: sqlite3.Connection, user_id: str, cwd: str) -> None:
     with conn:
         conn.execute("UPDATE recipients SET cwd=? WHERE user_id=?", (cwd, user_id))
 
 
-@_serialized
+@_writes
 def clear_agent_id(conn: sqlite3.Connection, user_id: str) -> None:
     """Forget an agent's harness session id (its new session is not known yet)."""
     with conn:
         conn.execute("UPDATE recipients SET agent_id=NULL WHERE user_id=?", (user_id,))
 
 
-@_serialized
+@_writes
 def set_owner_note(conn: sqlite3.Connection, user_id: str, text: str) -> dict | None:
     recipient = get_recipient(conn, user_id)
     if recipient is None:
@@ -616,7 +699,6 @@ def set_owner_note(conn: sqlite3.Connection, user_id: str, text: str) -> dict | 
     return get_recipient(conn, user_id)
 
 
-@_serialized
 def summaries_by_user(conn: sqlite3.Connection, per_user: int = 5) -> dict[str, list[dict]]:
     """Each agent's latest summaries, newest first."""
     rows = conn.execute(
@@ -633,7 +715,7 @@ def summaries_by_user(conn: sqlite3.Connection, per_user: int = 5) -> dict[str, 
     return out
 
 
-@_serialized
+@_writes
 def create_task(
     conn: sqlite3.Connection,
     title: str,
@@ -661,7 +743,7 @@ def create_task(
     return get_task(conn, int(cur.lastrowid))
 
 
-@_serialized
+@_writes
 def delete_task(conn: sqlite3.Connection, task_id: int) -> bool:
     """Remove a task without silently satisfying another task's dependency."""
     with conn:
@@ -691,7 +773,6 @@ def get_task(conn: sqlite3.Connection, task_id: int) -> dict | None:
     return task
 
 
-@_serialized
 def list_tasks(conn: sqlite3.Connection) -> list[dict]:
     deps: dict[int, list[int]] = {}
     for r in conn.execute("SELECT task_id, depends_on FROM task_deps ORDER BY depends_on"):
@@ -736,7 +817,7 @@ class TaskNoteRequired(ValueError):
     """The next task state would be done without its verification note."""
 
 
-@_serialized
+@_writes
 def update_task(
     conn: sqlite3.Connection,
     task_id: int,
@@ -823,7 +904,7 @@ def _team_name(conn: sqlite3.Connection, name: str, team_id: int = -1) -> str:
     return name
 
 
-@_serialized
+@_writes
 def create_team(conn: sqlite3.Connection, name: str) -> dict:
     name = _team_name(conn, name)
     position = (conn.execute("SELECT COALESCE(MAX(position), 0) + 1 FROM teams").fetchone()[0])
@@ -835,7 +916,6 @@ def create_team(conn: sqlite3.Connection, name: str) -> dict:
     return get_team(conn, int(cur.lastrowid))
 
 
-@_serialized
 def get_team(conn: sqlite3.Connection, team_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM teams WHERE id=?", (team_id,)).fetchone()
     if row is None:
@@ -851,13 +931,12 @@ def get_team(conn: sqlite3.Connection, team_id: int) -> dict | None:
     return team
 
 
-@_serialized
 def list_teams(conn: sqlite3.Connection) -> list[dict]:
     ids = [row["id"] for row in conn.execute("SELECT id FROM teams ORDER BY position, id")]
     return [get_team(conn, team_id) for team_id in ids]
 
 
-@_serialized
+@_writes
 def reorder_teams(conn: sqlite3.Connection, team_ids: list[int]) -> bool:
     """Set the displayed order for every team, atomically."""
     current = [int(row["id"]) for row in conn.execute("SELECT id FROM teams")]
@@ -869,7 +948,7 @@ def reorder_teams(conn: sqlite3.Connection, team_ids: list[int]) -> bool:
     return True
 
 
-@_serialized
+@_writes
 def update_team(
     conn: sqlite3.Connection,
     team_id: int,
@@ -893,7 +972,7 @@ def update_team(
     return get_team(conn, team_id)
 
 
-@_serialized
+@_writes
 def delete_team(conn: sqlite3.Connection, team_id: int) -> bool:
     if get_team(conn, team_id) is None:
         return False
@@ -904,7 +983,7 @@ def delete_team(conn: sqlite3.Connection, team_id: int) -> bool:
     return True
 
 
-@_serialized
+@_writes
 def set_recipient_model(
     conn: sqlite3.Connection, user_id: str, model: str | None
 ) -> dict | None:
@@ -914,7 +993,7 @@ def set_recipient_model(
     return get_recipient(conn, user_id) if cur.rowcount else None
 
 
-@_serialized
+@_writes
 def set_agent_team(
     conn: sqlite3.Connection, user_id: str, team_id: int | None
 ) -> dict | None:
@@ -948,7 +1027,7 @@ class DuplicateMessage(Exception):
         self.existing = existing
 
 
-@_serialized
+@_writes
 def record_message(
     conn: sqlite3.Connection,
     sender: str,
@@ -1003,7 +1082,7 @@ def record_message(
     return int(cur.lastrowid)
 
 
-@_serialized
+@_writes
 def record_notification(conn: sqlite3.Connection, sender: str, content: str,
                         context: str | None = None) -> int:
     """Check limits and store together, including across hub connections."""
@@ -1030,13 +1109,12 @@ def record_notification(conn: sqlite3.Connection, sender: str, content: str,
         return int(cur.lastrowid)
 
 
-@_serialized
 def get_message(conn: sqlite3.Connection, message_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM messages WHERE id=?", (message_id,)).fetchone()
     return _messages(conn, [row])[0] if row else None
 
 
-@_serialized
+@_writes
 def set_pinned(conn: sqlite3.Connection, message_id: int, pinned: bool) -> bool:
     """Pin or unpin a message. False if there is no such message."""
     if conn.execute("SELECT 1 FROM messages WHERE id=?", (message_id,)).fetchone() is None:
@@ -1050,11 +1128,10 @@ def set_pinned(conn: sqlite3.Connection, message_id: int, pinned: bool) -> bool:
     return True
 
 
-@_serialized
 def list_pins(conn: sqlite3.Connection) -> list[dict]:
     """Pinned messages, newest pin first, each with its `pinned_at`."""
     rows = conn.execute(
-        "SELECT m.*, p.pinned_at FROM pins p JOIN messages m ON m.id = p.message_id "
+        "SELECT m.*, p.pinned_at FROM pins p CROSS JOIN messages m ON m.id = p.message_id "
         "ORDER BY p.pinned_at DESC"
     ).fetchall()
     return _messages(conn, rows)
@@ -1067,7 +1144,6 @@ def message_by_client_id(conn: sqlite3.Connection, sender: str, client_id: str) 
     return _messages(conn, [row])[0] if row else None
 
 
-@_serialized
 def owner_reply_reminder_due(
     conn: sqlite3.Connection, recipient: str, *, since: float, now: float,
     idle_seconds: float,
@@ -1087,7 +1163,7 @@ def owner_reply_reminder_due(
     return row[0] is None or now - row[1] >= idle_seconds
 
 
-@_serialized
+@_writes
 def abandon_pending_messages(conn: sqlite3.Connection, reason: str) -> int:
     """Mark every pending message unknown.
 
@@ -1104,7 +1180,7 @@ def abandon_pending_messages(conn: sqlite3.Connection, reason: str) -> int:
     return cur.rowcount
 
 
-@_serialized
+@_writes
 def fill_missing_worktree_node(conn: sqlite3.Connection, node: str) -> int:
     """Stamp `node` on worktree paths recorded before nodes were. Every such
     path was recorded by an agent on this server's own machine."""
@@ -1116,7 +1192,7 @@ def fill_missing_worktree_node(conn: sqlite3.Connection, node: str) -> int:
     return cur.rowcount
 
 
-@_serialized
+@_writes
 def set_message_status(
     conn: sqlite3.Connection, message_id: int, status: str, delivery_error: str | None = None
 ) -> None:
@@ -1131,7 +1207,6 @@ def set_message_status(
     conn.commit()
 
 
-@_serialized
 def fetch_messages(
     conn: sqlite3.Connection,
     user_id: str | None = None,
@@ -1149,7 +1224,6 @@ def fetch_messages(
     return _messages(conn, rows)
 
 
-@_serialized
 def search_agent_messages(conn: sqlite3.Connection, user: str, query: str,
                           limit: int = 100, offset: int = 0) -> dict:
     """Search the whole owner conversation, independently of history pages."""
@@ -1174,7 +1248,6 @@ def search_agent_messages(conn: sqlite3.Connection, user: str, query: str,
             "terms": terms}
 
 
-@_serialized
 def agent_messages_page(conn: sqlite3.Connection, user: str, limit: int = 300,
                         before: int | None = None, after: int | None = None,
                         around: int | None = None) -> dict:
@@ -1185,36 +1258,42 @@ def agent_messages_page(conn: sqlite3.Connection, user: str, limit: int = 300,
     after it, oldest first. `has_more` keeps its meaning of "history exists
     below the returned window".
     """
-    where = "(sender=? OR recipient=?)"
     if around is not None:
         half = max(1, limit // 2)
-        older = conn.execute(
-            f"SELECT * FROM messages WHERE {where} AND id <= ? ORDER BY id DESC LIMIT ?",
-            (user, user, around, half + 1),
-        ).fetchall()
-        newer = conn.execute(
-            f"SELECT * FROM messages WHERE {where} AND id > ? ORDER BY id ASC LIMIT ?",
-            (user, user, around, half),
-        ).fetchall()
+        older = _conversation_page(conn, user, "<=", around, half + 1)
+        newer = _conversation_page(conn, user, ">", around, half)
         rows = [*reversed(older[:half]), *newer]
         return {"messages": _messages(conn, rows), "has_more": len(older) > half}
-    clauses = [where]
-    args = [user, user]
-    if before is not None:
-        clauses.append("id < ?")
-        args.append(before)
     if after is not None:
-        clauses.append("id > ?")
-        args.append(after)
-    order = "ASC" if after is not None else "DESC"
-    rows = conn.execute(
-        f"SELECT * FROM messages WHERE {' AND '.join(clauses)} ORDER BY id {order} LIMIT ?",
-        (*args, limit + 1),
-    ).fetchall()
+        rows = _conversation_page(conn, user, ">", after, limit + 1)
+    else:
+        rows = _conversation_page(conn, user, "<", before if before is not None else _NO_ID_LIMIT, limit + 1)
     return {"messages": _messages(conn, rows[:limit]), "has_more": len(rows) > limit}
 
 
-@_serialized
+_NO_ID_LIMIT = 2**63 - 1
+
+# One conversation is the messages a user sent plus those it received. Each
+# side walks its own (column, id) index and stops after `limit` rows, so a
+# page costs the page, not the conversation; `sender=? OR recipient=?` read
+# or sorted the whole conversation. UNION drops the copy of a message a user
+# sent itself.
+_CONVERSATION_PAGE = """
+SELECT * FROM (
+  SELECT * FROM (SELECT * FROM messages WHERE sender=:u AND id {op} :bound ORDER BY id {order} LIMIT :n)
+  UNION
+  SELECT * FROM (SELECT * FROM messages WHERE recipient=:u AND id {op} :bound ORDER BY id {order} LIMIT :n)
+) ORDER BY id {order} LIMIT :n
+"""
+
+
+def _conversation_page(conn: sqlite3.Connection, user: str, op: str, bound: int, limit: int) -> list:
+    """Up to `limit` of `user`'s messages with `id <op> bound`, nearest the bound first."""
+    order = "DESC" if op.startswith("<") else "ASC"
+    sql = _CONVERSATION_PAGE.format(op=op, order=order)
+    return conn.execute(sql, {"u": user, "bound": bound, "n": limit}).fetchall()
+
+
 def count_agent_messages_between(conn: sqlite3.Connection, user: str, after: int, before: int) -> int:
     """How many messages in one conversation sit strictly between two ids.
 
@@ -1223,13 +1302,14 @@ def count_agent_messages_between(conn: sqlite3.Connection, user: str, after: int
     count is what decides whether a jump to a far back message left a real hole.
     """
     row = conn.execute(
-        "SELECT COUNT(*) AS n FROM messages WHERE (sender=? OR recipient=?) AND id > ? AND id < ?",
-        (user, user, after, before),
+        "SELECT COUNT(*) AS n FROM ("
+        "SELECT id FROM messages WHERE sender=? AND id > ? AND id < ? "
+        "UNION SELECT id FROM messages WHERE recipient=? AND id > ? AND id < ?)",
+        (user, after, before, user, after, before),
     ).fetchone()
     return int(row["n"])
 
 
-@_serialized
 def fetch_messages_after(
     conn: sqlite3.Connection, after_id: int = 0, since_ts: float = 0.0, limit: int = 500
 ) -> list[dict]:
@@ -1242,19 +1322,17 @@ def fetch_messages_after(
     return _messages(conn, rows)
 
 
-@_serialized
 def message_ts(conn: sqlite3.Connection, message_id: int) -> float | None:
     row = conn.execute("SELECT ts FROM messages WHERE id=?", (message_id,)).fetchone()
     return float(row["ts"]) if row else None
 
 
-@_serialized
 def newest_message_id(conn: sqlite3.Connection) -> int:
     row = conn.execute("SELECT MAX(id) AS m FROM messages").fetchone()
     return int(row["m"] or 0)
 
 
-@_serialized
+@_writes
 def delete_messages_before(conn: sqlite3.Connection, cutoff: float) -> int:
     """Delete unpinned messages sent before `cutoff`; return how many were removed."""
     cur = conn.execute(
@@ -1264,7 +1342,6 @@ def delete_messages_before(conn: sqlite3.Connection, cutoff: float) -> int:
     return cur.rowcount
 
 
-@_serialized
 def attachment_last_used(conn: sqlite3.Connection) -> dict[str, float]:
     """Message last use, plus current use for attachments retained by tasks."""
     rows = conn.execute(
@@ -1311,7 +1388,7 @@ def _message(row: sqlite3.Row) -> dict:
 # ---- nodes: the other machines enrolled with this hub ----------------------
 
 
-@_serialized
+@_writes
 def hub_id(conn: sqlite3.Connection) -> str:
     """A random id minted once per database. Nodes scope their record of
     executed commands by it, since message ids restart with a new database."""
@@ -1332,7 +1409,7 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-@_serialized
+@_writes
 def set_node_token(conn: sqlite3.Connection, name: str, token: str) -> None:
     """Enrol a node, or rotate its token. Only the hash is kept."""
     now = time.time()
@@ -1344,7 +1421,6 @@ def set_node_token(conn: sqlite3.Connection, name: str, token: str) -> None:
     conn.commit()
 
 
-@_serialized
 def node_for_token(conn: sqlite3.Connection, token: str) -> str | None:
     """The node a bearer token belongs to, or None."""
     row = conn.execute(
@@ -1353,7 +1429,7 @@ def node_for_token(conn: sqlite3.Connection, token: str) -> str | None:
     return row["name"] if row else None
 
 
-@_serialized
+@_writes
 def touch_node(
     conn: sqlite3.Connection,
     name: str,
@@ -1376,7 +1452,6 @@ def touch_node(
     conn.commit()
 
 
-@_serialized
 def list_nodes(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         "SELECT name, created_at, last_seen, version, tmux_server, harnesses FROM nodes ORDER BY name"
@@ -1389,7 +1464,7 @@ def list_nodes(conn: sqlite3.Connection) -> list[dict]:
     return result
 
 
-@_serialized
+@_writes
 def delete_node(conn: sqlite3.Connection, name: str) -> bool:
     cur = conn.execute("DELETE FROM nodes WHERE name=?", (name,))
     conn.commit()
@@ -1421,7 +1496,7 @@ def _hub_state(conn: sqlite3.Connection) -> dict:
     }
 
 
-@_serialized
+@_writes
 def hub_state(conn: sqlite3.Connection) -> dict:
     """The same snapshot, for a dry run, which writes nothing."""
     _ensure_columns(conn)
@@ -1436,14 +1511,13 @@ class AlreadyImported(Exception):
         self.report = report
 
 
-@_serialized
+@_writes
 def clear_reservation(conn: sqlite3.Connection, user_id: str) -> None:
     """The agent registered: its row is a real registration now."""
     conn.execute("UPDATE recipients SET reserved=0 WHERE user_id=?", (user_id,))
     conn.commit()
 
 
-@_serialized
 def imported_report(conn: sqlite3.Connection, source_id: str) -> dict | None:
     row = conn.execute(
         "SELECT report FROM imports WHERE source_id=?", (source_id,)
@@ -1451,7 +1525,7 @@ def imported_report(conn: sqlite3.Connection, source_id: str) -> dict | None:
     return json.loads(row["report"]) if row else None
 
 
-@_serialized
+@_writes
 def apply_import(
     conn: sqlite3.Connection,
     source_id: str,

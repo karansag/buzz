@@ -3,8 +3,7 @@
 Build mock databases by resampling a read-only copy of the real one, then time
 the queries the dashboard runs, on five setups:
 
-  sqlite-asis   today's db.py functions on today's schema (one shared
-                connection behind db.py's lock, rollback journal)
+  sqlite-asis   db.py's functions as they are in this checkout
   sqlite-idx    the same db.py functions, plus WAL and three indexes: no code change
   sqlite-tuned  WAL, indexes, rewritten conversation queries, a trigram FTS
                 prefilter for search, one connection per thread
@@ -88,7 +87,7 @@ def _insert(conn: sqlite3.Connection, batch: list) -> None:
 
 
 class SqliteAsIs:
-    """Today's hub: db.py's functions on one shared connection."""
+    """The hub as checked out: db.py's own functions and connection."""
 
     concurrent_connections = False
 
@@ -218,9 +217,9 @@ class SqliteTuned:
     def state(self):
         rows = self.conn.execute("SELECT * FROM messages ORDER BY id DESC LIMIT 300").fetchall()
         db._messages(self.conn, rows)
-        db.list_tasks.__wrapped__(self.conn)
-        db.list_pins.__wrapped__(self.conn)
-        db.list_teams.__wrapped__(self.conn)
+        db.list_tasks(self.conn)
+        db.list_pins(self.conn)
+        db.list_teams(self.conn)
 
     def page(self, user, before=None):
         rows = self.conn.execute(PAGE_SQL, {"u": user, "before": before or 2**62, "n": 301}).fetchall()
