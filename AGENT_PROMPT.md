@@ -223,7 +223,9 @@ with ..."), so you always learn your teammates when work arrives.
 
 The crown is stored on the team but carries no special server
 authority: it is a prompt-driven role, the owner retains every right,
-and a queen coordinates only its own team.
+and a queen coordinates only its own team. For practices that worked for
+one queen-led team (roles, one message per event, launch gates, records),
+see `docs/team-practices.md` in the Buzz repo.
 
 ---
 

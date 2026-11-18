@@ -466,7 +466,8 @@ A team is a named group of agents. Create one at the bottom of the sidebar's
 teams view and drag agents in. The team's ✎ button makes a member the queen: it gets the
 team's objective and a prompt to split it into tasks, hand them out, and
 follow up. The queen has no special powers on the server; it is a role
-given by prompt.
+given by prompt. [docs/team-practices.md](docs/team-practices.md) describes
+how one queen-led team works: roles, messaging, launch gates and records.
 
 Every list that shows agents marks the queen with ♛: the sidebar chips and
 tile grid, each team's header, the agent switcher, your chat list, the task
