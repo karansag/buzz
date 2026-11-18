@@ -832,7 +832,7 @@ button.harness-key[aria-pressed=true] { border-color: var(--honey-dim); color: v
 .team-bees { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .team-bees-group { border: 1px solid var(--honey-dim); border-radius: 10px; padding: 0 8px; background: rgba(242,169,59,.03); }
 .team-bees-group.loose { border-style: dashed; border-color: var(--line); background: none; }
-.team-bees-drag { flex: none; min-width: 44px; min-height: 44px; margin: 0 -2px 0 -8px; padding: 0 7px; align-self: stretch; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--cream-dim); font-size: 20px; cursor: grab; touch-action: none; user-select: none; }
+.team-bees-drag { flex: none; min-width: 20px; min-height: 44px; margin-left: -8px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--cream-dim); font-size: 14px; cursor: grab; touch-action: none; user-select: none; }
 .team-bees-drag:hover, .team-bees-drag:focus-visible, .team-bees-drag:active { color: var(--cream); border-color: var(--line); background: rgba(255,255,255,.035); outline: none; }
 .team-bees-drag:active { cursor: grabbing; }
 .team-bees-drag:disabled { opacity: .55; cursor: wait; }
@@ -841,18 +841,18 @@ button.harness-key[aria-pressed=true] { border-color: var(--honey-dim); color: v
 .team-bees-group.reorder-before::before { top: -6px; }
 .team-bees-group.reorder-after::after { bottom: -6px; }
 .team-bees-group { position: relative; }
-.team-bees-group > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; row-gap: 4px; min-height: 44px; cursor: pointer; list-style: none; }
+.team-bees-group > summary { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; min-height: 44px; cursor: pointer; list-style: none; }
 .team-bees-group > summary::-webkit-details-marker { display: none; }
 .team-bees-group > summary::before { content: "▾"; color: var(--honey-dim); font-size: 11px; }
 .team-bees-group:not([open]) > summary::before { content: "▸"; }
 .team-bees-name { color: var(--honey); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 .team-bees-group.loose .team-bees-name { color: var(--cream-dim); }
-.team-bees-title { display: flex; align-items: baseline; gap: 6px; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; }
+.team-bees-title { display: flex; align-items: baseline; gap: 5px; flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; }
 .team-bees-name { overflow: hidden; text-overflow: ellipsis; }
-.team-bees-queen { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; color: var(--honey); font-size: 11px; }
+.team-bees-queen { flex: 1 1 auto; min-width: 0; max-width: 10ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--honey); font-size: 11px; }
 .team-bees-queen.none { color: var(--cream-dim); opacity: .7; font-style: italic; }
-.team-bees-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.team-bees-counts { margin-left: auto; color: var(--cream-dim); font-size: 11px; }
+.team-bees-actions { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; margin-left: 0; }
+.team-bees-counts { margin-left: 0; color: var(--cream-dim); font-size: 11px; white-space: nowrap; }
 .team-bees-counts .working { color: var(--moss); }
 .team-bees-counts .attn { color: var(--honey); }
 .team-bees-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 8px; }
@@ -863,7 +863,7 @@ button.mini.retire { flex: none; }
 .team-bees-empty { color: var(--cream-dim); font-size: 11px; padding: 4px 2px; }
 .team-bees-group.empty { border-style: dashed; opacity: .7; }
 .team-bees-group.empty > .team-bees-chips { display: none; }
-.team-bees-manage { flex: none; min-width: 28px; min-height: 28px; border: 1px solid var(--line); border-radius: 6px; background: none; color: var(--honey-dim); font-size: 12px; cursor: pointer; }
+.team-bees-manage { flex: none; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 5px; background: none; color: var(--honey-dim); font-size: 12px; cursor: pointer; line-height: 1; padding: 0; }
 .team-bees-manage:hover, .team-bees-manage[aria-pressed=true] { color: var(--honey); border-color: var(--honey-dim); }
 form.team-manage { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 2px 2px 10px; font-size: 11px; color: var(--cream-dim); }
 form.team-manage label { display: flex; align-items: center; gap: 6px; flex: 1 1 100%; min-width: 0; }
@@ -873,6 +873,7 @@ form.team-manage input { flex-basis: 100%; }
 .team-manage-error { flex: 1 1 100%; margin: 0; color: var(--alert); overflow-wrap: anywhere; }
 .agent-chats-toggle { margin-top: 14px; }
 .team-bees-remove:hover { color: var(--alert); border-color: var(--alert); }
+@media (pointer: coarse) { .team-bees-drag { min-width: 44px; min-height: 44px; padding: 0 7px; font-size: 20px; } .team-bees-manage { width: 44px; height: 44px; } }
 .team-bees-stop { border: 1px dashed var(--alert); border-radius: 10px; padding: 14px; text-align: center; color: var(--alert); font-size: 11px; }
 .team-bees-stop.over { background: color-mix(in srgb, var(--alert) 14%, transparent); }
 .team-bees > form.newteam { margin: 6px 0 0; }

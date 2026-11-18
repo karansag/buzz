@@ -908,7 +908,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
         ${team && (team.queen
           ? html`<span class="team-bees-queen" title=${`queen of ${team.name}: ${team.queen}`}>♛ ${team.queen}</span>`
           : html`<span class="team-bees-queen none" title="this team has no queen">no queen</span>`)}</span>
-        <span class="team-bees-actions"><span class="team-bees-counts">${g.members.length}${busy ? html` · <span class="working">${busy} working</span>` : ""}${attention ? html` · <span class="attn">${attention} need you</span>` : ""}</span>
+        <span class="team-bees-actions"><span class="team-bees-counts" title=${`${g.members.length} agents${busy ? `, ${busy} working` : ""}${attention ? `, ${attention} need you` : ""}`}>${g.members.length}${busy ? html` · <span class="working">${busy}w</span>` : ""}${attention ? html` · <span class="attn">${attention}!</span>` : ""}</span>
         ${team && html`<button type="button" class="team-bees-manage" aria-pressed=${managing === g.key}
           aria-label=${`Manage team ${g.name}`} title=${team.queen ? `manage team · queen: ${team.queen}` : "manage team"}
           onClick=${e => { e.preventDefault(); e.stopPropagation(); setManaging(m => m === g.key ? null : g.key); }}>✎</button>`}

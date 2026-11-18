@@ -1122,6 +1122,27 @@ test('dragging a team down one place lands it just below its neighbour', async (
   } finally { await page.close(); }
 });
 
+test('desktop: the team header stays one line with long names and queen', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  state.teams[0].name = 'A VERY LONG TEAM NAME THAT SHOULD ELLIPSIZE IN THE SIDEBAR';
+  state.teams[0].queen = 'a-very-long-queen-name-that-should-also-ellipsize';
+  try {
+    await page.goto(base + '#/');
+    const team = page.locator('#agent-sidebar .team-bees-group[data-team-id="1"]');
+    await team.waitFor();
+    const summary = team.locator('> summary');
+    const box = await summary.boundingBox();
+    assert.ok(box.height <= 48, `team header is ${box.height}px high`);
+    const children = await summary.evaluate(el => [...el.children].map(child => child.getBoundingClientRect().toJSON()));
+    assert.ok(children.every(rect => rect.right <= box.x + box.width + 1), 'a header control overflows the row');
+    const handle = team.locator('.team-bees-drag');
+    assert.ok((await handle.boundingBox()).width <= 24, 'desktop reorder handle is too wide');
+    assert.ok((await handle.boundingBox()).height >= 43.5, 'desktop reorder handle is clickable');
+    assert.equal(await page.locator('#agent-sidebar .team-bees-manage').first().evaluate(e => e.getBoundingClientRect().width), 24);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 for (const width of [320, 1500]) {
   test(`queen chats at ${width}px filter current leads, search history, and survive reload`, async () => {
     const { page, state, errors } = await setup(width, 900, width < 500);
