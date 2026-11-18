@@ -771,8 +771,10 @@ button:focus-visible { outline:2px solid var(--cream); outline-offset:3px; }
 /* Slide the desktop roster; keep the mobile roster stacked below the page. */
 .main-col { min-width: 0; }
 main.dashboard-layout { grid-template-columns: minmax(0,1fr) 0px; transition: grid-template-columns .22s ease; overflow: clip; }
-main.dashboard-layout.roster-open { grid-template-columns: minmax(0,1fr) 340px; }
-.roster-drawer { width: 340px; min-width: 0; position: sticky; top: 0; transform: translateX(100%); visibility: hidden; transition: transform .22s ease, visibility .22s; background: var(--ink); z-index: 20; }
+/* The roster grows with the window: 340px on small desktops, up to 420px. */
+main.dashboard-layout { --roster-width: clamp(340px, 26vw, 420px); }
+main.dashboard-layout.roster-open { grid-template-columns: minmax(0,1fr) var(--roster-width); }
+.roster-drawer { width: var(--roster-width); min-width: 0; position: sticky; top: 0; transform: translateX(100%); visibility: hidden; transition: transform .22s ease, visibility .22s; background: var(--ink); z-index: 20; }
 .roster-drawer.is-open { transform: translateX(0); visibility: visible; }
 .roster-drawer aside.roster { position: static; max-height: 100dvh; overflow-y: auto; border-left: 1px solid var(--line); border-top: 0; }
 .roster-heading { display: flex; align-items: baseline; gap: 12px; }
@@ -848,8 +850,9 @@ button.harness-key[aria-pressed=true] { border-color: var(--honey-dim); color: v
 .team-bees-name { color: var(--honey); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 .team-bees-group.loose .team-bees-name { color: var(--cream-dim); }
 .team-bees-title { display: flex; align-items: baseline; gap: 5px; flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; }
-.team-bees-name { overflow: hidden; text-overflow: ellipsis; }
-.team-bees-queen { flex: 1 1 auto; min-width: 0; max-width: 10ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--honey); font-size: 11px; }
+.team-bees-name { flex: 0 0 auto; max-width: 70%; overflow: hidden; text-overflow: ellipsis; }
+/* The queen's name gives way before the team's. */
+.team-bees-queen { flex: 0 4 auto; min-width: 3ch; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--honey); font-size: 11px; }
 .team-bees-queen.none { color: var(--cream-dim); opacity: .7; font-style: italic; }
 .team-bees-actions { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; margin-left: 0; }
 .team-bees-counts { margin-left: 0; color: var(--cream-dim); font-size: 11px; white-space: nowrap; }

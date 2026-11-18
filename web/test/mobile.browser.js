@@ -1073,9 +1073,11 @@ for (const width of [390, 1500]) {
       const names = async () => (await page.locator(`${scope} .team-bees-group[data-team-id] .team-bees-name`).allInnerTexts()).map(x => x.toLowerCase());
       assert.deepEqual(await names(), ['payments', 'research']);
       const target = page.locator(`${scope} [data-team-id="2"]`);
-      const targetBox = await target.boundingBox();
       const source = page.locator(`${scope} [data-team-id="1"]`);
       const handle = source.locator('.team-bees-drag');
+      // Hovering waits for the grip to stop moving; measure only after that.
+      await handle.hover();
+      const targetBox = await target.boundingBox();
       const handleBox = await handle.boundingBox();
       const reordered = page.waitForResponse(response => response.url().includes('/teams/reorder') && response.request().method() === 'POST');
       await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
@@ -1107,14 +1109,16 @@ test('dragging a team down one place lands it just below its neighbour', async (
     await page.goto(base + '#/');
     const scope = '#agent-sidebar';
     await page.waitForSelector(`${scope} .team-bees-group[data-team-id="3"]`);
-    const handle = await page.locator(`${scope} [data-team-id="1"] .team-bees-drag`).boundingBox();
+    const grip = page.locator(`${scope} [data-team-id="1"] .team-bees-drag`);
+    await grip.hover();  // waits for the grip to stop moving
+    const handle = await grip.boundingBox();
     const middle = await page.locator(`${scope} [data-team-id="2"]`).boundingBox();
-    const reordered = page.waitForResponse(r => r.url().includes('/teams/reorder'));
     await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
     await page.mouse.down();
     // Just past the middle of "research", above "ops".
     await page.mouse.move(handle.x + handle.width / 2, middle.y + middle.height * .75, { steps: 5 });
-    assert.equal(await page.locator(`${scope} [data-team-id="3"].reorder-before`).count(), 1);
+    await page.locator(`${scope} [data-team-id="3"].reorder-before`).waitFor();
+    const reordered = page.waitForResponse(r => r.url().includes('/teams/reorder'));
     await page.mouse.up();
     await reordered;
     assert.deepEqual(reorders, [{ order: [2, 1, 3] }]);

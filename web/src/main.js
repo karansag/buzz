@@ -778,7 +778,11 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
   const [dragging, setDragging] = useState(null);
   const [over, setOver] = useState(null);
   const [managing, setManaging] = useState(null);
-  const [teamDrag, setTeamDrag] = useState(null);
+  const [teamDrag, setTeamDragState] = useState(null);
+  // The drag also lives in a ref: pointer events that arrive before the next
+  // render must see the drag that started, or a quick drag is lost.
+  const teamDragRef = useRef(null);
+  const setTeamDrag = (drag) => { teamDragRef.current = drag; setTeamDragState(drag); };
   const [reorderBusy, setReorderBusy] = useState(false);
   const teamRowsRef = useRef(new Map());
   const [collapsed, setCollapsed] = useState(() => new Set(readJSON(COLLAPSED_TEAMS_KEY, [])));
@@ -839,9 +843,10 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
     setReorderBusy(false);
   };
   const moveTeamDrag = (e) => {
-    if (!teamDrag) return;
+    const drag = teamDragRef.current;
+    if (!drag) return;
     e.preventDefault();
-    setTeamDrag(drag => drag ? { ...drag, target: insertionIndex(e.clientY, drag.id) } : drag);
+    setTeamDrag({ ...drag, target: insertionIndex(e.clientY, drag.id) });
   };
   const startTeamDrag = (e, group) => {
     if (reorderBusy || (e.button !== undefined && e.button !== 0)) return;
@@ -850,12 +855,12 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
     setTeamDrag({ id: group.teamId, target: group.teamIndex });
   };
   const finishTeamDrag = async () => {
-    if (!teamDrag) return;
-    const target = teamDrag.target;
+    const drag = teamDragRef.current;
+    if (!drag) return;
     const current = teams.map(t => t.id);
-    const filtered = current.filter(id => id !== teamDrag.id);
-    const at = Math.max(0, Math.min(filtered.length, target));
-    const next = [...filtered.slice(0, at), teamDrag.id, ...filtered.slice(at)];
+    const filtered = current.filter(id => id !== drag.id);
+    const at = Math.max(0, Math.min(filtered.length, drag.target));
+    const next = [...filtered.slice(0, at), drag.id, ...filtered.slice(at)];
     setTeamDrag(null);
     if (next.join(",") === current.join(",")) return;
     setReorderBusy(true);
@@ -908,7 +913,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
         ${team && (team.queen
           ? html`<span class="team-bees-queen" title=${`queen of ${team.name}: ${team.queen}`}>♛ ${team.queen}</span>`
           : html`<span class="team-bees-queen none" title="this team has no queen">no queen</span>`)}</span>
-        <span class="team-bees-actions"><span class="team-bees-counts" title=${`${g.members.length} agents${busy ? `, ${busy} working` : ""}${attention ? `, ${attention} need you` : ""}`}>${g.members.length}${busy ? html` · <span class="working">${busy}w</span>` : ""}${attention ? html` · <span class="attn">${attention}!</span>` : ""}</span>
+        <span class="team-bees-actions"><span class="team-bees-counts" title=${`${g.members.length} agents${busy ? `, ${busy} working` : ""}${attention ? `, ${attention} need you` : ""}`}>${g.members.length}${attention ? html` · <span class="attn">${attention}!</span>` : ""}</span>
         ${team && html`<button type="button" class="team-bees-manage" aria-pressed=${managing === g.key}
           aria-label=${`Manage team ${g.name}`} title=${team.queen ? `manage team · queen: ${team.queen}` : "manage team"}
           onClick=${e => { e.preventDefault(); e.stopPropagation(); setManaging(m => m === g.key ? null : g.key); }}>✎</button>`}
