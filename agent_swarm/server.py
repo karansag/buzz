@@ -30,7 +30,7 @@ log = logging.getLogger("agent_swarm.monitor")
 
 # Default activity shown when the monitor is off or hasn't observed an agent
 # yet. The dashboard must tolerate this shape.
-UNKNOWN_ACTIVITY = {"status": "unknown", "detail": None, "error": None, "since": None}
+UNKNOWN_ACTIVITY = {"status": "unknown", "detail": None, "error": None, "since": None, "context": None}
 
 DB_PATH = Path(
     os.environ.get(
@@ -2348,6 +2348,7 @@ def create_app(
                     "detail": row["detail"],
                     "error": row.get("error"),
                     "since": row["since"],
+                    "context": row.get("context"),
                 }
                 if row
                 else dict(UNKNOWN_ACTIVITY)

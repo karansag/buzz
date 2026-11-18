@@ -558,7 +558,7 @@ def test_state_defaults_activity_to_unknown_without_monitor_data(client):
     user = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["user_id"]
     state = client.get("/api/state").json()
     act = next(r["activity"] for r in state["recipients"] if r["user_id"] == user)
-    assert act == {"status": "unknown", "detail": None, "error": None, "since": None}
+    assert act == {"status": "unknown", "detail": None, "error": None, "since": None, "context": None}
 
 
 def test_state_carries_seeded_activity(client):
@@ -566,7 +566,7 @@ def test_state_carries_seeded_activity(client):
     client.app.state.activity_registry[user] = {
         "hash": "abc", "changed_at": 1.0, "status": "needs_attention",
         "detail": "Do you want to proceed?", "error": "API Error: 402", "since": 2.0,
-        "notified": True,
+        "notified": True, "context": {"percent": 55.0, "window": None},
     }
     state = client.get("/api/state").json()
     act = next(r["activity"] for r in state["recipients"] if r["user_id"] == user)
@@ -575,6 +575,7 @@ def test_state_carries_seeded_activity(client):
         "detail": "Do you want to proceed?",
         "error": "API Error: 402",
         "since": 2.0,
+        "context": {"percent": 55.0, "window": None},
     }
 
 

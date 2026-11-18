@@ -297,6 +297,12 @@ how it responds. Ctrl+C waits two seconds between clicks to avoid a double press
 exiting Claude Code. Stopped/offline agents have disabled controls; failures or
 unconfirmed delivery are shown beside the buttons.
 
+An agent's page shows how full its context window is, read from the footer its own harness
+prints, so you need not open the terminal: Codex (`Context 55% used`), Pi (`13.1%/1.0M`) and
+Claude Code when its status line prints `ctx:N%`. The hub reads it from the screen it already
+captures, so agents on other machines work too. It turns amber from 70% and red from 90%.
+agy prints no context figure, and a Claude without such a status line shows none.
+
 On desktop, **Cmd+B** on Mac or **Ctrl+B** elsewhere toggles the agent sidebar. The shortcut also works from the reply box without moving the cursor.
 
 Teammates are listed at the top of the page; Alt+[ and Alt+] move between

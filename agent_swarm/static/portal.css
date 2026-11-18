@@ -124,6 +124,8 @@
   .stateword { font-size: 11px; }
   .attn { color: var(--state-attention); }
   .agent-error { color: #e5484d; }
+  .ctx-use.warn { color: var(--state-attention); }
+  .ctx-use.critical { color: #e5484d; font-weight: 650; }
   .bee-error { cursor: help; }
   .agent-error-mark { display: inline-grid; place-items: center; width: 15px; height: 15px; margin-left: 4px; border-radius: 50%; background: #e5484d; color: #fff; font: 800 11px/1 ui-monospace, monospace; cursor: help; flex: none; }
   .chip {

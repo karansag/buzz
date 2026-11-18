@@ -714,6 +714,49 @@ test('team strip and Alt+] / Alt+[ switch teammates, keeping the draft and the c
   } finally { await page.close(); }
 });
 
+for (const [width, touch] of [[390, true], [1500, false]]) {
+  test(`the agent page shows the harness's context figure, escalating when full, at ${width}px`, async () => {
+    const { page, state, errors } = await setup(width, 900, touch);
+    const stoat = state.recipients.find(r => r.user_id === 'stoat');
+    const chip = page.locator('.fhead .ctx-use');
+    try {
+      assert.ok(stoat.pane_alive);
+      await page.goto(base + '#/agent/stoat');
+      await page.waitForSelector('.fhead');
+      assert.equal(await chip.count(), 0);  // the harness shows no figure: say nothing
+      const read = async context => {
+        stoat.activity.context = context;
+        await page.reload();
+        await page.waitForSelector('.fhead');
+      };
+      const color = () => chip.evaluate(e => getComputedStyle(e).color);
+      await read({ percent: 55, window: null });
+      await chip.waitFor();
+      assert.equal((await chip.innerText()).trim(), 'context 55%');
+      assert.match(await chip.getAttribute('title'), /55% full/);
+      const normal = await color();
+      await read({ percent: 13.1, window: '1.0M' });
+      assert.equal((await chip.innerText()).trim(), 'context 13.1%');
+      assert.match(await chip.getAttribute('title'), /1\.0M-token window/);
+      await read({ percent: 78, window: null });
+      const warn = await color();
+      await read({ percent: 95, window: null });
+      const critical = await color();
+      assert.equal(new Set([normal, warn, critical]).size, 3);
+      assert.ok(await chip.evaluate(e => e.classList.contains('critical')));
+      await read({ percent: null, window: '131K' });
+      assert.equal((await chip.innerText()).trim(), 'context ?');
+      // A stopped agent keeps no figure.
+      const gone = state.recipients.find(r => r.pane_alive === false);
+      gone.activity = { status: 'stopped', context: { percent: 40, window: null } };
+      await page.goto(base + `#/agent/${gone.user_id}`);
+      await page.waitForSelector('.fhead');
+      assert.equal(await chip.count(), 0);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
 test('Alt+H goes back to the overview from any page, keeping the draft', async () => {
   const { page, errors } = await setup(1500, 900, false);
   try {

@@ -12,6 +12,8 @@ import hashlib
 import re
 from typing import NamedTuple
 
+from . import context_usage
+
 
 class Observation(NamedTuple):
     user_id: str
@@ -348,6 +350,9 @@ def step(
             notified = False
 
         registry[obs.user_id] = {
+            # What the harness's footer says about its context window; None
+            # when the pane is gone or the screen shows no figure.
+            "context": context_usage.parse(obs.flavor, obs.capture) if obs.pane_alive else None,
             "hash": snap,
             "changed_at": changed_at,
             "status": status,

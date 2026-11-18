@@ -249,3 +249,15 @@ def test_a_trust_prompt_shows_as_needing_attention_with_a_clear_reason():
     assert registry["smew"]["status"] == "needs_attention"
     assert registry["smew"]["detail"] == (
         "waiting at Claude's workspace trust prompt for /home/karan: answer it in the pane")
+
+
+def test_registry_carries_the_footer_context_and_drops_it_with_the_pane():
+    reg = {}
+    shown = "work\n  GPT-6 medium · ~/r · Context 55% used · weekly 24% left\n"
+    run(reg, [obs(flavor="codex", capture=shown)], now=0)
+    assert reg["otter"]["context"] == {"percent": 55.0, "window": None}
+    run(reg, [obs(flavor="codex", capture="no footer")], now=INTERVAL)
+    assert reg["otter"]["context"] is None
+    run(reg, [obs(flavor="codex", capture=shown)], now=2 * INTERVAL)
+    run(reg, [obs(flavor="codex", pane_alive=False, capture=None)], now=3 * INTERVAL)
+    assert reg["otter"]["context"] is None

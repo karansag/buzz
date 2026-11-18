@@ -1,6 +1,7 @@
 import { agentPreview } from "./agent-preview.js";
 import { replySnippet } from "./replies.js";
 import { ReplyPreview } from "./reply-preview.js";
+import { contextChip } from "./context.js";
 import { OwnerNote } from "./owner-note.js";
 import { QuickSwitcher, noteOpened } from "./quick-switch.js";
 import { useAgentHistory } from "./agent-history.js";
@@ -2109,6 +2110,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
   const status = agentStatus(r);
   const st = STATE[status] || STATE.unknown;
   const detail = r.activity && r.activity.detail;
+  const ctx = r.pane_alive ? contextChip(r.activity?.context) : null;
   // A queen's page lists the whole team's work: tasks held by any member,
   // and tasks assigned to the team itself.
   const queened = (state.teams || []).filter(t => t.queen === user);
@@ -2176,6 +2178,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
           <${StopAgentButton} key=${user} r=${r} refresh=${refresh} />
           <${InterruptAgent} key=${`interrupt-${user}`} r=${r} />
           · joined ${rel(r.registered_at, state.now)}
+          ${ctx && html`· <span class=${`ctx-use ${ctx.level}`} title=${ctx.title}>${ctx.text}</span>`}
           · <span style=${`color:${st.color}`}>${st.word}</span>${status === "needs_attention" && detail ? html` <span class="attn">${detail}</span>` : ""}${r.activity?.error ? html` <span class="agent-error">! ${r.activity.error}</span>` : ""}
         </div>
         ${r.instructions && html`<div class="inst">"${r.instructions}"</div>`}
