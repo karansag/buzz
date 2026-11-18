@@ -2065,3 +2065,13 @@ def test_resume_refuses_running_unknown_folder_and_sessionless_agents(client):
     assert r.status_code == 409 and "which folder" in r.json()["detail"]["error"]
     assert client.post("/agents/ghost/resume").status_code == 404
     assert client._spawn_cwds == []
+
+
+def test_chats_endpoint(client):
+    user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
+    client.post("/owner/send", json={"recipient": user, "content": "hello zephyr"})
+    body = client.get("/api/chats").json()["chats"]
+    assert [c["agent"] for c in body] == [user]
+    assert client.get("/api/chats", params={"q": "zephyr"}).json()["chats"][0]["matches"] == 1
+    assert client.get("/api/chats", params={"q": "nope"}).json()["chats"] == []
+    assert client.get("/api/chats", params={"queens": "true"}).json()["chats"] == []

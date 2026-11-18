@@ -34,7 +34,35 @@ export function historyPage(state, user, params) {
   return { messages: rows.slice(0, limit), has_more: rows.length > limit };
 }
 
+// What /api/chats returns: one row per owner conversation, newest first;
+// with a query only conversations with a matching message, sorted by it.
+function ownerChats(state, params) {
+  const words = (params.get('q') || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const queens = params.get('queens') === 'true'
+    ? new Set((state.teams || []).map(t => t.queen).filter(Boolean)) : null;
+  const by = new Map();
+  for (const m of [...(state.ownerHistory || []), ...(state.history || []), ...state.messages]) {
+    if ((m.sender !== 'owner' && m.recipient !== 'owner') || m.sender === m.recipient) continue;
+    const agent = m.sender === 'owner' ? m.recipient : m.sender;
+    if (queens && !queens.has(agent)) continue;
+    const c = by.get(agent) || { agent, last: null, count: 0, match: null, matches: 0 };
+    if (!by.has(agent)) by.set(agent, c);
+    if (c.seen?.has(m.id)) continue;
+    (c.seen ||= new Set()).add(m.id);
+    c.count += 1;
+    if (!c.last || m.ts > c.last.ts) c.last = m;
+    if (words.length && words.every(w => `${m.context || ''} ${m.content || ''}`.toLowerCase().includes(w))) {
+      c.matches += 1;
+      if (!c.match || m.ts > c.match.ts) c.match = m;
+    }
+  }
+  return [...by.values()].filter(c => !words.length || c.matches)
+    .sort((a, b) => words.length ? b.match.ts - a.match.ts : b.last.ts - a.last.ts)
+    .map(({ seen, ...c }) => c);
+}
+
 export async function mock(page,state=fixture()) {
+ await page.route('**/api/chats?*', r => r.fulfill({json: {chats: ownerChats(state, new URL(r.request().url()).searchParams)}}));
  await page.route('**/api/state',r=>r.fulfill({json:state}));
  await page.route('**/api/agents/*/messages?*', r => {
    const url = new URL(r.request().url());

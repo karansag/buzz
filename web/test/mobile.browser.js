@@ -1224,7 +1224,7 @@ for (const width of [320, 1500]) {
     state.recipients.find(a => a.user_id === 'tapir').pane_alive = false;
     state.messages.push({ id: 80, sender: 'owner', recipient: 'ferret', content: 'member conversation', ts: state.now + 10, status: 'delivered', attachments: [] });
     const history = { id: 81, sender: 'tapir', recipient: 'owner', content: 'Zephyr research report', ts: state.now - 100, status: 'delivered', attachments: [] };
-    await page.route('**/messages?user=owner&limit=*', route => route.fulfill({ json: { messages: [history] } }));
+    state.ownerHistory = [history];
     const who = () => page.locator('.chat-who').evaluateAll(els => els.map(e => e.childNodes[0].textContent.trim()));
     try {
       await page.goto(base + '#/chats');
@@ -1383,8 +1383,6 @@ for (const width of [390, 1500]) {
         content: `message ${id}`, ts: state.now - 7000 + i, status: 'delivered', attachments: [],
       };
     });
-    await page.route('**/messages?user=owner&limit=*', route =>
-      route.fulfill({ json: { messages: state.history.filter(m => m.sender === 'owner' || m.recipient === 'owner') } }));
     try {
       await page.goto(base + '#/chats');
       // Without a search a row still opens the end of the conversation.

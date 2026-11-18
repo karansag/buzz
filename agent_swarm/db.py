@@ -1224,6 +1224,56 @@ def fetch_messages(
     return _messages(conn, rows)
 
 
+def owner_chats(conn: sqlite3.Connection, query: str = "",
+                agents: list[str] | None = None) -> list[dict]:
+    """The owner's conversations, one row per agent, newest first.
+
+    Each row has the agent, its message `count`, its newest message as `last`,
+    and, for a non-empty query, `matches` and the newest matching message as
+    `match`. With a query only conversations with a match are returned and
+    they sort by that match. `agents` limits the rows to those handles.
+    """
+    agent = "CASE WHEN sender='owner' THEN recipient ELSE sender END"
+    scope = "(sender='owner' OR recipient='owner') AND NOT (sender='owner' AND recipient='owner')"
+    args: list = []
+    if agents is not None:
+        if not agents:
+            return []
+        scope += f" AND {agent} IN ({','.join('?' for _ in agents)})"
+        args = list(agents)
+    clause, params = search.matches(query) if query.strip() else ("", [])
+
+    def latest(extra: str, extra_args: list) -> dict[str, dict]:
+        rows = conn.execute(
+            f"SELECT a, id, n FROM ("
+            f"  SELECT {agent} AS a, id, ROW_NUMBER() OVER ("
+            f"    PARTITION BY {agent} ORDER BY ts DESC, id DESC) AS r, "
+            f"    COUNT(*) OVER (PARTITION BY {agent}) AS n "
+            f"  FROM messages WHERE {scope}{extra}) WHERE r=1",
+            (*args, *extra_args)).fetchall()
+        return {r["a"]: {"id": r["id"], "n": r["n"]} for r in rows}
+
+    last = latest("", [])
+    match = latest(f" AND ({clause})", list(params)) if clause else {}
+    wanted = {a for a in last if not clause or a in match}
+    ids = [last[a]["id"] for a in wanted] + [match[a]["id"] for a in wanted if a in match]
+    if not ids:
+        return []
+    marks = ",".join("?" for _ in ids)
+    by_id = {m["id"]: m for m in _messages(conn, conn.execute(
+        f"SELECT * FROM messages WHERE id IN ({marks})", ids).fetchall())}
+    chats = []
+    for a in wanted:
+        chat = {"agent": a, "count": last[a]["n"], "last": by_id[last[a]["id"]],
+                "match": None, "matches": 0}
+        if a in match:
+            chat["match"] = by_id[match[a]["id"]]
+            chat["matches"] = match[a]["n"]
+        chats.append(chat)
+    key = (lambda c: c["match"]["ts"]) if clause else (lambda c: c["last"]["ts"])
+    return sorted(chats, key=key, reverse=True)
+
+
 def search_agent_messages(conn: sqlite3.Connection, user: str, query: str,
                           limit: int = 100, offset: int = 0) -> dict:
     """Search the whole owner conversation, independently of history pages."""

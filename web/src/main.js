@@ -52,7 +52,7 @@ import { stepTeammate, teammates } from "./teammates.js";
 import { Crown, queenSuffix, queenTeam, teamOption } from "./queen.js";
 import { shellNewlines } from "./newlines.js";
 import { PinDialog, PinStrip, PinnedList, pinHref, pinsOf, setPinned } from "./pins.js";
-import { agentThreads, ownerChats } from "./chats.js";
+import { agentThreads } from "./chats.js";
 import { agentHash, parseAgentRoute } from "./agent-route.js";
 
 /* ---------- agent controls ---------- */
@@ -2013,16 +2013,24 @@ function TalkThread({ t, words }) {
 }
 
 function OwnerChats({ state, unreadFor, queensOnly = false }) {
-  const [full, setFull] = useState(null);
+  const [chats, setChats] = useState(null);
   const [query, setQuery] = useState(chatsQuery);
+  // The server builds the rows (one per conversation, search included). The
+  // list is fetched again when the search or the newest message changes.
+  const newest = state.messages.reduce((n, m) => Math.max(n, m.id), 0);
+  const queens = (state.teams || []).map(t => t.queen || "").join(",");
   useEffect(() => {
     let live = true;
-    fetch("/messages?user=owner&limit=100000")
-      .then(r => r.json())
-      .then(d => { if (live) setFull(d.messages || []); })
-      .catch(() => { if (live) setFull([]); });
-    return () => { live = false; };
-  }, []);
+    const params = new URLSearchParams({ q: query });
+    if (queensOnly) params.set("queens", "true");
+    const timer = setTimeout(() => {
+      fetch(`/api/chats?${params}`)
+        .then(r => r.json())
+        .then(d => { if (live) setChats(d.chats || []); })
+        .catch(() => { if (live) setChats(c => c || []); });
+    }, query ? 150 : 0);
+    return () => { live = false; clearTimeout(timer); };
+  }, [query, queensOnly, newest, queens]);
   const update = (q) => {
     setQuery(q);
     const params = new URLSearchParams();
@@ -2031,18 +2039,10 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
     history.replaceState(null, "", params.size ? `${CHATS_ROUTE}?${params}` : CHATS_ROUTE);
   };
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const chats = useMemo(
-    () => {
-      const all = ownerChats([...state.messages, ...(full || [])], query);
-      if (!queensOnly) return all;
-      const queens = new Set((state.teams || []).map(t => t.queen).filter(Boolean));
-      return all.filter(c => queens.has(c.agent));
-    },
-    [state.messages, full, query, queensOnly, state.teams],
-  );
+  if (chats === null) return html`<h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· loading…</span></h2>`;
   const byId = new Map(state.recipients.map(r => [r.user_id, r]));
   return html`
-    <h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· ${chats.length}${full === null ? " · loading full history…" : ""}</span></h2>
+    <h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· ${chats.length}</span></h2>
     <input type="text" class="h-search chats-search" value=${query} autofocus
       placeholder=${queensOnly ? "search your conversations with queens…" : "search your conversations: who did I ask about…"}
       aria-label=${queensOnly ? "Search your conversations with queens" : "Search your conversations"} onInput=${e => update(e.target.value)}

@@ -1757,6 +1757,15 @@ def create_app(
             return {"messages": [found]}
         return {"messages": db.fetch_messages(conn, user, limit)}
 
+    @app.get("/api/chats")
+    def owner_chats(q: str = Query("", max_length=1000), queens: bool = False,
+                    _: None = Depends(_require_owner)):
+        """One row per owner conversation; `queens` keeps current team queens."""
+        agents = None
+        if queens:
+            agents = sorted({t["queen"] for t in db.list_teams(conn) if t.get("queen")})
+        return {"chats": db.owner_chats(conn, q, agents)}
+
     @app.get("/api/agents/{user_id}/messages")
     def agent_messages(user_id: str, limit: int = Query(300, ge=1, le=500),
                        before: int | None = Query(None, ge=1),
