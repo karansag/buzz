@@ -1092,7 +1092,7 @@ def main(argv: list[str] | None = None) -> int:
     dest = snd.add_mutually_exclusive_group(required=True)
     dest.add_argument("--to")
     dest.add_argument("--to-queen", metavar="TEAM",
-                      help="send to the current queen of a team, by team name or id; the reply names her")
+                      help="send to the current queen of a team, by team name or id; the reply names the queen")
     snd.add_argument("--message", required=True)
     snd.add_argument("--context")
     snd.add_argument("--reply-to", type=int, help="id of the message this responds to")

@@ -571,7 +571,7 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         f"\n"
         f"To reply or initiate, POST to /send (or use the `buzz send` "
         f"CLI). Use `--reply-to <message-id>` on `buzz send` to link a reply.\n"
-        f"To reach a team's queen without knowing her handle, use "
+        f"To reach a team's queen without knowing their handle, use "
         f"`buzz send --to-queen <team name or id>`.\n"
         f'Use `buzz notify "text"` (optional `--context`) only for something the owner is waiting on: '
         f"a long job finished or failed, or a decision blocking you. Never use it for progress updates. "
