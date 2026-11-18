@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS teams (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL,
     queen       TEXT,
-    created_at  REAL NOT NULL
+    created_at  REAL NOT NULL,
+    position    REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -340,6 +341,12 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE messages ADD COLUMN status TEXT")
     if "client_id" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN client_id TEXT")
+    team_cols = {row[1] for row in conn.execute("PRAGMA table_info(teams)")}
+    if "position" not in team_cols:
+        conn.execute("ALTER TABLE teams ADD COLUMN position REAL")
+        for index, row in enumerate(conn.execute("SELECT id FROM teams ORDER BY id"), start=1):
+            conn.execute("UPDATE teams SET position=? WHERE id=?", (index, row["id"]))
+        conn.execute("UPDATE teams SET position=id WHERE position IS NULL")
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client "
         "ON messages(sender, client_id) WHERE client_id IS NOT NULL"
@@ -812,9 +819,10 @@ def _team_name(conn: sqlite3.Connection, name: str, team_id: int = -1) -> str:
 @_serialized
 def create_team(conn: sqlite3.Connection, name: str) -> dict:
     name = _team_name(conn, name)
+    position = (conn.execute("SELECT COALESCE(MAX(position), 0) + 1 FROM teams").fetchone()[0])
     cur = conn.execute(
-        "INSERT INTO teams(name, queen, created_at) VALUES(?,?,?)",
-        (name, None, time.time()),
+        "INSERT INTO teams(name, queen, created_at, position) VALUES(?,?,?,?)",
+        (name, None, time.time(), position),
     )
     conn.commit()
     return get_team(conn, int(cur.lastrowid))
@@ -838,8 +846,20 @@ def get_team(conn: sqlite3.Connection, team_id: int) -> dict | None:
 
 @_serialized
 def list_teams(conn: sqlite3.Connection) -> list[dict]:
-    ids = [row["id"] for row in conn.execute("SELECT id FROM teams ORDER BY id")]
+    ids = [row["id"] for row in conn.execute("SELECT id FROM teams ORDER BY position, id")]
     return [get_team(conn, team_id) for team_id in ids]
+
+
+@_serialized
+def reorder_teams(conn: sqlite3.Connection, team_ids: list[int]) -> bool:
+    """Set the displayed order for every team, atomically."""
+    current = [int(row["id"]) for row in conn.execute("SELECT id FROM teams")]
+    if len(current) != len(team_ids) or set(current) != set(team_ids):
+        raise ValueError("order must contain every team exactly once")
+    with conn:
+        for position, team_id in enumerate(team_ids, start=1):
+            conn.execute("UPDATE teams SET position=? WHERE id=?", (position, team_id))
+    return True
 
 
 @_serialized
@@ -1459,9 +1479,10 @@ def apply_import(
             if team["existing_id"] is not None:
                 team_ids[team["name"]] = team["existing_id"]
             else:
+                position = (conn.execute("SELECT COALESCE(MAX(position), 0) + 1 FROM teams").fetchone()[0])
                 cur = conn.execute(
-                    "INSERT INTO teams(name, queen, created_at) VALUES(?,?,?)",
-                    (team["name"], None, now),
+                    "INSERT INTO teams(name, queen, created_at, position) VALUES(?,?,?,?)",
+                    (team["name"], None, now, position),
                 )
                 team_ids[team["name"]] = int(cur.lastrowid)
 

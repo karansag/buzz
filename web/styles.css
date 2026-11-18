@@ -832,16 +832,26 @@ button.harness-key[aria-pressed=true] { border-color: var(--honey-dim); color: v
 .team-bees { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .team-bees-group { border: 1px solid var(--honey-dim); border-radius: 10px; padding: 0 8px; background: rgba(242,169,59,.03); }
 .team-bees-group.loose { border-style: dashed; border-color: var(--line); background: none; }
-.team-bees-group > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; cursor: pointer; list-style: none; }
+.team-bees-drag { flex: none; min-width: 44px; min-height: 44px; margin: 0 -2px 0 -8px; padding: 0 7px; align-self: stretch; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--cream-dim); font-size: 20px; cursor: grab; touch-action: none; user-select: none; }
+.team-bees-drag:hover, .team-bees-drag:focus-visible, .team-bees-drag:active { color: var(--cream); border-color: var(--line); background: rgba(255,255,255,.035); outline: none; }
+.team-bees-drag:active { cursor: grabbing; }
+.team-bees-drag:disabled { opacity: .55; cursor: wait; }
+.team-bees-group.dragging { border-color: var(--honey); opacity: .72; }
+.team-bees-group.reorder-before::before, .team-bees-group.reorder-after::after { content: ""; position: absolute; left: 5px; right: 5px; height: 2px; z-index: 2; background: var(--honey); border-radius: 2px; }
+.team-bees-group.reorder-before::before { top: -6px; }
+.team-bees-group.reorder-after::after { bottom: -6px; }
+.team-bees-group { position: relative; }
+.team-bees-group > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; row-gap: 4px; min-height: 44px; cursor: pointer; list-style: none; }
 .team-bees-group > summary::-webkit-details-marker { display: none; }
 .team-bees-group > summary::before { content: "▾"; color: var(--honey-dim); font-size: 11px; }
 .team-bees-group:not([open]) > summary::before { content: "▸"; }
 .team-bees-name { color: var(--honey); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 .team-bees-group.loose .team-bees-name { color: var(--cream-dim); }
-.team-bees-title { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; }
-.team-bees-queen { color: var(--honey); font-size: 11px; overflow-wrap: anywhere; }
+.team-bees-title { display: flex; align-items: baseline; gap: 6px; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; }
+.team-bees-name { overflow: hidden; text-overflow: ellipsis; }
+.team-bees-queen { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; color: var(--honey); font-size: 11px; }
 .team-bees-queen.none { color: var(--cream-dim); opacity: .7; font-style: italic; }
-.team-bees-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.team-bees-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .team-bees-counts { margin-left: auto; color: var(--cream-dim); font-size: 11px; }
 .team-bees-counts .working { color: var(--moss); }
 .team-bees-counts .attn { color: var(--honey); }

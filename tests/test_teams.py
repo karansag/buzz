@@ -97,6 +97,33 @@ def test_team_crud_and_membership(client):
     assert all(r["team_id"] is None for r in state["recipients"])
 
 
+def test_teams_can_be_reordered_atomically(client):
+    first = _make_team(client, "first")
+    second = _make_team(client, "second")
+    third = _make_team(client, "third")
+    assert [t["name"] for t in client.get("/teams").json()["teams"]] == ["first", "second", "third"]
+
+    response = client.post("/teams/reorder", json={"order": [third["id"], first["id"], second["id"]]})
+    assert response.status_code == 200
+    assert [t["id"] for t in response.json()["teams"]] == [third["id"], first["id"], second["id"]]
+    state = client.get("/api/state").json()
+    assert [t["id"] for t in state["teams"]] == [third["id"], first["id"], second["id"]]
+
+    # A partial, duplicate, unknown or mismatched order changes nothing.
+    for order in ([first["id"], second["id"]], [third["id"], first["id"], 9999],
+                  [third["id"], first["id"], first["id"]]):
+        assert client.post("/teams/reorder", json={"order": order}).status_code == 422
+        assert [t["id"] for t in client.get("/teams").json()["teams"]] == [third["id"], first["id"], second["id"]]
+    assert client.post("/teams/reorder", json={"order": [third["id"], first["id"], second["id"], third["id"]]}).status_code == 422
+    assert client.post("/teams/reorder", json={}).status_code == 422
+
+    # New teams join the end, and the chosen display order survives deletion.
+    fourth = _make_team(client, "fourth")
+    assert [t["name"] for t in client.get("/teams").json()["teams"]] == ["third", "first", "second", "fourth"]
+    client.delete(f"/teams/{first['id']}")
+    assert [t["id"] for t in client.get("/teams").json()["teams"]] == [third["id"], second["id"], fourth["id"]]
+
+
 def test_unregister_queen_clears_role_without_removing_teammates(client):
     queen = _register(client, "0:0.0")
     teammate = _register(client, "0:1.0")

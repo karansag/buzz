@@ -398,6 +398,18 @@ async function moveAgentToTeam(user, teamId, refresh) {
   refresh();
 }
 
+async function persistTeamOrder(teamIds, refresh) {
+  try {
+    const response = await fetch("/teams/reorder", {
+      method: "POST", headers: JSONH, body: JSON.stringify({ order: teamIds }),
+    });
+    if (!response.ok) await showNotice(`Could not save team order: ${await failure(response)}`);
+    else await refresh();
+  } catch {
+    await showNotice("Could not save team order. Check the hub before moving more teams.");
+  }
+}
+
 function agentDropProps(setOver, onDropUser) {
   return {
     onDragOver: (e) => {
@@ -766,6 +778,9 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
   const [dragging, setDragging] = useState(null);
   const [over, setOver] = useState(null);
   const [managing, setManaging] = useState(null);
+  const [teamDrag, setTeamDrag] = useState(null);
+  const [reorderBusy, setReorderBusy] = useState(false);
+  const teamRowsRef = useRef(new Map());
   const [collapsed, setCollapsed] = useState(() => new Set(readJSON(COLLAPSED_TEAMS_KEY, [])));
   const toggle = (key, open) => setCollapsed(prev => {
     const next = new Set(prev);
@@ -785,13 +800,65 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
   }));
   const loners = live.filter(r => !teams.some(t => t.id === r.team_id)).sort((a, b) => a.user_id.localeCompare(b.user_id));
   const lonersGone = offline.filter(r => !teams.some(t => t.id === r.team_id)).map(r => r.user_id).sort();
-  groups.push({ key: "none", name: "no team", queen: null, members: loners, gone: lonersGone, teamId: null });
-  // Groups with no one running go last, so nothing moves under the pointer
-  // during a drag. Empty teams still show (as one line), so they can be
-  // managed and dropped onto; "no team" only shows when it has someone or
-  // during a drag.
-  groups.sort((a, b) => !a.members.length - !b.members.length);
-  if (!dragging) groups.splice(0, groups.length, ...groups.filter(g => g.teamId !== null || g.members.length || g.gone.length));
+  let teamIndex = 0;
+  groups.forEach(g => { g.teamIndex = g.teamId === null ? null : teamIndex++; });
+  groups.push({ key: "none", name: "no team", queen: null, members: loners, gone: lonersGone, teamId: null, teamIndex: null });
+  // While an agent is being dragged, move empty teams below no team so the
+  // drop targets do not reflow out from under the pointer. Team order is
+  // otherwise stable: the server-persisted order is the display order.
+  const orderedGroups = dragging
+    ? [...groups].sort((a, b) => Number(!a.members.length) - Number(!b.members.length))
+    : teamDrag
+      ? groups
+      : groups.filter(g => g.teamId !== null || g.members.length || g.gone.length);
+  const teamGroups = groups.filter(g => g.teamId !== null);
+  const insertionIndex = (clientY) => {
+    let at = 0;
+    for (const group of teamGroups) {
+      const el = teamRowsRef.current.get(group.teamId);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (clientY >= rect.top + rect.height / 2) at += 1;
+    }
+    return at;
+  };
+  const resetTeamDrag = () => setTeamDrag(null);
+  const moveRelative = async (teamId, delta) => {
+    if (reorderBusy) return;
+    const current = teams.map(t => t.id);
+    const from = current.indexOf(teamId);
+    const to = Math.max(0, Math.min(current.length - 1, from + delta));
+    if (from === to) return;
+    const next = [...current];
+    [next[from], next[to]] = [next[to], next[from]];
+    setReorderBusy(true);
+    await persistTeamOrder(next, refresh);
+    setReorderBusy(false);
+  };
+  const moveTeamDrag = (e) => {
+    if (!teamDrag) return;
+    e.preventDefault();
+    setTeamDrag(drag => drag ? { ...drag, target: insertionIndex(e.clientY) } : drag);
+  };
+  const startTeamDrag = (e, group) => {
+    if (reorderBusy || (e.button !== undefined && e.button !== 0)) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setTeamDrag({ id: group.teamId, target: group.teamIndex });
+  };
+  const finishTeamDrag = async () => {
+    if (!teamDrag) return;
+    const target = teamDrag.target;
+    const current = teams.map(t => t.id);
+    const filtered = current.filter(id => id !== teamDrag.id);
+    const at = Math.max(0, Math.min(filtered.length, target));
+    const next = [...filtered.slice(0, at), teamDrag.id, ...filtered.slice(at)];
+    setTeamDrag(null);
+    if (next.join(",") === current.join(",")) return;
+    setReorderBusy(true);
+    await persistTeamOrder(next, refresh);
+    setReorderBusy(false);
+  };
   const stopOver = over === "stop";
   const stopDrop = agentDropProps(
     on => setOver(cur => on ? "stop" : cur === "stop" ? null : cur),
@@ -802,7 +869,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
     });
   return html`<div class="team-bees">
     ${!live.length && html`<p class="compact-hive-empty">No live ${harness ? `${harnessStyle(harness).label} ` : ""}agents${machine ? ` on ${machine}` : ""}.</p>`}
-    ${groups.map(g => {
+    ${orderedGroups.map(g => {
     const busy = g.members.filter(r => agentStatus(r) === "working").length;
     const attention = g.members.filter(r => agentStatus(r) === "needs_attention").length;
     const drop = agentDropProps(
@@ -815,9 +882,25 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       });
     const team = g.teamId === null ? null : teams.find(t => t.id === g.teamId);
     const empty = !g.members.length && !g.gone.length;
-    return html`<details key=${g.key} class=${`team-bees-group ${g.key === "none" ? "loose" : ""} ${empty && !dragging ? "empty" : ""} ${over === g.key ? "over" : ""}`}
+    const reorderClass = teamDrag && g.teamIndex === teamDrag.target
+      ? "reorder-before"
+      : teamDrag && teamDrag.target === teamGroups.length && g.teamIndex === teamGroups.length - 1
+        ? "reorder-after"
+        : "";
+    const teamRowRef = g.teamId === null ? undefined : (el) => {
+      if (el) teamRowsRef.current.set(g.teamId, el);
+      else teamRowsRef.current.delete(g.teamId);
+    };
+    return html`<details key=${g.key} ref=${teamRowRef} data-team-id=${g.teamId} class=${`team-bees-group ${g.key === "none" ? "loose" : ""} ${empty && !dragging ? "empty" : ""} ${over === g.key ? "over" : ""} ${reorderClass} ${teamDrag?.id === g.teamId ? "dragging" : ""}`}
         open=${!collapsed.has(g.key) || managing === g.key} onToggle=${e => toggle(g.key, e.currentTarget.open)} ...${drop}>
-      <summary><span class="team-bees-title"><span class="team-bees-name">${g.name}</span>
+      <summary>${team && html`<button type="button" class="team-bees-drag" aria-label=${`Reorder team ${g.name}`} title="Drag to reorder team; arrow keys move it" disabled=${reorderBusy}
+          onClick=${e => { e.preventDefault(); e.stopPropagation(); }}
+          onPointerDown=${e => startTeamDrag(e, g)} onPointerMove=${moveTeamDrag} onPointerUp=${finishTeamDrag} onPointerCancel=${resetTeamDrag}
+          onKeyDown=${e => {
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              e.preventDefault(); e.stopPropagation(); moveRelative(g.teamId, e.key === "ArrowUp" ? -1 : 1);
+            } else if (e.key === "Escape") { e.preventDefault(); resetTeamDrag(); }
+          }}><span aria-hidden="true">⠿</span></button>`}<span class="team-bees-title"><span class="team-bees-name">${g.name}</span>
         ${team && (team.queen
           ? html`<span class="team-bees-queen" title=${`queen of ${team.name}: ${team.queen}`}>♛ ${team.queen}</span>`
           : html`<span class="team-bees-queen none" title="this team has no queen">no queen</span>`)}</span>

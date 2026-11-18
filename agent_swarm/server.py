@@ -388,6 +388,11 @@ class SpawnReq(BaseModel):
     )
 
 
+class TeamReorderReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    order: list[int] = Field(min_length=0)
+
+
 class TeamCreateReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2224,6 +2229,15 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail={"error": str(exc)}) from exc
         return {"ok": True, "team": team}
+
+    @app.post("/teams/reorder")
+    def teams_reorder(req: TeamReorderReq, _: None = Depends(_require_owner)):
+        """Set the sidebar's team order after a drag."""
+        try:
+            db.reorder_teams(conn, req.order)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"error": str(exc)}) from exc
+        return {"ok": True, "teams": db.list_teams(conn)}
 
     @app.patch("/teams/{team_id}")
     def teams_update(team_id: int, req: TeamUpdateReq, _: None = Depends(_require_owner)):

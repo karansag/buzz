@@ -1053,6 +1053,45 @@ test('chats tab lists owner conversations newest first and searches them', async
 });
 
 
+for (const width of [390, 1500]) {
+  test(`dragging sidebar teams persists their order at ${width}px`, async () => {
+    const { page, state, errors } = await setup(width, 900, width < 500);
+    state.teams[0].name = 'payments';
+    state.recipients.find(r => r.user_id === 'numbat-claude-opus-karansmbp').team_id = 2;
+    state.teams.push({ id: 2, name: 'research', queen: 'numbat-claude-opus-karansmbp', members: ['numbat-claude-opus-karansmbp'] });
+    const reorders = [];
+    await page.route('**/teams/reorder', route => {
+      const body = route.request().postDataJSON();
+      reorders.push(body);
+      state.teams = body.order.map(id => state.teams.find(t => t.id === id));
+      return route.fulfill({ json: { ok: true, teams: state.teams } });
+    });
+    try {
+      await page.goto(base + '#/');
+      const scope = width < 500 ? '.hive-panel' : '#agent-sidebar';
+      await page.waitForSelector(`${scope} .team-bees-group`);
+      const names = async () => (await page.locator(`${scope} .team-bees-group[data-team-id] .team-bees-name`).allInnerTexts()).map(x => x.toLowerCase());
+      assert.deepEqual(await names(), ['payments', 'research']);
+      const target = page.locator(`${scope} [data-team-id="2"]`);
+      const targetBox = await target.boundingBox();
+      const source = page.locator(`${scope} [data-team-id="1"]`);
+      const handle = source.locator('.team-bees-drag');
+      const handleBox = await handle.boundingBox();
+      const reordered = page.waitForResponse(response => response.url().includes('/teams/reorder') && response.request().method() === 'POST');
+      await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(handleBox.x + handleBox.width / 2, targetBox.y + targetBox.height + 3, { steps: 5 });
+      await page.mouse.up();
+      await reordered;
+      assert.deepEqual(reorders, [{ order: [2, 1] }]);
+      await page.waitForFunction(() => [...document.querySelectorAll('.team-bees-group .team-bees-name')]
+        .map(e => e.innerText.toLowerCase()).slice(0, 2).join('|') === 'research|payments');
+      assert.deepEqual(await names(), ['research', 'payments']);
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
 for (const width of [320, 1500]) {
   test(`queen chats at ${width}px filter current leads, search history, and survive reload`, async () => {
     const { page, state, errors } = await setup(width, 900, width < 500);
