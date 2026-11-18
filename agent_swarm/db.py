@@ -598,6 +598,13 @@ def set_cwd(conn: sqlite3.Connection, user_id: str, cwd: str) -> None:
 
 
 @_serialized
+def clear_agent_id(conn: sqlite3.Connection, user_id: str) -> None:
+    """Forget an agent's harness session id (its new session is not known yet)."""
+    with conn:
+        conn.execute("UPDATE recipients SET agent_id=NULL WHERE user_id=?", (user_id,))
+
+
+@_serialized
 def set_owner_note(conn: sqlite3.Connection, user_id: str, text: str) -> dict | None:
     recipient = get_recipient(conn, user_id)
     if recipient is None:

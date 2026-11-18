@@ -880,7 +880,7 @@ def test_spawn_options_lists_harnesses_and_models(client):
     r = client.get("/api/spawn-options")
     assert r.status_code == 200
     harnesses = {h["flavor"]: h["models"] for h in r.json()["harnesses"]}
-    assert set(harnesses) == {"claude", "codex", "pi", "hermes"}
+    assert set(harnesses) == {"claude", "codex", "pi", "agy", "hermes"}
     assert "opus" in harnesses["claude"]
     assert harnesses["hermes"] == []
 
@@ -950,6 +950,30 @@ def test_switch_dry_run_reports_the_plan_and_writes_nothing(client, monkeypatch,
     assert "pi --session" in plan["command"]
     assert not (tmp_path / "pi").exists()
     assert client._kills == []
+
+
+@pytest.mark.parametrize("to,seeded", [("agy", True), ("codex", True), ("pi", False)])
+def test_applied_switch_records_only_a_session_id_that_exists(client, monkeypatch, tmp_path, to, seeded):
+    # A seeded harness names its own session when it starts; the made-up id
+    # in the plan, or the old harness's id, would resume the wrong conversation.
+    folder = tmp_path / "work"
+    folder.mkdir()
+    user = client.post("/register", json={"tmux_pane": "0:0.0", "agent_id": "switch-src",
+                                          "flavor": "claude"}).json()["user_id"]
+    conn = db.connect(tmp_path / "db.sqlite")
+    db.set_cwd(conn, user, str(folder))
+    home = tmp_path / "home"
+    source = home / ".claude" / "projects" / handoff.claude_project_dir(str(folder)) / "switch-src.jsonl"
+    source.parent.mkdir(parents=True)
+    source.write_text('{"type":"user","message":{"role":"user","content":"remember 4417"}}\n')
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(handoff, "apply", lambda item, own_pane=None: None)
+    r = client.post(f"/agents/{user}/switch", json={"to": to})
+    assert r.status_code == 200, r.text
+    row = db.get_recipient(conn, user)
+    assert row["flavor"] == to
+    assert row["agent_id"] == (None if seeded else r.json()["plan"]["session_id"])
 
 
 def test_stop_reports_tmux_failure(client, monkeypatch):

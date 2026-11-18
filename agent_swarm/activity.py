@@ -74,6 +74,14 @@ ATTENTION_PATTERNS: dict[str, dict[str, list[re.Pattern]]] = {
         # The question itself is the line after this header.
         "question_headers": _compile(r"^\W*Question \d+/\d+\b"),
     },
+    # The Antigravity CLI (agy 1.5.11): "Requesting permission for:", the
+    # command, "Run this command?", numbered answers, and this footer. The
+    # command itself is the useful reason to show.
+    "agy": {
+        "markers": _compile(r"\btab Amend\b", r"^\W*Requesting permission for:\s*$"),
+        "questions": [],
+        "question_headers": _compile(r"^\W*Requesting permission for:\s*$"),
+    },
     "generic": {
         "markers": _compile(r"\[y/N\]", r"\(y/n\)", r"(?i)\bpassword( for \S+)?:\s*$"),
         "questions": [],
@@ -84,9 +92,14 @@ ATTENTION_PATTERNS: dict[str, dict[str, list[re.Pattern]]] = {
 # A harness asking whether to trust its working folder, which it does
 # before the agent starts. Claude draws "Accessing workspace:" over the
 # folder, with "No, exit" selected; Codex asks "Trust this folder?" (older
-# builds: "Do you trust the contents of this directory?"). Each title counts
+# builds: "Do you trust the contents of this directory?"); Antigravity asks
+# "Do you trust the contents of this project?". Each title counts
 # only with its answer on screen, so an agent quoting the words does not.
 TRUST_PROMPTS = [
+    # Antigravity draws Claude's "Accessing workspace:" heading too, so its
+    # own question has to be checked first. Its answer defaults to "Yes".
+    ("Antigravity", re.compile(r"^\W*Do you trust the contents of this project\?"),
+     re.compile(r"Yes, I trust this folder")),
     ("Claude", re.compile(r"^\W*Accessing workspace:\s*$"), re.compile(r"Yes, I trust this folder")),
     ("Codex", re.compile(r"^\W*Trust this folder\?"), re.compile(r"Trust and continue")),
     ("Codex", re.compile(r"^\W*Do you trust the contents of this directory\?"), re.compile(r"\bYes, continue\b")),

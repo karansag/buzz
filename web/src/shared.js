@@ -10,13 +10,14 @@ export function stopAgentPrompt(agent) {
   return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`;
 }
 
-export const FLAVOR_ICON = { claude: "✳", codex: "◇", pi: "π", hermes: "☿", generic: "▪" };
+export const FLAVOR_ICON = { claude: "✳", codex: "◇", pi: "π", agy: "▲", hermes: "☿", generic: "▪" };
 
 // Harness glyphs identify the runtime; machine colors live in machines.js.
 export const HARNESSES = Object.freeze({
   claude:  { key: "claude",  label: "Claude",  color: "#d8905f", mark: "✳" },
   codex:   { key: "codex",   label: "Codex",   color: "#56b4e9", mark: "◇" },
   pi:      { key: "pi",      label: "Pi",      color: "#3cb44b", mark: "π" },
+  agy:     { key: "agy",     label: "Antigravity", color: "#a78bfa", mark: "▲" },
   hermes:  { key: "hermes",  label: "Hermes",  color: "#e5c14f", mark: "☿" },
   generic: { key: "generic", label: "Generic", color: "#9aa1a8", mark: "▪" },
 });

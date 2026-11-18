@@ -152,7 +152,7 @@ def resume_command(agent: dict) -> str | None:
     command = config.harness_command(flavor)
     if command is not None:
         resume_flag = {"claude": "--resume", "codex": "resume", "pi": "--session",
-                       "hermes": "--resume"}[flavor]
+                       "agy": "--conversation", "hermes": "--resume"}[flavor]
         parts = [command, resume_flag, sid]
         if model and flavor != "pi":
             parts += [spec.model_flag, model]
@@ -163,6 +163,9 @@ def resume_command(agent: dict) -> str | None:
         parts = ["codex", "resume", sid]
     elif flavor == "pi":
         parts = ["pi", "--session", sid]
+    elif flavor == "agy":
+        # A launch --model is for this session only; agy's /model would save it.
+        parts = ["agy", "--conversation", sid]
     else:
         parts = ["hermes", "--resume", sid]
     if spec.startup_args:

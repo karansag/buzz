@@ -19,6 +19,14 @@ Each harness shows its model in its own way, and changes it in its own way:
   provider/id` is not used: Pi's autocomplete can swap a near match from the
   saved list in for the typed id.
 
+- Antigravity (agy): its /model picker saves the pick as the default for
+  every new agy session, and nothing applies it to one session only. So a
+  switch restarts the agent instead, only while the screen shows it idle:
+  `/quit`, then `agy --conversation ID --model M` in the same pane. That
+  resumes the same conversation; a launch --model is not saved. The footer
+  shows the model ("Gemini 4 Argon · medium"), the id is agy's own
+  ("gemini-4-argon-medium").
+
 A switch drives that UI through the node (paste, keys, screen captures), so it
 works for agents on any machine, and checks every step on the screen before
 the next key: it never presses a confirm key unless the cursor is on the
@@ -34,9 +42,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import nodes, tmux
+from . import nodes, restore, tmux
 
-SWITCHABLE = ("claude", "codex", "pi")
+SWITCHABLE = ("claude", "codex", "pi", "agy")
 
 # How long to wait for each screen change, and how often to look.
 STEP_TIMEOUT = 8.0
@@ -60,6 +68,10 @@ _CODEX_STATUS = re.compile(rf"^\s*(\S.*?)\s+({_CODEX_EFFORTS})\s+·")
 # Pi's footer: context use ("7.1%/131k"), "(auto)" compaction, then
 # "(provider) id" and, for reasoning models, "• level". A narrow pane drops
 # the provider and cuts the end of a long id.
+# agy's footer: its key hint, then the model and effort on the right:
+# "? for shortcuts        Gemini 4 Neon · high" (busy: "esc to cancel").
+_AGY_FOOTER = re.compile(r"^\s*(\? for shortcuts|esc to cancel)\s{2,}(\S.*?) · (\w+)\s*$")
+AGY_IDLE = "? for shortcuts"
 _PI_FOOTER = re.compile(
     r"\d+(?:\.\d+)?%/\S+(?:\s+\(auto\))?\s+(?:\(([\w.-]+)\)\s+)?(\S+)(?:\s+•\s+\S+)?\s*$"
 )
@@ -102,6 +114,28 @@ def _codex_slug(label: str) -> str:
     return known.get(label.lower()) or re.sub(r"\s+", "-", label.strip().lower())
 
 
+def _agy_id(name: str, effort: str) -> str:
+    """"Gemini 4 Argon", "medium" -> "gemini-4-argon-medium", agy's model id.
+
+    agy's catalog maps its labels ("Gemini 4 Argon (Medium)") to ids; without
+    it, the label is turned into an id the same way agy names most models.
+    """
+    label = f"{name} ({effort})".lower()
+    for model, shown in tmux.agy_catalog():
+        if shown.lower() == label:
+            return model
+    return re.sub(r"\s+", "-", f"{name} {effort}".strip().lower())
+
+
+def agy_footer(screen: str) -> tuple[bool, str] | None:
+    """(idle, model id) from agy's footer, or None if it is not on screen."""
+    lines = [ln for ln in screen.splitlines() if ln.strip()]
+    for line in reversed(lines[-FOOTER_LINES:]):
+        if m := _AGY_FOOTER.match(line):
+            return m.group(1) == AGY_IDLE, _agy_id(m.group(2), m.group(3))
+    return None
+
+
 def screen_model(flavor: str | None, screen: str | None) -> str | None:
     """The model the harness on this screen says it runs, or None if it doesn't say.
 
@@ -135,6 +169,9 @@ def screen_model(flavor: str | None, screen: str | None) -> str | None:
                 provider, model = m.groups()
                 return f"{provider}/{model}" if provider else _pi_full_id(model)
         return None
+    if flavor == "agy":
+        found = agy_footer(screen)
+        return found[1] if found else None
     return None
 
 
@@ -197,6 +234,9 @@ def same_model(flavor: str, wanted: str, seen: str | None) -> bool:
         return seen.startswith(f"claude-{wanted}-")
     if flavor == "pi" and "/" in wanted and seen == wanted.split("/", 1)[1]:
         return True
+    if flavor == "agy" and re.fullmatch(r"[a-z]+", wanted):
+        # A family alias ("argon") matches any effort of that family.
+        return f"-{wanted}-" in f"-{seen}-"
     return seen == wanted
 
 
@@ -288,6 +328,8 @@ class Pane:
     tmux_server: str | None
     submit_key: str
     flavor: str
+    # The harness's session id. agy's switch resumes it under the new model.
+    session: str | None = None
 
     def screen(self) -> str:
         text, err = self.node.capture(self.pane, self.tmux_server)
@@ -525,6 +567,57 @@ def _effort_row(effort: str | None, rows: list[Row]) -> Row | None:
     return next((r for r in rows if r.default), None)
 
 
+def agy_model(wanted: str, current: str | None) -> str | None:
+    """The agy model id for `wanted`: an id agy lists, one of its labels, or a
+    family alias ("argon"), which keeps the current effort when agy offers it,
+    else takes medium, else the first listed. None if agy has no such model."""
+    catalog = tmux.agy_catalog() or [(m, m) for m in tmux.AGY_FALLBACK_MODELS]
+    wanted = wanted.strip().lower()
+    for model, label in catalog:
+        if wanted in (model, label.lower()):
+            return model
+    family = [model for model, _ in catalog if re.fullmatch(r"[a-z]+", wanted) and f"-{wanted}-" in f"-{model}-"]
+    effort = current.rsplit("-", 1)[-1] if current else None
+    for pick in (effort, "medium"):
+        found = next((m for m in family if pick and m.endswith(f"-{pick}")), None)
+        if found:
+            return found
+    return family[0] if family else None
+
+
+def _agy_restart(pane: Pane, wanted: str, sleep: Callable[[float], None]) -> str:
+    """Restart an idle agy agent in its pane on another model; returns the model id."""
+    screen = pane.screen()
+    footer = agy_footer(screen)
+    if footer is None:
+        raise SwitchFailed("agy's footer is not on screen; is a menu open?", screen)
+    idle, current = footer
+    if not idle:
+        # /quit would end the turn it is working on.
+        raise SwitchFailed("agy is busy; switching restarts it, so wait until it is idle", screen)
+    if not pane.session:
+        raise SwitchFailed("no agy conversation id is registered for this agent, so it could not be resumed")
+    model = agy_model(wanted, current)
+    if model is None:
+        listed = ", ".join(m for m, _ in tmux.agy_catalog()) or ", ".join(tmux.AGY_FALLBACK_MODELS)
+        raise SwitchFailed(f"agy has no model {wanted} (it lists: {listed})", screen)
+    if model == current:
+        return model
+    command = restore.resume_command({"flavor": "agy", "agent_id": pane.session, "model": model})
+    pane.type("/quit", retry_submit=False)
+
+    def shell(_screen: str) -> bool:
+        try:
+            snap = pane.node.snapshot()
+        except nodes.Unavailable:
+            return False
+        return pane.pane in snap.existing and pane.pane not in snap.live
+
+    wait_for(pane, shell, "agy to exit to the shell", sleep=sleep)
+    pane.type(command, retry_submit=False)
+    return model
+
+
 def switch(pane: Pane, wanted: str, sleep: Callable[[float], None] = time.sleep) -> str:
     """Switch the agent in `pane` to `wanted`, for its current session only.
 
@@ -533,7 +626,11 @@ def switch(pane: Pane, wanted: str, sleep: Callable[[float], None] = time.sleep)
     open picker is closed again with Escape. Escape is never pressed when no
     picker is open, because in Claude Code and Codex it interrupts a turn.
     """
-    if pane.flavor == "pi":
+    timeout = None
+    if pane.flavor == "agy":
+        wanted = _agy_restart(pane, wanted, sleep)
+        timeout = 45.0  # agy starts up again first
+    elif pane.flavor == "pi":
         _pi_select(pane, wanted, sleep)
     elif pane.flavor in PICKERS:
         title, apply_key = PICKERS[pane.flavor]
@@ -570,4 +667,4 @@ def switch(pane: Pane, wanted: str, sleep: Callable[[float], None] = time.sleep)
             return seen if seen else wanted
         return None
 
-    return wait_for(pane, shows_wanted, f"the screen to show {wanted}", sleep=sleep)
+    return wait_for(pane, shows_wanted, f"the screen to show {wanted}", timeout=timeout, sleep=sleep)

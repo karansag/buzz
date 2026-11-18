@@ -28,15 +28,16 @@ from pathlib import Path
 
 from . import restore, tmux
 
-# Harnesses whose transcripts this module can read and write.
-FLAVORS = ("claude", "codex", "pi")
+# Harnesses this module can move an agent to (and read transcripts from).
+FLAVORS = ("claude", "codex", "pi", "agy")
 # Harnesses whose own session files are not safe to hand-write yet. A switch
 # into one of these writes the conversation to a markdown file in the agent's
 # folder and starts a fresh session that is told to read it: the conversation
 # still travels, the harness format is left alone. Codex's rollout files are
 # written by its app server and `codex resume <id>` did not pick up a
 # hand-written one in testing (it started empty), so it takes this route.
-SEED_TARGETS = frozenset({"codex"})
+# The Antigravity CLI keeps conversations in its own SQLite databases.
+SEED_TARGETS = frozenset({"codex", "agy"})
 
 # Roughly 4 characters per token, so this is about 37k tokens of conversation
 # plus the target's own system prompt and instructions.
@@ -134,6 +135,12 @@ def pi_home() -> Path:
     return Path(os.environ.get("PI_CODING_AGENT_DIR") or (Path.home() / ".pi" / "agent"))
 
 
+def agy_home() -> Path:
+    """The Antigravity CLI's data folder (it tells its commands as ANTIGRAVITY_APP_DATA_DIR)."""
+    return Path(os.environ.get("ANTIGRAVITY_APP_DATA_DIR")
+                or (Path.home() / ".gemini" / "antigravity-cli"))
+
+
 def claude_project_dir(cwd: str) -> str:
     """Claude's directory name for a working directory: /home/karan → -home-karan."""
     return "-" + str(Path(cwd)).lstrip("/").replace("/", "-")
@@ -173,6 +180,13 @@ def find_source(flavor: str, agent_id: str | None) -> Path | None:
         for candidate in root.rglob(f"*{agent_id}.jsonl"):
             return candidate
         return None
+    if flavor == "agy":
+        # agy keeps the conversation in conversations/<id>.db and writes a
+        # readable copy, step by step, under brain/<id>/.
+        if "/" in agent_id or agent_id.startswith("."):
+            return None
+        candidate = agy_home() / "brain" / agent_id / ".system_generated" / "logs" / "transcript.jsonl"
+        return candidate if candidate.is_file() else None
     return None
 
 
@@ -280,7 +294,35 @@ def _pi_text(content) -> str:
     return "\n".join(part for part in parts if part and part.strip())
 
 
-READERS = {"claude": _claude_turn, "codex": _codex_turn, "pi": _pi_turn}
+_AGY_REQUEST = re.compile(r"<USER_REQUEST>\n?(.*?)\n?</USER_REQUEST>", re.DOTALL)
+
+
+def _agy_turn(record: dict) -> Turn | None:
+    """One step of an Antigravity transcript.jsonl.
+
+    USER_INPUT wraps the typed text in <USER_REQUEST> next to metadata the
+    harness adds (time, settings changes); PLANNER_RESPONSE is the model's
+    reply and its tool calls; GENERIC steps from the model are tool results.
+    System messages are dropped.
+    """
+    kind, content = record.get("type"), record.get("content")
+    if kind == "USER_INPUT" and record.get("source") == "USER_EXPLICIT":
+        found = _AGY_REQUEST.findall(content if isinstance(content, str) else "")
+        text = "\n".join(part.strip() for part in found)
+        return Turn("user", _clip(text, TURN_CLIP)) if text.strip() else None
+    if kind == "PLANNER_RESPONSE":
+        parts = [content] if isinstance(content, str) else []
+        for call in record.get("tool_calls") or []:
+            if isinstance(call, dict):
+                parts.append(_tool_note(call.get("name") or "?", call.get("args")))
+        text = "\n".join(part for part in parts if part and part.strip())
+        return Turn("assistant", _clip(text, TURN_CLIP)) if text.strip() else None
+    if kind == "GENERIC" and record.get("source") == "MODEL" and isinstance(content, str) and content.strip():
+        return Turn("assistant", _result_note(content))
+    return None
+
+
+READERS = {"claude": _claude_turn, "codex": _codex_turn, "pi": _pi_turn, "agy": _agy_turn}
 
 
 def read_turns(flavor: str, path: Path) -> list[Turn]:
@@ -556,7 +598,9 @@ def seed_command(item: Switch, model: str | None) -> str | None:
     prompt = (f"This conversation was handed over from another harness. Read "
               f"{item.session_path} and carry on from its last message as if you had been in "
               f"it all along. Do not summarise it back to me.")
-    return f"{launch} {shlex.quote(prompt)}"
+    # agy takes no bare prompt; -i runs one and stays interactive.
+    flag = "-i " if item.to == "agy" else ""
+    return f"{launch} {flag}{shlex.quote(prompt)}"
 
 
 def target_path(flavor: str, cwd: str, session_id: str = "SESSION") -> Path | None:

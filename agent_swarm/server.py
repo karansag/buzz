@@ -360,7 +360,7 @@ class TaskUpdateReq(ActorFields):
 class SwitchReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    to: Literal["claude", "codex", "pi"] = Field(description="The harness to move the agent to.")
+    to: Literal["claude", "codex", "pi", "agy"] = Field(description="The harness to move the agent to.")
     model: str | None = Field(default=None, description="Optional model for the new harness.")
     max_chars: int = Field(default=handoff.DEFAULT_MAX_CHARS, ge=2000, le=2_000_000,
                            description="How much conversation to carry over, in characters.")
@@ -371,7 +371,7 @@ class SwitchReq(BaseModel):
 class SpawnReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    flavor: Literal["claude", "codex", "pi", "hermes"] = "claude"
+    flavor: Literal["claude", "codex", "pi", "agy", "hermes"] = "claude"
     model: str | None = Field(
         default=None,
         description="Optional harness model. Only honored when it is one of "
@@ -439,7 +439,8 @@ class SwitchModelReq(ActorFields):
     model: str = Field(
         min_length=1, max_length=200,
         description="The model to switch to, as the harness names it: a Claude "
-        "alias or id (sonnet, claude-opus-5-5), a Codex slug, Pi's provider/id.",
+        "alias or id (sonnet, claude-opus-5-5), a Codex slug, Pi's provider/id, an "
+        "agy id or family (gemini-4-argon-medium, argon).",
     )
 
 
@@ -501,7 +502,7 @@ def _supervisor_prompt(user_id: str, objective: str, peers: list[dict]) -> str:
         "- Delegate when asked. File work with `buzz task-create \"title\" "
         "--description ... --assignee <handle>`; the assignee is notified in your "
         "name. Prefer an idle agent of a suitable harness; when none is free, "
-        "`buzz spawn --flavor claude|codex|pi|hermes` starts one, then assign "
+        "`buzz spawn --flavor claude|codex|pi|agy|hermes` starts one, then assign "
         "to the handle it prints. Record ordering with --depends-on.\n"
         "- Watch the swarm. The hub sends you a message from `hub` tagged `digest` "
         "when there is new traffic or task changes you were not party to; read the "
@@ -2208,11 +2209,17 @@ def create_app(
             raise HTTPException(status_code=502, detail={"error": error, "plan": item.describe()})
         spec = tmux.HARNESS_SPAWN.get(req.to)
         model = req.model if (spec and req.model in spec.models) else None
+        # A seeded session (codex, agy) gets its id from the harness when it
+        # starts; its startup registration records it. Until then there is
+        # none, and the old harness's id would resume the wrong conversation.
+        seeded = item.route == "seed"
         db.register(
-            conn, user_id, row["tmux_pane"], item.session_id, model, req.to,
+            conn, user_id, row["tmux_pane"], None if seeded else item.session_id, model, req.to,
             submit_key=tmux.submit_key_for_flavor(req.to),
             tmux_server=row.get("tmux_server"), pane_label=row.get("pane_label"), node=row.get("node"),
         )
+        if seeded:
+            db.clear_agent_id(conn, user_id)
         _refresh_watch(node.name)
         return {"ok": True, "applied": True, "plan": item.describe()}
 
@@ -2418,7 +2425,8 @@ def create_app(
         """Switch the model an agent runs, for its current session.
 
         Drives the harness's own /model command in the agent's pane (see
-        model_switch) and reads the result back off the screen. The owner may
+        model_switch) and reads the result back off the screen. An agy agent
+        is restarted into the same conversation instead, and only when idle. The owner may
         switch any agent; an agent may switch the members of a team it is
         queen of.
         """
@@ -2468,6 +2476,7 @@ def create_app(
             pane = model_switch.Pane(
                 node, recipient["tmux_pane"], recipient.get("tmux_server"),
                 recipient.get("submit_key") or tmux.DEFAULT_SUBMIT_KEY, flavor,
+                session=recipient.get("agent_id"),
             )
             try:
                 seen = model_switch.switch(pane, req.model.strip())

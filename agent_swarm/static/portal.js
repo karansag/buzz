@@ -9191,6 +9191,7 @@ var FLAVOR_ICON = {
 	claude: "✳",
 	codex: "◇",
 	pi: "π",
+	agy: "▲",
 	hermes: "☿",
 	generic: "▪"
 };
@@ -9212,6 +9213,12 @@ var HARNESSES = Object.freeze({
 		label: "Pi",
 		color: "#3cb44b",
 		mark: "π"
+	},
+	agy: {
+		key: "agy",
+		label: "Antigravity",
+		color: "#a78bfa",
+		mark: "▲"
 	},
 	hermes: {
 		key: "hermes",
@@ -12602,7 +12609,8 @@ function ResumeAgentButton({ r, refresh }) {
 var SWITCHABLE = [
 	"claude",
 	"codex",
-	"pi"
+	"pi",
+	"agy"
 ];
 var OTHER_MODEL = "\0other";
 function ModelLabel({ r, refresh }) {

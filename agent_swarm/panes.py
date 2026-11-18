@@ -35,6 +35,8 @@ def harness_matches(flavor: str | None, command: str) -> bool:
         return command in {"claude", "node"} or re.fullmatch(r"\d+(\.\d+)+", command) is not None
     if flavor == "codex":
         return command in {"codex", "node"} or command.startswith("codex")
+    if flavor == "agy":
+        return command == "agy"
     return True
 
 

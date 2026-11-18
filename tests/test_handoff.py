@@ -24,9 +24,10 @@ def fake_homes(tmp_path, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     monkeypatch.setenv("CODEX_HOME", str(codex))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(pi))
+    monkeypatch.setenv("ANTIGRAVITY_APP_DATA_DIR", str(home / ".gemini" / "antigravity-cli"))
     # Never probe the real harness binaries from a test.
     monkeypatch.setattr(tmux, "harness_accepts", lambda binary, flag: False)
-    return {"home": home, "codex": codex, "pi": pi}
+    return {"home": home, "codex": codex, "pi": pi, "agy": home / ".gemini" / "antigravity-cli"}
 
 
 def claude_session(home: Path, session_id: str, cwd: str, records: list[dict]) -> Path:
@@ -58,6 +59,13 @@ def pi_session(pi: Path, session_id: str, cwd: str, messages: list[dict]) -> Pat
     lines += [{"type": "message", "id": f"0000000{i}", "parentId": None,
                "timestamp": "2026-05-04T10:00:01.000Z", "message": m} for i, m in enumerate(messages)]
     path.write_text("".join(json.dumps(line) + "\n" for line in lines))
+    return path
+
+
+def agy_session(agy: Path, conversation: str, records: list[dict]) -> Path:
+    path = agy / "brain" / conversation / ".system_generated" / "logs" / "transcript.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(r) + "\n" for r in records))
     return path
 
 
@@ -100,11 +108,24 @@ PI_MESSAGES = [
 ]
 
 
+AGY_RECORDS = [
+    {"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "content": "You are an expert coding assistant."},
+    {"source": "USER_EXPLICIT", "type": "USER_INPUT", "content":
+        "<USER_REQUEST>\nBuild the parser, the ticket is 4417.\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nx\n</ADDITIONAL_METADATA>"},
+    {"source": "MODEL", "type": "PLANNER_RESPONSE", "thinking": "I should look at the repo first.",
+     "tool_calls": [{"name": "bash", "args": {"CommandLine": "ls"}}]},
+    {"source": "MODEL", "type": "GENERIC", "content": "Command exited with code 0.\n\nCommand output:\nREADME.md\nsrc"},
+    {"source": "MODEL", "type": "PLANNER_RESPONSE", "content": "The parser is in src and the ticket number is 4417."},
+]
+
+
 def source_for(flavor: str, homes) -> tuple[str, Path]:
     if flavor == "claude":
         return "claude-src", claude_session(homes["home"], "claude-src", CWD, CLAUDE_RECORDS)
     if flavor == "codex":
         return "codex-src", codex_session(homes["codex"], "codex-src", CWD, CODEX_ITEMS)
+    if flavor == "agy":
+        return "agy-src", agy_session(homes["agy"], "agy-src", AGY_RECORDS)
     return "pi-src", pi_session(homes["pi"], "pi-src", CWD, PI_MESSAGES)
 
 

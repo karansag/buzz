@@ -209,10 +209,11 @@ function shortModel(model, flavor) {
 
 // For Claude Code, Codex and Pi the model label is a switcher: saving drives
 // the harness's own /model command in the agent's pane, for its current
-// session only, and the hub reads the result back off the screen. The hub
-// also keeps the label in step when /model is typed in the pane. Other
-// harnesses keep a display-only label.
-const SWITCHABLE = ["claude", "codex", "pi"];
+// session only, and the hub reads the result back off the screen. An idle
+// agy agent is restarted into its conversation on the new model instead.
+// The hub also keeps the label in step when /model is typed in the pane.
+// Other harnesses keep a display-only label.
+const SWITCHABLE = ["claude", "codex", "pi", "agy"];
 const OTHER_MODEL = "\u0000other";
 
 function ModelLabel({ r, refresh }) {

@@ -54,7 +54,7 @@ def test_unspawnable_flavor_returns_none():
 
 def test_spawn_options_shape(codex_catalog):
     opts = {o["flavor"]: o["models"] for o in tmux.spawn_options()}
-    assert set(opts) == {"claude", "codex", "pi", "hermes"}
+    assert set(opts) == {"claude", "codex", "pi", "agy", "hermes"}
     assert opts["claude"] == ["opus", "sonnet", "haiku", "fable"]
     # Codex's own picker list, in its priority order, hidden models left out.
     assert opts["codex"] == codex_catalog

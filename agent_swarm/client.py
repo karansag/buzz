@@ -14,10 +14,10 @@
                             [--depends-on 3,5] [--note TEXT]   # --note required to close
     buzz digest [--minutes N | --after-message ID]   # what changed, as text
     buzz supervisor [HANDLE [--objective TEXT] | --clear]   # the swarm supervisor role
-    buzz spawn [--flavor claude|codex|pi|hermes] [--model M] [--node N]
+    buzz spawn [--flavor claude|codex|pi|agy|hermes] [--model M] [--node N]
     buzz stop HANDLE   # kill that agent's tmux pane
     buzz model HANDLE... --to MODEL | --team --to MODEL   # switch agents' models (owner or their queen)
-    buzz switch HANDLE --to claude|codex|pi [--model M] [--apply]   # move it to another harness, keeping the conversation
+    buzz switch HANDLE --to claude|codex|pi|agy [--model M] [--apply]   # move it to another harness, keeping the conversation
     buzz snapshot      # save this machine's tmux layout and the agent in each pane
     buzz restore [--from FILE] [--apply] [--stagger SECONDS]   # after a reboot
     buzz restart HANDLE... | --all [--flavor F] [--force] [--apply]   # e.g. after a harness upgrade
@@ -69,6 +69,8 @@ SESSION_ENV = (
     ("codex", "CODEX_THREAD_ID"),
     ("codex", "CODEX_SESSION_ID"),
     ("pi", "PI_SESSION_ID"),
+    # The Antigravity CLI. Its ANTIGRAVITY_TRAJECTORY_ID is a different id.
+    ("agy", "ANTIGRAVITY_CONVERSATION_ID"),
 )
 
 
@@ -80,7 +82,8 @@ def harness_of(command: str) -> str | None:
     """The harness a process command line belongs to, or None.
 
     Codex runs as its native binary under .../codex/..., Claude Code as
-    `claude` or a versioned binary, and Pi renames its process to `pi`.
+    `claude` or a versioned binary, Pi renames its process to `pi`, and the
+    Antigravity CLI is a native `agy` binary.
     """
     executable, _, rest = command.partition(" ")
     program = executable.rsplit("/", 1)[-1]
@@ -94,6 +97,8 @@ def harness_of(command: str) -> str | None:
         return "claude"
     if program == "pi":
         return "pi"
+    if program == "agy":
+        return "agy"
     return None
 
 
@@ -318,7 +323,21 @@ def _one_shot(harness: str, command: str) -> bool:
                 # Unknown option arity: don't risk registering a one-shot run.
                 return True
         return False
+    if harness == "agy":
+        # `agy -p`/`--print`/`--prompt` print one answer; a subcommand
+        # (`agy models`, `agy acp`) is no session either. `-i` is interactive.
+        if any(w in ("-p", "--print", "--prompt") or w.startswith(("--print=", "--prompt="))
+               for w in words):
+            return True
+        return bool(words) and words[0] in AGY_SUBCOMMANDS
     return "-p" in words or "--print" in words
+
+
+# `agy` subcommands (agy 1.5.11 help); none of them is an agent session.
+AGY_SUBCOMMANDS = {
+    "acp", "agent", "agents", "changelog", "help", "install", "mcp", "mic-serve",
+    "models", "plugin", "plugins", "remote-control", "update",
+}
 
 
 def own_pane_harness(pane: str) -> tuple[str | None, str]:
@@ -335,7 +354,7 @@ def own_pane_harness(pane: str) -> tuple[str | None, str]:
         if harness:
             break
     else:
-        return None, "no claude, codex or pi process above this command"
+        return None, "no claude, codex, pi or agy process above this command"
     pane_pid = tmux.pane_process(pane)
     if pane_pid is None:
         return None, f"tmux does not know pane {pane}"
@@ -1035,7 +1054,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     reg.add_argument(
         "--flavor",
-        help="delivery flavor (claude, codex, pi, hermes); default: the harness this runs under",
+        help="delivery flavor (claude, codex, pi, agy, hermes); default: the harness this runs under",
     )
     reg.add_argument(
         "--instructions",
@@ -1066,7 +1085,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     rsa.add_argument("handles", nargs="*", help="agents to restart")
     rsa.add_argument("--all", action="store_true", help="every agent on this machine")
-    rsa.add_argument("--flavor", help="with --all: only this harness (claude, codex, pi, hermes)")
+    rsa.add_argument("--flavor", help="with --all: only this harness (claude, codex, pi, agy, hermes)")
     rsa.add_argument("--force", action="store_true", help="also restart agents without observed idle activity")
     rsa.add_argument("--apply", action="store_true", help="do it; without this, only print the plan")
     rsa.add_argument("--stagger", type=float, default=3.0, help="seconds between restarts")
@@ -1209,7 +1228,7 @@ def main(argv: list[str] | None = None) -> int:
     sup.set_defaults(func=cmd_supervisor)
 
     sp = sub.add_parser("spawn", help="launch a new agent in a fresh tmux window and register it")
-    sp.add_argument("--flavor", default="claude", choices=["claude", "codex", "pi", "hermes"])
+    sp.add_argument("--flavor", default="claude", choices=["claude", "codex", "pi", "agy", "hermes"])
     sp.add_argument("--model", help="one of the harness's known models (see the dashboard's spawn menu)")
     sp.add_argument("--node", help="machine to spawn on (default: the hub)")
     sp.add_argument("--cwd", help="start folder, one of that machine's AGENT_SWARM_SPAWN_DIRS "
@@ -1217,7 +1236,7 @@ def main(argv: list[str] | None = None) -> int:
     sp.set_defaults(func=cmd_spawn)
 
     swt = sub.add_parser(
-        "switch", help="move an agent to another harness (claude, codex, pi), keeping its conversation"
+        "switch", help="move an agent to another harness (claude, codex, pi, agy), keeping its conversation"
     )
     swt.add_argument("handle")
     swt.add_argument("--to", required=True, help="the harness to move it to")

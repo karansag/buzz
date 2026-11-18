@@ -52,6 +52,7 @@ FLAVOR_SUBMIT_KEYS = {
     "codex": "Enter",
     "hermes": DEFAULT_SUBMIT_KEY,
     "pi": "Enter",
+    "agy": "Enter",
 }
 
 # The slash command that compacts each harness's context, sent from the
@@ -61,6 +62,7 @@ FLAVOR_COMPACT_COMMANDS = {
     "claude": "/compact",
     "codex": "/compact",
     "pi": "/compact",
+    "agy": "/compact",
     "hermes": "/compress",
 }
 
@@ -96,6 +98,8 @@ def infer_flavor(model: str | None) -> str:
         return "hermes"
     if _has_label_token(label, "pi"):
         return "pi"
+    if label.startswith("gemini") or "antigravity" in label:
+        return "agy"
     return DEFAULT_FLAVOR
 
 
@@ -423,6 +427,53 @@ def pi_models() -> list[str]:
     return shortlist or PI_ALIASES
 
 
+# The Antigravity CLI's own model ids ("gemini-4-carbon-medium": model and
+# effort in one), for when `agy models` cannot answer (offline, signed out).
+AGY_FALLBACK_MODELS = [
+    "gemini-4-neon-high",
+    "gemini-4-carbon-medium",
+    "gemini-4-argon-medium",
+    "gemini-4-hydrogen-high",
+    "gemini-3.8-flash-medium",
+]
+AGY_MODELS_TTL = 600.0
+_agy_models: tuple[float, list[tuple[str, str]]] | None = None
+
+
+def _agy_models_output() -> str:
+    """What `agy models` prints: "id<TAB>label" lines, or "" when it can't answer."""
+    try:
+        return subprocess.run(["agy", "models"], capture_output=True, text=True, timeout=10, check=False).stdout
+    except (subprocess.SubprocessError, OSError):
+        return ""
+
+
+def agy_catalog() -> list[tuple[str, str]]:
+    """(id, label) for each model `agy models` lists, in its order.
+
+    The list depends on the signed-in plan, so it comes from agy itself
+    (about a second) and is kept for AGY_MODELS_TTL. Labels look like
+    "Gemini 4 Carbon (Medium)".
+    """
+    global _agy_models
+    now = time.monotonic()
+    if _agy_models is not None and now - _agy_models[0] < AGY_MODELS_TTL:
+        return _agy_models[1]
+    rows = []
+    for line in _agy_models_output().splitlines():
+        model, sep, label = line.partition("\t")
+        if sep and re.fullmatch(r"[a-z0-9][a-z0-9.-]*", model.strip()):
+            rows.append((model.strip(), label.strip()))
+    if rows:
+        _agy_models = (now, rows)
+    return rows
+
+
+def agy_models() -> list[str]:
+    """The model ids `agy --model` takes, from agy's own catalog."""
+    return [model for model, _ in agy_catalog()] or AGY_FALLBACK_MODELS
+
+
 HARNESS_SPAWN: dict[str, HarnessSpec] = {
     "claude": HarnessSpec(
         "claude",
@@ -455,6 +506,15 @@ HARNESS_SPAWN: dict[str, HarnessSpec] = {
         # The owner's Pi shortlist ("provider/id", which `pi --model` accepts).
         pi_models,
         # pi does not gate commands behind approval prompts: no extra flags.
+    ),
+    "agy": HarnessSpec(
+        "agy",
+        "--model",
+        agy_models,
+        # Without it every shell command waits for an approval in the pane
+        # (owner's choice, 2026-11-18). A folder agy has not been told to
+        # trust still asks once; activity reports that prompt.
+        launch_args="--dangerously-skip-permissions",
     ),
     "hermes": HarnessSpec(
         "hermes",
