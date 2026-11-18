@@ -158,7 +158,12 @@ Antigravity agents register when the harness owns the tmux pane. The
 installer writes `~/.gemini/config/hooks.json`; it does not change other
 settings or read credentials. Antigravity's hook receives `conversationId`
 and `modelName` through the session hook payload and can inject the protocol
-brief as a system message.
+brief as a system message. The hook does not run when a conversation is
+resumed (`agy --conversation <id>`); Buzz restore registers those panes
+itself. An `agy` started by hand asks before every shell command, so it stops
+the first time a message asks it to run `buzz`; choose "always allow" for
+commands starting with `buzz`, or start it with
+`--dangerously-skip-permissions` as `buzz spawn` does.
 
 Each runs `buzz autoregister`. It registers only when the harness runs
 straight in its own tmux pane: walking up from the harness to the pane's
