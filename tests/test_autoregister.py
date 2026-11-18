@@ -125,6 +125,15 @@ def test_antigravity_hook_injects_its_brief_and_registers_its_conversation(monke
     assert json.loads(out.out) == {"injectSteps": [{"systemMessage": {"systemMessage": brief}}]}
 
 
+def test_allow_model_switch_answers_a_pre_model_switch_hook(capsys):
+    # Claude Code reads permissionDecision from hookSpecificOutput; "allow"
+    # is what lets a pick apply without the "cached for the current model"
+    # question.
+    assert client.main(["allow-model-switch"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "hookSpecificOutput": {"hookEventName": "PreModelSwitch", "permissionDecision": "allow"}}
+
+
 def test_hook_registers_with_the_hooks_session_and_model(monkeypatch, capsys):
     # The env holds an outer session's id; the hook input names the new one.
     monkeypatch.setenv("TMUX_PANE", "%5")
@@ -211,6 +220,11 @@ def test_install_adds_each_hook_once_and_remove_undoes_it(tmp_path):
     commands = [h["command"] for g in claude["hooks"]["SessionStart"] for h in g["hooks"]]
     assert len(commands) == 1
     assert shlex.split(commands[0]) == [os.path.abspath(shutil.which("buzz")), "autoregister", "--hook"]
+    # Claude Code asks before switching models mid-conversation; our hook
+    # answers allow, and installing twice keeps one handler.
+    allowed = [h["command"] for g in claude["hooks"]["PreModelSwitch"] for h in g["hooks"]]
+    assert len(allowed) == 1
+    assert shlex.split(allowed[0]) == [os.path.abspath(shutil.which("buzz")), "allow-model-switch"]
     codex = json.loads((tmp_path / ".codex/hooks.json").read_text())
     assert len(codex["hooks"]["SessionStart"]) == 1
     ext = tmp_path / ".pi/agent/extensions/agent-swarm"
@@ -224,6 +238,7 @@ def test_install_adds_each_hook_once_and_remove_undoes_it(tmp_path):
     _install(tmp_path, "--remove")
     assert json.loads(settings.read_text()) == {"model": "opus", "hooks": {"Stop": [{"hooks": [{"command": "x"}]}]}}
     assert not ext.exists() and not ext.is_symlink()
+    assert "PreModelSwitch" not in json.loads(settings.read_text())["hooks"]
     agy = json.loads((tmp_path / ".gemini/config/hooks.json").read_text())
     assert "agent-swarm" not in agy
 

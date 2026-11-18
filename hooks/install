@@ -2,13 +2,17 @@
 """Install (or with --remove, uninstall) the agent-swarm startup hooks.
 
   Claude Code  SessionStart hook in ~/.claude/settings.json
+               PreModelSwitch hook there too, so a model switch never asks
   Codex        SessionStart hook in ~/.codex/hooks.json (trust it once via /hooks)
   Pi           extension linked at ~/.pi/agent/extensions/agent-swarm
   Antigravity  SessionStart hook in ~/.gemini/config/hooks.json
 
-Each runs `buzz autoregister`, which registers the session only when
-its harness runs straight in its own tmux pane. JSON files are backed up to
-<file>.bak-<time> before they change.
+The startup hooks run `buzz autoregister`, which registers the session only
+when its harness runs straight in its own tmux pane. Claude Code's
+PreModelSwitch hook runs `buzz allow-model-switch`: a long conversation makes
+Claude Code ask before switching models ("the full history gets re-read"),
+and a switch made from Buzz is always intentional. JSON files are backed up
+to <file>.bak-<time> before they change.
 """
 
 import json
@@ -25,6 +29,13 @@ STAMP = time.strftime("%Y%m%d-%H%M%S") + f"-{time.time_ns()}"
 NAME = "agent-swarm"
 
 
+def back_up(path: Path) -> None:
+    """Keep the file as it was before this run, once, even if it changes twice."""
+    backup = path.with_name(f"{path.name}.bak-{STAMP}")
+    if path.exists() and not backup.exists():
+        shutil.copy2(path, backup)
+
+
 def is_our_hook(command: str) -> bool:
     if not isinstance(command, str):
         return False
@@ -32,12 +43,13 @@ def is_our_hook(command: str) -> bool:
         words = shlex.split(command)
     except ValueError:
         return False
-    return len(words) == 3 and Path(words[0]).name in ("buzz", "agent-swarm") and words[1:] == ["autoregister", "--hook"]
+    ours = (["autoregister", "--hook"], ["allow-model-switch"])
+    return bool(words) and Path(words[0]).name in ("buzz", "agent-swarm") and words[1:] in ours
 
 
-def edit_hooks(path: Path, remove: bool, command: str | None) -> None:
+def edit_hooks(path: Path, event: str, remove: bool, command: str | None) -> None:
     config = json.loads(path.read_text()) if path.exists() else {}
-    groups = config.setdefault("hooks", {}).setdefault("SessionStart", [])
+    groups = config.setdefault("hooks", {}).setdefault(event, [])
     kept = []
     for group in groups:
         handlers = group.get("hooks", [])
@@ -53,16 +65,15 @@ def edit_hooks(path: Path, remove: bool, command: str | None) -> None:
     if kept == groups:
         print(f"{path}: unchanged")
         return
-    config["hooks"]["SessionStart"] = kept
+    config["hooks"][event] = kept
     if not kept:
-        del config["hooks"]["SessionStart"]
+        del config["hooks"][event]
     if not config["hooks"]:
         del config["hooks"]
-    if path.exists():
-        shutil.copy2(path, f"{path}.bak-{STAMP}")
+    back_up(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, indent=2) + "\n")
-    print(f"{path}: {'removed' if remove else 'added'} SessionStart hook")
+    print(f"{path}: {'removed' if remove else 'added'} {event} hook")
 
 
 def is_our_agent_hook(handler: object) -> bool:
@@ -97,8 +108,7 @@ def edit_agy_hooks(path: Path, remove: bool, command: str | None) -> None:
     if config == original:
         print(f"{path}: unchanged")
         return
-    if path.exists():
-        shutil.copy2(path, f"{path}.bak-{STAMP}")
+    back_up(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"{path}: {'removed' if remove else 'added'} SessionStart hook")
@@ -121,7 +131,7 @@ def link_pi(remove: bool) -> None:
 
 def main() -> None:
     remove = "--remove" in sys.argv[1:]
-    command = None
+    command = switch_command = None
     if not remove:
         executable = shutil.which("buzz")
         if not executable:
@@ -129,8 +139,12 @@ def main() -> None:
         # Keep the stable launcher path (e.g. ~/.local/bin/buzz), not
         # its realpath into a uv environment that can change on reinstall.
         command = f"{shlex.quote(os.path.abspath(executable))} autoregister --hook"
-    edit_hooks(HOME / ".claude/settings.json", remove, command)
-    edit_hooks(Path(os.environ.get("CODEX_HOME") or HOME / ".codex") / "hooks.json", remove, command)
+        switch_command = f"{shlex.quote(os.path.abspath(executable))} allow-model-switch"
+    edit_hooks(HOME / ".claude/settings.json", "SessionStart", remove, command)
+    # Claude Code asks before switching models once a conversation has
+    # content. Buzz switches are deliberate, so answer that hook with allow.
+    edit_hooks(HOME / ".claude/settings.json", "PreModelSwitch", remove, switch_command)
+    edit_hooks(Path(os.environ.get("CODEX_HOME") or HOME / ".codex") / "hooks.json", "SessionStart", remove, command)
     # Antigravity CLI reads its own hooks.json, with SessionStart handlers
     # flat (no matcher group) and a timeout in seconds.
     edit_agy_hooks(HOME / ".gemini" / "config" / "hooks.json", remove, command)

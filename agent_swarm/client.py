@@ -3,6 +3,7 @@
     buzz register [--pane Y] [--name HANDLE] [--flavor NAME] [--instructions TXT]
                          [--message-prefix TXT]
     buzz autoregister [--hook] [--verbose]   # from a harness startup hook
+    buzz allow-model-switch   # from Claude Code's PreModelSwitch hook
     buzz send --to Y | --to-queen TEAM [--context CTX] --message MSG
     buzz messages [--user X] [--limit N] [--id N]
     buzz recipients
@@ -1017,6 +1018,29 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+ALLOW_MODEL_SWITCH = {
+    "hookSpecificOutput": {
+        "hookEventName": "PreModelSwitch",
+        "permissionDecision": "allow",
+    }
+}
+
+
+def cmd_allow_model_switch(args: argparse.Namespace) -> int:
+    """Answer Claude Code's PreModelSwitch hook: allow the switch.
+
+    Claude Code asks before a model switch once a conversation holds tokens
+    ("Switch model? ... This conversation is cached for the current model.
+    Switching to X means the full history gets re-read"), because the new
+    model re-reads everything and the prompt cache is lost. A switch made
+    through Buzz is always intentional, so the hook that hooks/install writes
+    allows every one of them; a hook that allows also skips the question, so
+    the model picker's `s` applies at once.
+    """
+    print(json.dumps(ALLOW_MODEL_SWITCH))
+    return 0
+
+
 def cmd_whoami(_: argparse.Namespace) -> int:
     who = caller()
     answer = whoami_lookup(who) if (who["pane"] or who["agent_id"]) else {}
@@ -1213,6 +1237,12 @@ def main(argv: list[str] | None = None) -> int:
                       help="read the hook's JSON on stdin and answer as SessionStart hook output")
     auto.add_argument("--verbose", action="store_true", help="say why registration was skipped")
     auto.set_defaults(func=cmd_autoregister)
+
+    allow = sub.add_parser(
+        "allow-model-switch",
+        help="answer Claude Code's PreModelSwitch hook: allow, since a switch is intentional",
+    )
+    allow.set_defaults(func=cmd_allow_model_switch)
 
     who = sub.add_parser("whoami")
     who.set_defaults(func=cmd_whoami)

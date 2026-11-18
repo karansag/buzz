@@ -129,10 +129,13 @@ def test_codex_rows_match_slugs_exactly():
 class FakeHarness:
     """A pane that answers /model the way the real harness does."""
 
-    def __init__(self, flavor, model, open_picker=True, effort="medium", window=None):
+    def __init__(self, flavor, model, open_picker=True, effort="medium", window=None, ask_cache=None):
         self.flavor, self.model, self.open_picker, self.effort = flavor, model, open_picker, effort
         # Claude in a short pane shows only `window` rows of its picker.
         self.window, self.top = window, 0
+        # Claude asks before switching once the conversation holds tokens; the
+        # dialog names ask_cache instead of the picked row when it is set.
+        self.ask_cache, self.pending = ask_cache, None
         self.screen_name = "prompt"
         self.cursor = 0
         self.keys, self.typed = [], []
@@ -160,6 +163,15 @@ class FakeHarness:
             self.cursor = max(self.cursor - 1, 0)
         elif key == "Escape":
             self.screen_name = "prompt"
+        elif (self.flavor == "claude" and self.screen_name == "models" and key == "s"
+              and self.ask_cache is not None):
+            self.pending = self.ask_cache
+            self.screen_name = "confirm"
+        elif self.screen_name == "confirm" and key == "Enter":
+            self.model = self.pending
+            self.pending, self.screen_name = None, "prompt"
+        elif self.screen_name == "confirm" and key == "Escape":
+            self.pending, self.screen_name = None, "prompt"
         elif self.flavor == "claude" and self.screen_name == "models" and key in ("s", "Enter"):
             self.model = rows[self.cursor]
             self.saved_default = key == "Enter"
@@ -206,6 +218,16 @@ class FakeHarness:
             if (hidden := len(rows) - shown.stop) > 0:
                 lines.append(f"     … +{hidden} model{'s' if hidden > 1 else ''}")
             lines.append("  enter select · esc back")
+        elif self.screen_name == "confirm":
+            lines += [
+                "  " + ms.CACHE_CONFIRM_TITLE,
+                "  Your next response will be slower and use more tokens",
+                "  This conversation is cached for the current model. Switching to",
+                f"  {self.pending} means the full history gets re-read.",
+                f"  ❯ 1. Yes, switch to {self.pending}",
+                "    2. No, go back",
+                "  Enter to confirm · Esc to cancel",
+            ]
         elif self.flavor == "claude":
             lines += ["❯ ", f"  /home/x  [{self.model} | wk:95%]"]
         else:
@@ -239,6 +261,45 @@ def test_claude_switch_scrolls_down_to_a_folded_row():
     assert ms.switch(_pane(fake), "sonnet", sleep=no_sleep) == "claude-sonnet-5-5"
     assert fake.keys == ["Down", "Down", "s"]
     assert not fake.saved_default
+
+
+def test_cache_confirm_names_the_model_it_would_switch_to():
+    # Captured from Claude Code 2.1.327 after `/model`, a pick, then `s`.
+    screen = ("  Switch model?\n"
+              "  Your next response will be slower and use more tokens\n"
+              "  This conversation is cached for the current model. Switching to Sonnet 5.5\n"
+              "  means the full history gets re-read.\n"
+              "  ❯ 1. Yes, switch to Sonnet 5.5\n"
+              "    2. No, go back\n"
+              "  Enter to confirm · Esc to cancel\n")
+    assert ms.cache_confirm_model(screen) == "Sonnet 5.5"
+    # An overwritten line: the row is gone, the sentence above still names it.
+    assert ms.cache_confirm_model(screen.replace("  ❯ 1. Yes, switch to Sonnet 5.5\n", "")) == "Sonnet 5.5"
+    assert ms.cache_confirm_model("❯ \n  /home/x  [Sonnet 5.5 | wk:95%]\n") is None
+    # Conversation text that mentions the dialog is not the dialog.
+    assert ms.cache_confirm_model("Switch model? I once saw that prompt\n") is None
+
+
+def test_claude_switch_accepts_the_confirmation_for_the_model_it_asked_for():
+    fake = FakeHarness("claude", "Opus 5.5", ask_cache="Sonnet 5.5")
+    assert ms.switch(_pane(fake), "sonnet", sleep=no_sleep) == "claude-sonnet-5-5"
+    # "Yes, switch to Sonnet 5.5" was focused, so Enter accepted it, once.
+    assert fake.keys == ["Down", "Down", "s", "Enter"]
+    assert fake.model == "Sonnet 5.5" and not fake.saved_default
+
+
+def test_claude_switch_never_accepts_a_confirmation_for_another_model():
+    # A stale dialog from a previous pick must not switch to the wrong model.
+    fake = FakeHarness("claude", "Opus 5.5", ask_cache="Fable 5.2")
+    with pytest.raises(ms.SwitchFailed, match=r"confirm switching to Fable 5.2, not sonnet"):
+        ms.switch(_pane(fake), "sonnet", sleep=no_sleep)
+    assert "Enter" not in fake.keys and fake.model == "Opus 5.5"
+
+
+def test_claude_switch_takes_a_confirmation_for_the_default_model():
+    fake = FakeHarness("claude", "Sonnet 5.5", ask_cache="Opus 5.5")
+    assert ms.switch(_pane(fake), "default", sleep=no_sleep) == "claude-opus-5-5"
+    assert fake.keys[-1] == "Enter"
 
 
 def test_claude_switch_scrolls_up_to_a_row_hidden_above():

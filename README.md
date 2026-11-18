@@ -145,7 +145,8 @@ absolute `buzz` launcher path, so the hook still works when the harness
 doesn't inherit your shell's PATH. Re-running it upgrades old hooks while
 preserving unrelated handlers.
 
-- Claude Code: a `SessionStart` hook in `~/.claude/settings.json`.
+- Claude Code: a `SessionStart` hook in `~/.claude/settings.json`, and a
+  `PreModelSwitch` hook that answers "allow" (see below).
 - Codex: a `SessionStart` hook in `~/.codex/hooks.json`. Codex skips a new
   hook until you trust it once with `/hooks`.
 - Pi: an extension linked at `~/.pi/agent/extensions/agent-swarm`.
@@ -165,8 +166,19 @@ the first time a message asks it to run `buzz`; choose "always allow" for
 commands starting with `buzz`, or start it with
 `--dangerously-skip-permissions` as `buzz spawn` does.
 
-Each runs `buzz autoregister`. It registers only when the harness runs
-straight in its own tmux pane: walking up from the harness to the pane's
+**Model switches never ask.** Once a conversation holds tokens, Claude Code
+asks before switching models: "Switch model? ... This conversation is cached
+for the current model. Switching to Sonnet 5.5 means the full history gets
+re-read." The switch is deliberate whenever it is made from Buzz, so the
+installer also writes a `PreModelSwitch` hook that runs `buzz
+allow-model-switch` and answers `permissionDecision: allow`, which skips the
+question for `/model`, the picker and `buzz model` alike. Agents on a
+machine without the installer still switch: `buzz model` reads that dialog
+off the screen and takes "Yes, switch to <model>", but only when it names the
+model that was asked for, so a stale dialog can never switch to another one.
+
+The startup hooks run `buzz autoregister`. It registers only when the harness
+runs straight in its own tmux pane: walking up from the harness to the pane's
 process, only shells may stand in between. It skips, quietly and without
 failing the harness:
 
@@ -737,6 +749,7 @@ buzz register [--model <id>] [--flavor <claude|codex|pi|agy|hermes|generic>] [--
                      [--name <handle>] [--pane <id>] [--instructions <text>]
                      [--message-prefix <text>] [--submit-key <key>]
 buzz autoregister [--verbose]       # what the startup hooks run
+buzz allow-model-switch             # what Claude Code's PreModelSwitch hook runs
 buzz unregister [--user <handle>]     # keeps messages and tasks
 buzz whoami
 buzz recipients

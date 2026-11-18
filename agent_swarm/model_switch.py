@@ -8,7 +8,14 @@ Each harness shows its model in its own way, and changes it in its own way:
   list scrolls: it shows a few rows around the cursor, marks a row with
   hidden rows above it "↑ 3.", and folds the rest below into "… +4 models".
   A long label can wrap onto a second line. The last row, "▸ More models",
-  has no number and opens a submenu; the switch never picks it.
+  has no number and opens a submenu; the switch never picks it. Once the
+  conversation holds tokens, applying a pick asks for confirmation first
+  ("Switch model? ... the full history gets re-read"), because the new model
+  re-reads everything and the prompt cache is lost; `s` there opens that
+  dialog rather than switching. Installing the PreModelSwitch hook that
+  hooks/install writes stops it ever appearing; when it does appear anyway
+  (another machine's Claude Code), the switch accepts it, but only when the
+  dialog names the model that was asked for.
 - Codex: `/model` opens a numbered picker ("Select Model and Effort"). Enter
   picks the model, then a reasoning-level screen opens, where `s` applies it
   for this session only (Enter would save it to config.toml).
@@ -216,6 +223,53 @@ def confirmed_model(flavor: str, screen: str) -> str | None:
     if flavor == "claude":
         return _claude_id(*found.groups())
     return found.group(1)
+
+
+# Claude Code's confirmation before a switch in a conversation that already
+# holds tokens, shown instead of switching:
+#   Switch model?
+#   Your next response will be slower and use more tokens
+#   This conversation is cached for the current model. Switching to Sonnet 5.5
+#   means the full history gets re-read.
+#   ❯ 1. Yes, switch to Sonnet 5.5
+#     2. No, go back
+CACHE_CONFIRM_TITLE = "Switch model?"
+_CACHE_CONFIRM_YES = re.compile(r"^\s*(?:[\u276f\u203a>]\s*)?\d*\.?\s*Yes, switch to (.+?)\s*$")
+# "This conversation is cached for the current model. Switching to Sonnet 5.5
+# means the full history gets re-read." wraps, so the sentence and the label
+# can end the line.
+_CACHE_CONFIRM_BODY = re.compile(
+    r"Switching to (.+?)(?:\s+means the full history gets re-read)?\s*$")
+
+
+def cache_confirm_model(screen: str) -> str | None:
+    """The model Claude Code's switch confirmation would switch to, if it shows.
+
+    Reads the label from its "Yes, switch to ..." row, or from the sentence
+    above when a narrow pane wraps that row.
+    """
+    lines = screen.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.strip() == CACHE_CONFIRM_TITLE), None)
+    if start is None:
+        return None
+    for line in lines[start + 1:]:
+        if m := _CACHE_CONFIRM_YES.match(line):
+            return _MARKS.sub("", m.group(1)).strip()
+        if m := _CACHE_CONFIRM_BODY.search(line):
+            return _MARKS.sub("", m.group(1)).strip()
+    return None
+
+
+def confirm_names(flavor: str, wanted: str, label: str) -> bool:
+    """Whether a confirmation that names `label` is confirming the model asked for.
+
+    "Default" is no model name, so any Claude model label stands for it: the
+    dialog names what the default resolves to today.
+    """
+    if row_matches(flavor, wanted, label):
+        return True
+    return (flavor == "claude" and wanted.lower() == "default"
+            and re.fullmatch(rf"(?:{_CLAUDE_FAMILIES}) \d+(?:\.\d+)*", label) is not None)
 
 
 # --- matching a requested model ------------------------------------------
@@ -667,4 +721,30 @@ def switch(pane: Pane, wanted: str, sleep: Callable[[float], None] = time.sleep)
             return seen if seen else wanted
         return None
 
-    return wait_for(pane, shows_wanted, f"the screen to show {wanted}", timeout=timeout, sleep=sleep)
+    accepted = None
+
+    def shows_or_accepts(screen: str) -> str | None:
+        """The model once the switch shows, after accepting the confirmation.
+
+        Claude Code asks before switching models mid-conversation. Only a
+        dialog that names the requested model is accepted, and its
+        "Yes, switch to ..." row is focused, so Enter takes it. Pressed once
+        per dialog: the screen lags a key, and a second Enter would land on
+        the prompt behind it.
+        """
+        nonlocal accepted
+        if (seen := shows_wanted(screen)) is not None:
+            return seen
+        label = cache_confirm_model(screen) if pane.flavor == "claude" else None
+        if label is None:
+            accepted = None
+            return None
+        if not confirm_names(pane.flavor, wanted, label):
+            raise SwitchFailed(
+                f"Claude Code asked to confirm switching to {label}, not {wanted}", screen)
+        if accepted != label:
+            pane.key("Enter")
+            accepted = label
+        return None
+
+    return wait_for(pane, shows_or_accepts, f"the screen to show {wanted}", timeout=timeout, sleep=sleep)
