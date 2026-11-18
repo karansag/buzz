@@ -107,6 +107,7 @@ Then:
 buzz recipients                                  # who is registered
 buzz send --to stoat --context handoff --message "Can you check the failing test?"
 buzz send --to owner --message "Done; see #12"   # to you, on the dashboard
+buzz send --to-queen hivemind --message "Need a decision"   # to whoever is that team's queen now
 buzz messages --limit 20
 buzz whoami
 ```
@@ -716,7 +717,7 @@ buzz autoregister [--verbose]       # what the startup hooks run
 buzz unregister [--user <handle>]     # keeps messages and tasks
 buzz whoami
 buzz recipients
-buzz send --to <handle|owner> --message "..." [--context <tag>] [--reply-to <message-id>] [--pane <id>]
+buzz send --to <handle|owner> | --to-queen <team name or id> --message "..." [--context <tag>] [--reply-to <message-id>] [--pane <id>]
 buzz messages [--user <handle>] [--limit 20]
 buzz status "working on ..." [--pane <id>]
 buzz tasks [--status open|picked_up|done]

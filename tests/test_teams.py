@@ -330,3 +330,60 @@ def test_task_title_and_description_can_be_edited(client):
     assert r.json()["task"]["description"] is None
     assert client.patch(f"/tasks/{task['id']}", json={"title": "   "}).status_code == 422
     assert client.get("/tasks").json()["tasks"][0]["title"] == "final title"
+
+
+def _queen_team(client, name="hivemind"):
+    sender = _register(client, pane="0:0.0")
+    queen = _register(client, pane="0:1.0")
+    team = _make_team(client, name)
+    client.post(f"/agents/{queen}/team", json={"team_id": team["id"]})
+    client.patch(f"/teams/{team['id']}", json={"queen": queen})
+    return sender, queen, team
+
+
+def test_send_to_queen_by_team_name_or_id_reaches_the_current_queen(client):
+    sender, queen, team = _queen_team(client)
+    for ref in ("hivemind", "HiveMind", str(team["id"])):
+        r = client.post("/send", json={"tmux_pane": "0:0.0", "recipient": f"queen:{ref}", "content": f"hi {ref}"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["recipient"] == queen and body["team"] == {"id": team["id"], "name": "hivemind"}
+    stored = client.get("/messages", params={"user": queen}).json()["messages"]
+    assert sorted(m["content"] for m in stored if m["sender"] == sender) == sorted(["hi hivemind", "hi HiveMind", f"hi {team['id']}"])
+    # A queen change is followed at send time.
+    new = _register(client, pane="0:2.0")
+    client.post(f"/agents/{new}/team", json={"team_id": team["id"]})
+    client.patch(f"/teams/{team['id']}", json={"queen": new})
+    client.post("/send", json={"tmux_pane": "0:0.0", "recipient": "queen:hivemind", "content": "again"})
+    last = client.get("/messages", params={"limit": 1}).json()["messages"][0]
+    assert last["content"] == "again" and last["recipient"] == new
+
+
+def test_send_to_queen_reports_unknown_team_and_missing_queen_without_storing(client):
+    _register(client, pane="0:0.0")
+    team = _make_team(client, "leaderless")
+    before = client.get("/messages", params={"limit": 100}).json()["messages"]
+    r = client.post("/send", json={"tmux_pane": "0:0.0", "recipient": "queen:nope", "content": "x"})
+    assert r.status_code == 404 and r.json()["detail"]["error"] == "no such team"
+    r = client.post("/send", json={"tmux_pane": "0:0.0", "recipient": f"queen:{team['id']}", "content": "x"})
+    assert r.status_code == 409 and r.json()["detail"]["error"] == "team has no queen"
+    assert client.get("/messages", params={"limit": 100}).json()["messages"] == before
+
+
+def test_send_to_queen_who_cannot_receive_is_recorded_as_undelivered(client):
+    _register(client, pane="0:0.0")
+    shell = _register(client, pane="0:2.0")  # a bare shell: not a live agent
+    team = _make_team(client)
+    client.post(f"/agents/{shell}/team", json={"team_id": team["id"]})
+    client.patch(f"/teams/{team['id']}", json={"queen": shell})
+    r = client.post("/send", json={"tmux_pane": "0:0.0", "recipient": "queen:hivemind", "content": "hello?"})
+    assert r.status_code == 409
+    msg = client.get("/messages", params={"limit": 1}).json()["messages"][0]
+    assert msg["recipient"] == shell and msg["content"] == "hello?" and not msg["delivered"]
+
+
+def test_send_to_queen_after_the_queen_leaves_says_the_team_has_none(client):
+    sender, queen, team = _queen_team(client)
+    client.delete(f"/recipients/{queen}")
+    r = client.post("/send", json={"tmux_pane": "0:0.0", "recipient": "queen:hivemind", "content": "hello?"})
+    assert r.status_code == 409 and r.json()["detail"]["error"] == "team has no queen"

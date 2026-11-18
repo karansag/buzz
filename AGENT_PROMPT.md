@@ -334,7 +334,8 @@ know:
    message in your prompt as a new turn.
 4. When you see `[agent-msg from X · Y] ...` in your prompt, reply to X
    through the API. X may be `owner` (the human operator) or another agent.
-5. To send: `buzz send --to <handle> --message "..."`.
+5. To send: `buzz send --to <handle> --message "..."`. To reach a team's queen without
+   knowing who she is: `buzz send --to-queen <team name or id> --message "..."`.
 
 
 ### Notify the owner sparingly

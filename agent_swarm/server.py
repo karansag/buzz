@@ -571,6 +571,8 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         f"\n"
         f"To reply or initiate, POST to /send (or use the `buzz send` "
         f"CLI). Use `--reply-to <message-id>` on `buzz send` to link a reply.\n"
+        f"To reach a team's queen without knowing her handle, use "
+        f"`buzz send --to-queen <team name or id>`.\n"
         f'Use `buzz notify "text"` (optional `--context`) only for something the owner is waiting on: '
         f"a long job finished or failed, or a decision blocking you. Never use it for progress updates. "
         f"Limit: one per five minutes and six per UTC day per agent; send a normal message instead if refused.\n"
@@ -1510,6 +1512,33 @@ def create_app(
             raise HTTPException(status_code=422, detail={"error": f"no message {reply_to}"})
         return original
 
+    def _queen_target(spec: str) -> tuple[str, dict | None]:
+        """Resolve a `queen:<team>` recipient to the team's current queen.
+
+        <team> is a team id or a name, case-insensitive. Any other recipient
+        passes through unchanged. Nothing is stored for a team that cannot be
+        resolved: there is no agent to attach the message to.
+        """
+        if not spec.lower().startswith("queen:"):
+            return spec, None
+        ref = spec[len("queen:"):].strip()
+        teams = db.list_teams(conn)
+        named = [t for t in teams if t["name"].casefold() == ref.casefold()]
+        found = named or [t for t in teams if ref.isdigit() and t["id"] == int(ref)]
+        if not found:
+            raise HTTPException(status_code=404, detail={
+                "error": "no such team", "team": ref,
+                "detail": "give a team name or id; `GET /teams` lists them"})
+        if len(found) > 1:
+            raise HTTPException(status_code=409, detail={
+                "error": "team name is ambiguous", "team": ref,
+                "detail": "use the team id: " + ", ".join(f"{t['id']} ({t['name']})" for t in found)})
+        team = found[0]
+        if not team["queen"]:
+            raise HTTPException(status_code=409, detail={
+                "error": "team has no queen", "team": team["name"], "team_id": team["id"]})
+        return team["queen"], {"id": team["id"], "name": team["name"]}
+
     def _deliver_as(
         sender: str,
         recipient_id: str,
@@ -1655,6 +1684,8 @@ def create_app(
         node = _claimed_node(request, req.node)
         sender = _caller(node, req.tmux_pane, req.agent_id, req.pane_verified, req.pane_in_tree, req.harness)
         original = _reply_original(req.reply_to)
+        target, via_team = _queen_target(req.recipient)
+        req = req.model_copy(update={"recipient": target})
         if req.recipient == OWNER:
             # Messages to the human are recorded for the dashboard, not
             # injected into a pane.
@@ -1690,6 +1721,7 @@ def create_app(
             "message_id": mid,
             "delivered_to_pane": recipient["tmux_pane"],
             "delivery_error": err,
+            **({"recipient": target, "team": via_team} if via_team else {}),
         }
 
     @app.put("/agents/{user_id}/owner-note")

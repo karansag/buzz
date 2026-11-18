@@ -3,7 +3,7 @@
     buzz register [--pane Y] [--name HANDLE] [--flavor NAME] [--instructions TXT]
                          [--message-prefix TXT]
     buzz autoregister [--hook] [--verbose]   # from a harness startup hook
-    buzz send --to Y [--context CTX] --message MSG
+    buzz send --to Y | --to-queen TEAM [--context CTX] --message MSG
     buzz messages [--user X] [--limit N] [--id N]
     buzz recipients
     buzz whoami       # prints detected tmux pane + registered handle
@@ -463,7 +463,7 @@ def cmd_send(args: argparse.Namespace) -> int:
     who = caller(getattr(args, "pane", None))
     if not _identify_or_explain(who):
         return 2
-    payload = {**_identity_payload(who), "recipient": args.to, "content": args.message}
+    payload = {**_identity_payload(who), "recipient": args.to or f"queen:{args.to_queen}", "content": args.message}
     if getattr(args, "reply_to", None) is not None:
         payload["reply_to"] = args.reply_to
     if args.context:
@@ -1089,7 +1089,10 @@ def main(argv: list[str] | None = None) -> int:
     rst.set_defaults(func=cmd_restore)
 
     snd = sub.add_parser("send")
-    snd.add_argument("--to", required=True)
+    dest = snd.add_mutually_exclusive_group(required=True)
+    dest.add_argument("--to")
+    dest.add_argument("--to-queen", metavar="TEAM",
+                      help="send to the current queen of a team, by team name or id; the reply names her")
     snd.add_argument("--message", required=True)
     snd.add_argument("--context")
     snd.add_argument("--reply-to", type=int, help="id of the message this responds to")

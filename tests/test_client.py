@@ -788,6 +788,19 @@ def test_send_passes_reply_reference(monkeypatch):
     assert calls['post'][0]['content'] == 'answer'
 
 
+def test_send_to_queen_asks_the_hub_to_resolve_the_team(monkeypatch):
+    monkeypatch.setattr(client, 'caller', lambda pane=None: {'pane':'%1'})
+    monkeypatch.setattr(client, '_identify_or_explain', lambda who: True)
+    monkeypatch.setattr(client, '_identity_payload', lambda who: {'tmux_pane':'%1'})
+    calls = _fake_server(monkeypatch, {})
+    assert client.main(['send','--to-queen','hive mind','--message','status?']) == 0
+    assert calls['post'][0]['recipient'] == 'queen:hive mind'
+    with pytest.raises(SystemExit):
+        client.main(['send','--to','x','--to-queen','y','--message','m'])
+    with pytest.raises(SystemExit):
+        client.main(['send','--message','m'])
+
+
 def test_notify_sends_text_context_and_registered_identity(monkeypatch):
     monkeypatch.setattr(client, 'caller', lambda pane=None: {'pane': '%1'})
     monkeypatch.setattr(client, '_identify_or_explain', lambda who: True)
