@@ -8,6 +8,7 @@ import math
 import re
 import sqlite3
 import threading
+import weakref
 import time
 from pathlib import Path
 
@@ -164,6 +165,19 @@ def _open(path: Path) -> sqlite3.Connection:
     return conn
 
 
+class _ThreadConnection:
+    """One thread's connection. Only that thread's local storage holds it, so
+    it is dropped, and the connection closed, when the thread ends."""
+
+    __slots__ = ("conn", "__weakref__")
+
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn = conn
+
+    def __del__(self):
+        self.conn.close()
+
+
 class Connections:
     """One SQLite connection per thread, all on one database file.
 
@@ -176,16 +190,20 @@ class Connections:
     def __init__(self, path: Path):
         self.path = path
         self._local = threading.local()
-        self._opened: list[sqlite3.Connection] = []
+        # Weak, so a thread's connection closes when the thread ends: the
+        # server's worker threads come and go (anyio retires idle ones), and
+        # strong references here leaked a connection and two file
+        # descriptors per retired thread until the hub hit its fd limit.
+        self._opened: weakref.WeakSet[_ThreadConnection] = weakref.WeakSet()
         self._opened_lock = threading.Lock()
 
     def _conn(self) -> sqlite3.Connection:
-        conn = getattr(self._local, "conn", None)
-        if conn is None:
-            conn = self._local.conn = _open(self.path)
+        held = getattr(self._local, "held", None)
+        if held is None:
+            held = self._local.held = _ThreadConnection(_open(self.path))
             with self._opened_lock:
-                self._opened.append(conn)
-        return conn
+                self._opened.add(held)
+        return held.conn
 
     def execute(self, sql: str, params=()):
         return self._conn().execute(sql, params)
@@ -214,9 +232,9 @@ class Connections:
     def close(self) -> None:
         """Close every thread's connection. Call it when no thread is using them."""
         with self._opened_lock:
-            opened, self._opened = self._opened, []
-        for conn in opened:
-            conn.close()
+            opened, self._opened = list(self._opened), weakref.WeakSet()
+        for held in opened:
+            held.conn.close()
         self._local = threading.local()
 
 

@@ -1,8 +1,11 @@
 """Per-thread connections, the write lock, and the indexed conversation queries."""
 
+import gc
+import os
 import random
 import sqlite3
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -137,3 +140,31 @@ def test_hot_queries_use_their_indexes_even_after_analyze(tmp_path):
     pins = plan("SELECT m.*, p.pinned_at FROM pins p CROSS JOIN messages m ON m.id = p.message_id")
     assert pins.startswith("SCAN p")
     conn.close()
+
+
+def test_a_finished_thread_closes_its_connection(tmp_path):
+    # The server's worker threads retire when idle; each one's connection
+    # must close with it, or the hub runs out of file descriptors.
+    path = tmp_path / "t.sqlite"
+    conn = db.connect(path)
+
+    def db_fds():
+        fd_dir = Path("/proc/self/fd")
+        return sum(1 for fd in fd_dir.iterdir() if os.path.realpath(fd).startswith(str(path)))
+
+    def run_threads(n):
+        for _ in range(n):
+            t = threading.Thread(target=lambda: db.fetch_messages(conn, None, 1))
+            t.start()
+            t.join()
+        gc.collect()
+
+    run_threads(1)
+    # SQLite may keep one closed connection's descriptor for reuse while
+    # another connection holds locks on the file, so measure growth, not zero.
+    after_one = db_fds()
+    run_threads(40)
+    assert len(conn._opened) == 1  # only the main thread's
+    assert db_fds() == after_one
+    conn.close()
+    assert len(conn._opened) == 0
