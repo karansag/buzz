@@ -91,8 +91,19 @@ function statusRecords(recipients) {
 
 const tokenize = (q) => q.toLowerCase().split(/\s+/).filter(Boolean);
 
+// A whole query that is one task number, "310" or "#310", picks that task on
+// its own: nobody types an id to read the tasks that mention it. A number that
+// names no task is still text, so "310" finds notes about something else when
+// there is no task 310. Several words keep the AND below instead.
+function taskNumber(tokens, tasks) {
+  if (tokens.length !== 1) return null;
+  const m = /^#?(\d+)$/.exec(tokens[0]);
+  return m ? tasks.find(t => String(t.id) === m[1]) || null : null;
+}
+
 // Every token must match somewhere in the record (AND). "#42" matches only
-// task 42; a bare "42" matches task 42 or the text "42" anywhere.
+// task 42; a bare "42" matches task 42 or the text "42" anywhere, unless the
+// whole query is that number and task 42 exists (see taskNumber).
 function matches(rec, tokens) {
   return tokens.every(tok => {
     const idTok = /^#(\d+)$/.exec(tok);
@@ -270,9 +281,10 @@ export function HistoryView({ state, refresh }) {
   const lines = useMemo(() => statusRecords(state.recipients), [state.recipients]);
   const tokens = tokenize(s.q);
   const re = markRe(tokens);
-  const withLines = (tokens.length || s.agent) && !s.status;
-  const records = withLines ? tasks.concat(lines) : tasks;
-  const textHits = tokens.length ? records.filter(r => matches(r, tokens)) : records;
+  const picked = taskNumber(tokens, tasks);
+  const withLines = !picked && (tokens.length || s.agent) && !s.status;
+  const records = picked ? [picked] : withLines ? tasks.concat(lines) : tasks;
+  const textHits = !tokens.length || picked ? records : records.filter(r => matches(r, tokens));
   const inStatus = (r) => !s.status || r.status === s.status;
   const hasAgent = (r) => !s.agent || r.agents.includes(s.agent);
 

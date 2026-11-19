@@ -6,7 +6,7 @@
     "build": "vite build",
     "dev": "vite",
     "test": "node --test \"web/test/*.test.js\"",
-    "test:browser": "npm run build && node --test web/test/mobile.browser.js"
+    "test:browser": "npm run build && node --test \"web/test/*.browser.js\""
   },
   "dependencies": {
     "highlight.js": "11.12.0",

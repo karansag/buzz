@@ -11850,6 +11850,11 @@ function statusRecords(recipients) {
 	})));
 }
 var tokenize = (q) => q.toLowerCase().split(/\s+/).filter(Boolean);
+function taskNumber(tokens, tasks) {
+	if (tokens.length !== 1) return null;
+	const m = /^#?(\d+)$/.exec(tokens[0]);
+	return m ? tasks.find((t) => String(t.id) === m[1]) || null : null;
+}
 function matches(rec, tokens) {
 	return tokens.every((tok) => {
 		const idTok = /^#(\d+)$/.exec(tok);
@@ -12022,9 +12027,10 @@ function HistoryView({ state, refresh }) {
 	const lines = T(() => statusRecords(state.recipients), [state.recipients]);
 	const tokens = tokenize(s.q);
 	const re = markRe(tokens);
-	const withLines = (tokens.length || s.agent) && !s.status;
-	const records = withLines ? tasks.concat(lines) : tasks;
-	const textHits = tokens.length ? records.filter((r) => matches(r, tokens)) : records;
+	const picked = taskNumber(tokens, tasks);
+	const withLines = !picked && (tokens.length || s.agent) && !s.status;
+	const records = picked ? [picked] : withLines ? tasks.concat(lines) : tasks;
+	const textHits = !tokens.length || picked ? records : records.filter((r) => matches(r, tokens));
 	const inStatus = (r) => !s.status || r.status === s.status;
 	const hasAgent = (r) => !s.agent || r.agents.includes(s.agent);
 	const statusCount = {};
