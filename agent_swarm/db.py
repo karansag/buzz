@@ -734,6 +734,28 @@ def summaries_by_user(conn: sqlite3.Connection, per_user: int = 5) -> dict[str, 
     return out
 
 
+def last_sent(conn: sqlite3.Connection, senders: list[str], recipient: str | None = None) -> dict[str, float]:
+    """Each sender's newest message time; only messages to `recipient` when given.
+
+    Walks idx_messages_sender_id backwards, so a sender's newest message is found
+    without reading its whole history.
+    """
+    out: dict[str, float] = {}
+    for sender in senders:
+        if recipient is None:
+            row = conn.execute(
+                "SELECT ts FROM messages WHERE sender=? ORDER BY id DESC LIMIT 1", (sender,)
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT ts FROM messages WHERE sender=? AND recipient=? ORDER BY id DESC LIMIT 1",
+                (sender, recipient),
+            ).fetchone()
+        if row:
+            out[sender] = row["ts"]
+    return out
+
+
 @_writes
 def create_task(
     conn: sqlite3.Connection,

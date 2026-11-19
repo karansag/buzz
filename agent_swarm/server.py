@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import activity, attachments, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restore, tmux
+from . import activity, attachments, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restore, team_view, tmux
 
 log = logging.getLogger("agent_swarm.monitor")
 
@@ -472,7 +472,9 @@ def _queen_prompt(team: dict, objective: str) -> str:
         "dependency graph. Tasks "
         "the owner assigns to the team are delivered to you: parcel them out by "
         "reassigning or splitting them among teammates as appropriate, and "
-        "monitor your workers' progress. Normally coordinate rather than "
+        "monitor your workers' progress: `buzz team` shows each member's state, "
+        "status line and open tasks, which tasks are ready, blocked or stale, "
+        "and who is free; `buzz team --since 2h` shows only what changed. Normally coordinate rather than "
         "implement. Require repository workers to use "
         "branch task/<id> in a dedicated worktree and record it on the task. "
         "Track progress, dependencies, stopped agents, commits, tests, and "
@@ -611,7 +613,9 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         f"The owner may group agents into teams, each with a queen who "
         f"coordinates that team's work. Tasks can be assigned to a team; "
         f"they reach the queen, who parcels them out; `buzz tasks --team "
-        f"<name or id>` lists a team's work. The owner may also "
+        f"<name or id>` lists a team's work, and `buzz team [name]` shows "
+        f"each member's state and open tasks and which tasks are ready, "
+        f"blocked or stale. The owner may also "
         f"appoint one agent as swarm supervisor, the agent they ask about the "
         f"whole swarm; `buzz supervisor` says who, if anyone, holds it."
     )
@@ -1955,9 +1959,22 @@ def create_app(
     def team_tasks(team_ref: str):
         """The team's work: tasks held by any member, and tasks assigned to the team."""
         team = _find_team(team_ref)
-        members = set(team["members"])
-        tasks = [t for t in db.list_tasks(conn) if t["assignee"] in members or t["team_id"] == team["id"]]
+        tasks = team_view.team_tasks(team, db.list_tasks(conn))
         return {"team": {"id": team["id"], "name": team["name"], "queen": team["queen"]}, "tasks": tasks}
+
+    @app.get("/teams/{team_ref}/view")
+    def team_view_get(team_ref: str, stale_hours: float = team_view.STALE_HOURS, since: float | None = None):
+        """The team for its queen: each member's state, status line and open
+        tasks; each open task's dependencies and whether it can move; and flags
+        (free members, tasks on offline or sleep-prone machines, stale work).
+        `since` (epoch seconds) keeps only members and tasks that changed after it."""
+        team = _find_team(team_ref)
+        members = team["members"]
+        return team_view.build(
+            time.time(), team, _recipients_with_activity(), db.list_tasks(conn),
+            db.last_sent(conn, members, team["queen"]) if team["queen"] else {},
+            db.last_sent(conn, members), fleet.local.name, stale_hours, since,
+        )
 
     @app.post("/tasks")
     def tasks_create(req: TaskCreateReq, request: Request):
@@ -2415,12 +2432,13 @@ def create_app(
         return {"ok": True, "was": row, "delivery": delivery}
 
     @app.get("/digest")
-    def digest_get(after_message: int = 0, minutes: float = 60):
+    def digest_get(after_message: int = 0, minutes: float = 60, team: str | None = None):
         """What changed, as text an agent can read in one go.
 
         `after_message` is an exact cursor (message ids only go up); the last
         line of every digest names the next one. Without it the window is the
-        last `minutes`.
+        last `minutes`. `team` (name or id) keeps only that team's members,
+        its tasks, and messages one of its members sent or received.
         """
         now = time.time()
         since_ts = now - max(minutes, 0) * 60
@@ -2430,8 +2448,15 @@ def create_app(
         else:
             msgs = db.fetch_messages_after(conn, 0, since_ts)
         sup = db.get_supervisor(conn)
+        recipients, tasks = _recipients_with_activity(), db.list_tasks(conn)
+        if team is not None:
+            found = _find_team(team)
+            members = set(found["members"])
+            recipients = [r for r in recipients if r["user_id"] in members]
+            tasks = team_view.team_tasks(found, tasks)
+            msgs = [m for m in msgs if m["sender"] in members or m["recipient"] in members]
         return digest.render(
-            now, _recipients_with_activity(), db.list_tasks(conn), msgs,
+            now, recipients, tasks, msgs,
             after_message, since_ts, sup["user_id"] if sup else None, db.list_teams(conn),
         )
 

@@ -13,7 +13,8 @@
     buzz task-create TITLE [--description TEXT] [--assignee HANDLE] [--depends-on 3,5]
     buzz task-update ID --status open|picked_up|done [--assignee X] [--worktree PATH]
                             [--depends-on 3,5] [--note TEXT]   # --note required to close
-    buzz digest [--minutes N | --after-message ID]   # what changed, as text
+    buzz digest [--minutes N | --after-message ID] [--team [TEAM]]   # what changed, as text
+    buzz team [TEAM] [--since 2h] [--stale-hours N] [--json]   # a team for its queen
     buzz supervisor [HANDLE [--objective TEXT] | --clear]   # the swarm supervisor role
     buzz spawn [--flavor claude|codex|pi|agy|hermes] [--model M] [--node N]
     buzz stop HANDLE   # kill that agent's tmux pane
@@ -835,10 +836,56 @@ def cmd_model(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def _own_team() -> str | None:
+    """The caller's team id, as text, or None when it is on no team."""
+    me = whoami_lookup(caller()).get("user_id")
+    if me is None:
+        return None
+    recipients = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5).json()["recipients"]
+    team_id = next((r.get("team_id") for r in recipients if r["user_id"] == me), None)
+    return None if team_id is None else str(team_id)
+
+
+def _parse_since(raw: str, now: float) -> float:
+    """'30m', '2h', '1d', '90s' back from now; a bare number is epoch seconds
+    (the `next:` line of `buzz team` prints one)."""
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    raw = raw.strip()
+    if raw and raw[-1] in units:
+        return now - float(raw[:-1]) * units[raw[-1]]
+    return float(raw)
+
+
+def cmd_team(args: argparse.Namespace) -> int:
+    ref = args.name or _own_team()
+    if ref is None:
+        print("error: you are on no team; name one (`buzz team NAME`)", file=sys.stderr)
+        return 2
+    params: dict = {"stale_hours": args.stale_hours}
+    if args.since is not None:
+        try:
+            params["since"] = _parse_since(args.since, time.time())
+        except ValueError:
+            print("error: --since takes 30m, 2h, 1d, or epoch seconds", file=sys.stderr)
+            return 2
+    r = httpx.get(f"{base_url()}/teams/{quote(ref, safe='')}/view", params=params, headers=_headers(), timeout=10)
+    if not r.is_success:
+        print(r.text, file=sys.stderr)
+        return 1
+    print(r.json()["text"] if not args.json else json.dumps(r.json(), indent=2))
+    return 0
+
+
 def cmd_digest(args: argparse.Namespace) -> int:
     params: dict = {"minutes": args.minutes}
     if args.after_message is not None:
         params["after_message"] = args.after_message
+    if args.team is not None:
+        team = args.team or _own_team()
+        if team is None:
+            print("error: you are on no team; pass --team NAME", file=sys.stderr)
+            return 2
+        params["team"] = team
     r = httpx.get(f"{base_url()}/digest", params=params, headers=_headers(), timeout=10)
     if not r.is_success:
         print(r.text, file=sys.stderr)
@@ -1256,7 +1303,26 @@ def main(argv: list[str] | None = None) -> int:
         help="exact cursor: the message id the last digest ended with (its final line names it)",
     )
     dg.add_argument("--json", action="store_true", help="print the text, cursor, and counts as JSON")
+    dg.add_argument(
+        "--team", nargs="?", const="", metavar="TEAM",
+        help="only this team's members, tasks and messages (name or id; default: your own team)",
+    )
     dg.set_defaults(func=cmd_digest)
+
+    tm = sub.add_parser(
+        "team", help="one team for its queen: members, open tasks, dependencies, and what needs a decision"
+    )
+    tm.add_argument("name", nargs="?", help="team name or id (default: your own team)")
+    tm.add_argument("--json", action="store_true", help="print the view as JSON")
+    tm.add_argument(
+        "--stale-hours", type=float, default=4.0,
+        help="a picked-up task is stale after this many hours with no message, status line or task update (default 4)",
+    )
+    tm.add_argument(
+        "--since", metavar="WHEN",
+        help="only members and tasks that changed since then: 30m, 2h, 1d, or epoch seconds (flags always show)",
+    )
+    tm.set_defaults(func=cmd_team)
 
     sup = sub.add_parser(
         "supervisor",

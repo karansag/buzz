@@ -512,6 +512,23 @@ also flies above her bee. Assignee menus spell the role out, "stoat · ♛
 queen". The marker comes from the team data on each poll, so changing the
 queen moves the crown with no reload.
 
+A queen (or you) can read one team at a glance:
+
+```bash
+buzz team                    # the caller's own team
+buzz team marin --since 2h   # only what changed in the last 2 hours
+buzz digest --team marin     # the digest, limited to one team
+```
+
+It lists each member with its machine, live / idle / offline, status
+line and age, open tasks, and when it last messaged the queen. Each open
+team task is **ready** (deps done), **blocked** (names the dep), **in
+progress**, or **stale** (picked up with no message, status line or task
+update for `--stale-hours`, default 4). Flags at the end name members
+with no open task, team tasks with no member, and tasks held by an
+offline agent or by one on a machine other than the hub's, which may
+sleep. `--json` prints the same data the endpoint returns.
+
 When a task reaches an agent on a team, the message names its teammates
 that are running; offline members are left out. To clear out agents that
 are gone for good, **retire** them: the teams view lists each team's
@@ -761,7 +778,8 @@ buzz status "working on ..." [--pane <id>]
 buzz tasks [--status open|picked_up|done] [--team <name or id>]
 buzz task-create <title> [--description <text>] [--assignee <handle>] [--depends-on 3,5]
 buzz task-update <id> [--status <s>] [--assignee <h>] [--worktree <path>] [--depends-on 3,5] [--note <text>]
-buzz digest [--minutes N | --after-message ID] [--json]
+buzz digest [--minutes N | --after-message ID] [--team [<name or id>]] [--json]
+buzz team [<name or id>] [--since 2h|<epoch>] [--stale-hours 4] [--json]   # a team for its queen
 buzz supervisor [<handle> --objective <text> | --clear]
 buzz spawn [--flavor claude|codex|pi|agy|hermes] [--model <m>] [--node <machine>] [--cwd <folder>]
 buzz stop <handle>
@@ -809,6 +827,7 @@ token may call it; "owner" means a node token is refused (see
 | GET, POST | `/teams` | owner | list; create `{name}` |
 | PATCH, DELETE | `/teams/{id}` | owner | rename, crown a queen, set an objective; remove |
 | GET | `/teams/{name or id}/tasks` | agent | the team's tasks: its members' and the team's own |
+| GET | `/teams/{name or id}/view` | agent | `buzz team`: members, open tasks with ready/blocked/stale, flags; `?stale_hours=&since=` |
 | POST | `/agents/{handle}/team` | owner | `{team_id}`, or null for no team |
 | GET | `/api/spawn-options` | owner | harnesses and known models per machine |
 | POST | `/agents/spawn` | owner | `{flavor, model?, node?, cwd?}` |
@@ -817,7 +836,7 @@ token may call it; "owner" means a node token is refused (see
 | POST | `/agents/{handle}/model` | owner | set the model label the dashboard shows (it does not switch models) |
 | GET | `/supervisor` | agent | who holds the role |
 | PUT, DELETE | `/supervisor` | owner | appoint `{user_id, objective?}`; clear |
-| GET | `/digest` | agent | `?minutes=` or `?after_message=` |
+| GET | `/digest` | agent | `?minutes=` or `?after_message=`; `?team=` for one team |
 | GET, POST, DELETE | `/nodes`, `/nodes/{name}/token`, `/nodes/{name}` | owner | list, enrol or rotate, revoke |
 | GET | `/nodes/me` | agent | who the hub takes the caller for |
 | WS | `/nodes/ws` | node | a node's connection; frames are in `agent_swarm/protocol.py` |
@@ -867,6 +886,7 @@ agent_swarm/
   db.py        SQLite
   tmux.py      pane detection, delivery, capture, spawn commands
   digest.py    the supervisor's digest
+  team_view.py `buzz team`: one team for its queen
   node.py      the node daemon
   nodes.py     local and remote machines behind one interface
   protocol.py  frames between hub and node

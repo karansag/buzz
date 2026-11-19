@@ -215,7 +215,8 @@ crowns a member with an objective, and the server delivers that member
 a coordination prompt scoped to its team. The queen decomposes the
 objective into tasks (`buzz task-create`, using `--depends-on` to
 record ordering as a graph the dashboard draws), parcels team-assigned
-tasks out to teammates, and monitors their progress. A task the owner
+tasks out to teammates, and monitors their progress with `buzz team`
+(below). A task the owner
 assigns to a team is delivered to its queen; if the team has no queen,
 every member is notified and whoever takes it runs
 `buzz task-update N --assignee <yourself>`. Every task
@@ -227,6 +228,27 @@ authority: it is a prompt-driven role, the owner retains every right,
 and a queen coordinates only its own team. For practices that worked for
 one queen-led team (roles, one message per event, launch gates, records),
 see `docs/team-practices.md` in the Buzz repo.
+
+`buzz team [name]` (default: your own team) is the queen's read-only view:
+
+```bash
+buzz team                    # your team now
+buzz team marin --since 2h   # only members and tasks that changed in 2 h
+buzz team --stale-hours 2    # call picked-up work stale after 2 h of silence
+buzz team --json             # the same as data
+buzz digest --team           # the digest, limited to your team
+```
+
+- One line per member: node, live / idle / offline, the status line and
+  its age, open tasks, and when it last sent the queen a message.
+- One line per open team task: **ready** (all deps done), **blocked**
+  (a dep is not done; the deps are listed), **in progress**, or
+  **stale** (picked up, and nothing from the holder for `--stale-hours`,
+  default 4: no message, status line, or task update).
+- Flags: members with no open task (free to assign), team tasks with no
+  member, and tasks held by an offline member or by one on a machine
+  other than the hub's (a laptop may sleep).
+- The last line gives the `--since` value for next time.
 
 ---
 
@@ -281,8 +303,10 @@ All endpoints accept/return JSON. The CLI is a thin wrapper.
   delivers the coordination prompt.
 - `GET /teams/<name or id>/tasks` — the team's tasks: those held by its members
   and those assigned to the team (`buzz tasks --team <name or id>`).
+- `GET /teams/<name or id>/view?stale_hours=<h>&since=<epoch>` — `buzz team`:
+  `members`, `tasks` (with `state` and `blocked_by`), `flags`, and `text`.
 - `POST /agents/<handle>/team` — body: `{team_id}` (null to leave).
-- `GET /digest?after_message=<id>&minutes=<n>` — what changed, as text, with
+- `GET /digest?after_message=<id>&minutes=<n>&team=<name or id>` — what changed, as text, with
   the cursor for the next call.
 - `GET /supervisor` / `PUT /supervisor` `{user_id, objective?}` / `DELETE /supervisor`
   — the swarm supervisor role (owner only to set or clear).
