@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import names, notifications, search
+from . import message_index, names, notifications, search
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recipients (
@@ -229,6 +229,7 @@ def connect(path: str | Path) -> Connections:
         conns.execute("PRAGMA journal_mode=WAL")
         conns.executescript(SCHEMA)
         _ensure_columns(conns)
+        message_index.ensure(conns, path)
     return conns
 
 
@@ -1078,6 +1079,7 @@ def record_message(
             reply_to,
         ),
     )
+    message_index.add(conn, cur.lastrowid, content, context)
     conn.commit()
     return int(cur.lastrowid)
 
@@ -1106,6 +1108,7 @@ def record_notification(conn: sqlite3.Connection, sender: str, content: str,
             "INSERT INTO messages(sender,recipient,context,content,ts,delivered,status,notify) "
             "VALUES(?,'owner',?,?,?,1,'delivered',1)", (sender, context, content, now),
         )
+        message_index.add(conn, cur.lastrowid, content, context)
         return int(cur.lastrowid)
 
 
@@ -1279,9 +1282,13 @@ def search_agent_messages(conn: sqlite3.Connection, user: str, query: str,
     """Search the whole owner conversation, independently of history pages."""
     clause, params = search.matches(query)
     terms = search.terms(query)
-    scope = "((sender='owner' AND recipient=?) OR (sender=? AND recipient='owner'))"
-    where = f"{scope} AND ({clause})"
-    args = [user, user, *params]
+    narrow, narrow_args = message_index.prefilter(conn, query)
+    # The unary plus keeps SQLite from walking the whole conversation by index
+    # when the trigram index has already named the few messages to look at.
+    p = "+" if narrow else ""
+    scope = f"(({p}sender='owner' AND {p}recipient=?) OR ({p}sender=? AND {p}recipient='owner'))"
+    where = f"{narrow}{scope} AND ({clause})"
+    args = [*narrow_args, user, user, *params]
     total = conn.execute(f"SELECT COUNT(*) FROM messages WHERE {where}", args).fetchone()[0]
     rows = conn.execute(
         f"SELECT id, ts, sender, content FROM messages WHERE {where} "
@@ -1385,6 +1392,7 @@ def newest_message_id(conn: sqlite3.Connection) -> int:
 @_writes
 def delete_messages_before(conn: sqlite3.Connection, cutoff: float) -> int:
     """Delete unpinned messages sent before `cutoff`; return how many were removed."""
+    message_index.remove_before(conn, cutoff)
     cur = conn.execute(
         "DELETE FROM messages WHERE ts < ? AND id NOT IN (SELECT message_id FROM pins)", (cutoff,)
     )
@@ -1672,7 +1680,7 @@ def apply_import(
                     )
 
         for message in plan["messages"]:
-            conn.execute(
+            cur = conn.execute(
                 "INSERT INTO messages(sender, recipient, context, content, ts, delivered, "
                 "delivery_error, attachments, status) VALUES(?,?,?,?,?,?,?,NULL,?)",
                 (
@@ -1682,6 +1690,7 @@ def apply_import(
                     message["delivery_error"], message["status"],
                 ),
             )
+            message_index.add(conn, cur.lastrowid, message["content"], message["context"])
 
         report = summarize(plan)
         report["task_ids"] = {str(k): v for k, v in task_ids.items()}
