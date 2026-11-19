@@ -488,7 +488,7 @@ HARNESS_SPAWN: dict[str, HarnessSpec] = {
         "codex",
         "--model",
         codex_models,
-        startup_args="-c check_for_update_on_startup=false",
+        startup_args="-c check_for_update_on_startup=false -c notice.hide_rate_limit_model_nudge=true",
         # Codex's workspace-write sandbox blocks the tmux socket, the local
         # agent-swarm API and DNS, so an agent spawned inside it could not
         # register, send, or reach anything. --yolo is codex's short alias

@@ -67,7 +67,7 @@ def test_resume_commands_match_spawn_flags():
     assert cmd({"flavor": "claude", "agent_id": "abc", "model": "claude-code"}) == (
         "claude --resume abc --permission-mode auto")
     assert cmd({"flavor": "codex", "agent_id": "t1", "model": "astra"}) == (
-        "codex resume t1 -c check_for_update_on_startup=false --model astra --yolo --no-daemon")
+        "codex resume t1 -c check_for_update_on_startup=false -c notice.hide_rate_limit_model_nudge=true --model astra --yolo --no-daemon")
     assert cmd({"flavor": "pi", "agent_id": "p1", "model": "/m/bonsai.gguf"}) == "pi --session p1"
     assert cmd({"flavor": "hermes", "agent_id": "h1", "model": None}) == (
         "hermes --resume h1 --yolo --accept-hooks")
@@ -78,7 +78,7 @@ def test_codex_restore_always_uses_yolo(monkeypatch):
     monkeypatch.setattr(tmux.HARNESS_SPAWN["codex"], "launch_args", "")
     command = restore.resume_command({"flavor": "codex", "agent_id": "saved-session"})
     assert command == (
-        "codex resume saved-session -c check_for_update_on_startup=false --yolo --no-daemon")
+        "codex resume saved-session -c check_for_update_on_startup=false -c notice.hide_rate_limit_model_nudge=true --yolo --no-daemon")
 
 
 def snapshot_of(rows, recipients):

@@ -614,6 +614,30 @@ def test_a_message_is_never_pasted_into_a_workspace_trust_prompt(client, monkeyp
     assert msgs[0]["status"] == "failed"
 
 
+@pytest.mark.parametrize("screen,expected_label", [
+    (
+        "Approaching rate limits\nSwitch to gpt-6-luna for lower credit usage?\n"
+        "› 1. Switch to gpt-6-luna\n  2. Keep current model\n",
+        "Codex's low-quota model switch prompt",
+    ),
+    (
+        "Your included usage is exhausted. Choose an option below to continue.\n"
+        "› 1. Continue with Luna Reserve\n  2. Switch to API key\n",
+        "Codex's Luna Reserve recovery prompt",
+    ),
+])
+def test_a_message_is_never_pasted_into_a_codex_downgrade_prompt(client, monkeypatch, screen, expected_label):
+    monkeypatch.setattr(tmux, "capture_pane", lambda pane, colors=False: (screen, None))
+    user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
+    before = len(client._calls)
+    r = client.post("/owner/send", json={"recipient": user, "content": "hello"})
+    body = r.json()
+    assert body["ok"] is False and body["status"] == "failed"
+    assert expected_label in body["delivery_error"]
+    assert "model downgrade" in body["delivery_error"]
+    assert len(client._calls) == before
+
+
 def test_owner_send_delivers_to_pane_and_records(client):
     user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
     r = client.post("/owner/send", json={"recipient": user, "content": "status update please"})
@@ -837,7 +861,8 @@ def test_spawn_codex_runs_yolo_and_permission_choice_is_gone(client, codex_catal
     r = client.post("/agents/spawn", json={"flavor": "codex", "model": "gpt-5.6-luna"})
     assert r.status_code == 200
     assert client._spawns[-1] == (
-        tmux.AGENTS_SESSION, "codex -c check_for_update_on_startup=false --model gpt-5.6-luna --yolo"
+        tmux.AGENTS_SESSION,
+        "codex -c check_for_update_on_startup=false -c notice.hide_rate_limit_model_nudge=true --model gpt-5.6-luna --yolo",
     )
     # The old permission field is refused, not silently ignored.
     assert client.post(

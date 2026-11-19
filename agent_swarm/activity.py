@@ -127,11 +127,36 @@ def trust_prompt(capture: str) -> str | None:
     return None
 
 
+# Codex low-quota / exhausted-quota modals whose highlighted default option
+# switches the session to a lower-tier model (e.g. gpt-6-luna / Luna Reserve).
+# Like trust prompts, a message pasted into one (with Enter) would accept it.
+DOWNGRADE_PROMPTS = [
+    ("Codex's low-quota model switch prompt",
+     re.compile(r"^\W*Switch to .+ for lower credit usage\?"),
+     re.compile(r"\bKeep current model\b")),
+    ("Codex's Luna Reserve recovery prompt",
+     re.compile(r"^\W*Your included usage is exhausted\."),
+     re.compile(r"\bContinue with Luna Reserve\b")),
+]
+
+
+def downgrade_prompt(capture: str) -> str | None:
+    """What a model-downgrade prompt on screen asks, or None."""
+    lines = capture.splitlines()
+    for label, title, answer in DOWNGRADE_PROMPTS:
+        at = next((i for i, line in enumerate(lines) if title.search(line)), None)
+        if at is not None and any(answer.search(line) for line in lines[at + 1:]):
+            return label
+    return None
+
+
 def _attention_detail(flavor: str | None, capture: str) -> str | None:
     """If the screen shows a live prompt awaiting the operator, return the line
     to display (its question when visible, else the first marker line)."""
     if trust := trust_prompt(capture):
         return f"waiting at {trust}: answer it in the pane"
+    if downgrade := downgrade_prompt(capture):
+        return f"waiting at {downgrade}: answer it in the pane"
     patterns = ATTENTION_PATTERNS.get(
         (flavor or "generic").lower(), ATTENTION_PATTERNS["generic"]
     )

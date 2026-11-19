@@ -41,7 +41,7 @@ def test_all_restarts_idle_resumable_agents_on_this_machine_and_says_why_not():
     got = by_handle(restart.plan(AGENTS, LIVE, "n1", SERVER))
     assert got == {
         "otter": "cd /repo && claude --resume s-otter --permission-mode auto",
-        "tapir": "cd /w && codex resume t-tapir -c check_for_update_on_startup=false --yolo --no-daemon",
+        "tapir": "cd /w && codex resume t-tapir -c check_for_update_on_startup=false -c notice.hide_rate_limit_model_nudge=true --yolo --no-daemon",
         "busy": "activity is working; only observed-idle agents restart by default (--force overrides)",
         "gone": "no harness is running in its pane; `buzz restore gone` resumes it there",
         "anon": "no session id, so it could not be resumed",

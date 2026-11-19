@@ -261,3 +261,37 @@ def test_registry_carries_the_footer_context_and_drops_it_with_the_pane():
     run(reg, [obs(flavor="codex", capture=shown)], now=2 * INTERVAL)
     run(reg, [obs(flavor="codex", pane_alive=False, capture=None)], now=3 * INTERVAL)
     assert reg["otter"]["context"] is None
+
+
+CODEX_RATE_LIMIT_SWITCH = (
+    "Approaching rate limits\n"
+    "Switch to gpt-6-luna for lower credit usage?\n"
+    "› 1. Switch to gpt-6-luna\n"
+    "  2. Keep current model\n"
+    "  3. Keep current model (never show again)\n"
+)
+
+CODEX_LUNA_RESERVE = (
+    "Your included usage is exhausted. Choose an option below to continue.\n"
+    "› 1. Continue with Luna Reserve\n"
+    "  2. Switch to API key\n"
+)
+
+
+def test_downgrade_prompts_are_recognized_and_prose_is_ignored():
+    assert activity.downgrade_prompt(CODEX_RATE_LIMIT_SWITCH) == "Codex's low-quota model switch prompt"
+    assert activity.downgrade_prompt(CODEX_LUNA_RESERVE) == "Codex's Luna Reserve recovery prompt"
+    # Talking about the prompt in prose or without the menu option must not match.
+    assert activity.downgrade_prompt("It showed Switch to gpt-6-luna for lower credit usage? and I chose Keep current model.") is None
+    assert activity.downgrade_prompt("Switch to gpt-6-luna for lower credit usage?\n") is None
+    assert activity.downgrade_prompt("") is None
+
+
+def test_a_downgrade_prompt_shows_as_needing_attention():
+    registry = {}
+    observations = [activity.Observation("genet", "codex", True, CODEX_LUNA_RESERVE)]
+    for now in (0.0, 2.0, 4.0, 6.0):
+        activity.step(registry, observations, now, interval=2.0, grace=0.0)
+    assert registry["genet"]["status"] == "needs_attention"
+    assert registry["genet"]["detail"] == (
+        "waiting at Codex's Luna Reserve recovery prompt: answer it in the pane")

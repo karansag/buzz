@@ -1634,9 +1634,7 @@ def create_app(
             conn, recipient["user_id"], since=recipient["registered_at"],
             now=time.time(), idle_seconds=OWNER_REPLY_IDLE_SECONDS,
         )
-        if trust := _trust_prompt_on(node, recipient):
-            err = (f"not delivered: {recipient['user_id']} is waiting at {trust}. Answer it in its "
-                   "pane first; a pasted message would answer it, and Claude's default there is No, exit.")
+        if err := _blocking_prompt_error(node, recipient):
             db.set_message_status(conn, mid, "failed", err)
             return mid, "failed", err
         body = tmux.format_message(sender, context, reply_note + content, owner_reply_reminder=reminder)
@@ -1658,18 +1656,28 @@ def create_app(
         db.set_message_status(conn, mid, status, result.error)
         return mid, status, result.error
 
-    def _trust_prompt_on(node: nodes.Node, recipient: dict) -> str | None:
-        """The workspace trust prompt the recipient's pane shows, or None.
+    def _blocking_prompt_error(node: nodes.Node, recipient: dict) -> str | None:
+        """Error message if the recipient's pane shows a modal prompt, or None.
 
-        The Enter that submits a message would answer it. Unknown screens
-        count as no prompt: delivery then reports its own errors. A remote
-        agent's screen is the node's latest observation, a few seconds old.
+        The Enter that submits a message would accept the prompt's default
+        (No, exit on Claude's trust prompt; a model downgrade on Codex's
+        rate-limit / Luna Reserve modals). Unknown screens count as no prompt:
+        delivery then reports its own errors. A remote agent's screen is the
+        node's latest observation, a few seconds old.
         """
         try:
             screen = node.screen(recipient["tmux_pane"], recipient.get("tmux_server"))
         except Exception:  # noqa: BLE001 - the delivery that follows reports a broken node
             return None
-        return activity.trust_prompt(screen) if screen else None
+        if not screen:
+            return None
+        if trust := activity.trust_prompt(screen):
+            return (f"not delivered: {recipient['user_id']} is waiting at {trust}. Answer it in its "
+                    "pane first; a pasted message would answer it, and Claude's default there is No, exit.")
+        if downgrade := activity.downgrade_prompt(screen):
+            return (f"not delivered: {recipient['user_id']} is waiting at {downgrade}. Answer it in its "
+                    "pane first; a pasted message would accept the model downgrade.")
+        return None
 
     @app.post("/notify")
     def notify(req: NotifyReq, request: Request):

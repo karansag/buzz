@@ -359,8 +359,8 @@ def startup(pane: str, launched_at: float, wait: float, settle: float = SETTLE) 
         command = tmux._tmux_out("display-message", "-p", "-t", pane, "#{pane_current_command}")
         if screen is None or command is None:
             return "failed", "its pane is gone"
-        if trust := activity.trust_prompt(screen):
-            return "blocked", (f"waiting at {trust}. Answer it in that pane or the dashboard's "
+        if prompt := (activity.trust_prompt(screen) or activity.downgrade_prompt(screen)):
+            return "blocked", (f"waiting at {prompt}. Answer it in that pane or the dashboard's "
                                "terminal view; the hub holds messages back until then")
         if command.strip() in tmux.SHELL_COMMANDS:
             return "failed", "its harness started and exited; see the pane"

@@ -346,8 +346,10 @@ flag. Claude offers the aliases `opus`, `sonnet`, `haiku`, and `fable`,
 which Claude Code maps to the newest model of each family. Codex offers the
 models its own `/model` picker lists, read from `~/.codex/models_cache.json`
 (or `$CODEX_HOME`), which Codex keeps up to date; if Codex has never run on
-the hub's machine, only the default is offered. Codex also gets `-c check_for_update_on_startup=false`, so an update
-prompt cannot stall a new pane, and `--no-daemon` when the installed Codex
+the hub's machine, only the default is offered. Codex also gets
+`-c check_for_update_on_startup=false -c notice.hide_rate_limit_model_nudge=true`,
+so an update or low-quota switch prompt cannot stall or downgrade a pane, and
+`--no-daemon` when the installed Codex
 supports it, so its commands run in the agent's own pane. Codex needs
 `--yolo` because its sandbox blocks the tmux socket and the local hub.
 Claude runs in auto mode: it approves routine commands itself and still
@@ -361,7 +363,7 @@ any existing `hub`, `node`, and `token` settings above the table:
 ```toml
 [harness_commands]
 claude = 'env -u CLAUDE_CONFIG_DIR /Users/you/.local/bin/claude --permission-mode auto'
-codex = 'env CODEX_HOME="$HOME/.codex-personal" /opt/homebrew/bin/codex --yolo -c check_for_update_on_startup=false'
+codex = 'env CODEX_HOME="$HOME/.codex-personal" /opt/homebrew/bin/codex --yolo -c check_for_update_on_startup=false -c notice.hide_rate_limit_model_nudge=true'
 pi = '/usr/local/bin/pi'
 hermes = 'hermes --yolo --accept-hooks'
 ```

@@ -3,7 +3,7 @@
 from agent_swarm import tmux
 
 
-CODEX_STARTUP = "codex -c check_for_update_on_startup=false"
+CODEX_STARTUP = "codex -c check_for_update_on_startup=false -c notice.hide_rate_limit_model_nudge=true"
 
 
 def test_each_harness_has_one_launch_and_no_permission_choice():
