@@ -184,10 +184,49 @@ function TaskEdit({ task, refresh, done }) {
   </form>`;
 }
 
+function TaskMeta({ task: t, fields: f, re, now }) {
+  return html`<div class="h-meta">
+      <span title=${fmtDate(t.created_at)}>created ${fmtDate(t.created_at)}</span>
+      ${t.status === "done"
+        ? html`<span title=${`last updated ${fmtDate(t.updated_at)}`}>closed ${fmtDate(t.updated_at)} · ${rel(t.updated_at, now)}</span>`
+        : html`<span>updated ${rel(t.updated_at, now)}</span>`}
+      ${f.team && html`<span>team ${hl(f.team, re)}</span>`}
+      ${f.worktree && html`<span class="h-wt" title=${f.worktree}>${hl(f.worktree, re)}</span>`}
+    </div>`;
+}
+
+function TaskDetails({ task: t, fields: f, re, now, close }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current.showModal(); }, []);
+
+  return html`<dialog class="page-dialog task-details" ref=${ref} aria-labelledby=${`task-details-title-${t.id}`}
+      onClose=${close} onKeyDown=${e => { if (e.key === "Escape") e.stopPropagation(); }}>
+    <header class="task-details-header">
+      <span>Task #${t.id}</span>
+      <button type="button" class="mini" autofocus onClick=${() => ref.current.close()}>Close</button>
+    </header>
+    <div class="task-details-body" tabindex="0">
+      <h2 id=${`task-details-title-${t.id}`}>${hl(f.title, re)}</h2>
+      <div class="task-details-status">
+        ${t.assignee && html`<a class="agent-link" href=${focusHash(t.assignee)}>${hl(t.assignee, re)}</a>`}
+        <span class=${`pill ${t.status}`}>${t.status.replace("_", " ")}</span>
+      </div>
+      ${f.description && html`<div class="task-details-text">${hl(f.description, re)}</div>`}
+      <${AttachmentList} files=${t.attachments} />
+      ${f.note && html`<section>
+        <h3>How to verify</h3>
+        <div class="task-details-text">${hl(f.note, re)}</div>
+      </section>`}
+      <${TaskMeta} task=${t} fields=${f} re=${re} now=${now} />
+    </div>
+  </dialog>`;
+}
+
 function TaskTile({ rec, re, now, teams, filterAgent, refresh }) {
   const t = rec.src;
   const f = rec.fields;
   const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   if (editing) {
     return html`<article class=${`htile ${t.status}`}>
       <div class="h-title"><span class="h-id">#${t.id}</span> editing</div>
@@ -209,20 +248,16 @@ function TaskTile({ rec, re, now, teams, filterAgent, refresh }) {
     <${Clipped} text=${f.description} re=${re} />
     <${AttachmentList} files=${t.attachments} />
     <${Clipped} label="how to verify" text=${f.note} re=${re} />
-    <div class="h-meta">
-      <span title=${fmtDate(t.created_at)}>created ${fmtDate(t.created_at)}</span>
-      ${t.status === "done"
-        ? html`<span title=${`last updated ${fmtDate(t.updated_at)}`}>closed ${fmtDate(t.updated_at)} · ${rel(t.updated_at, now)}</span>`
-        : html`<span>updated ${rel(t.updated_at, now)}</span>`}
-      ${f.team && html`<span>team ${hl(f.team, re)}</span>`}
-      ${f.worktree && html`<span class="h-wt" title=${f.worktree}>${hl(f.worktree, re)}</span>`}
-    </div>
+    <${TaskMeta} task=${t} fields=${f} re=${re} now=${now} />
     <div class="h-actions">
+      <button type="button" class="mini" aria-haspopup="dialog" aria-label=${`Expand task #${t.id}`}
+        onClick=${e => { e.currentTarget.focus(); setExpanded(true); }}>Expand</button>
       <button type="button" class="mini" onClick=${() => setEditing(true)}
         aria-label=${`Edit task #${t.id}`}>Edit</button>
       <${TaskStatusActions} task=${t} refresh=${refresh} />
       <${TaskTrash} task=${t} refresh=${refresh} />
     </div>
+    ${expanded && html`<${TaskDetails} task=${t} fields=${f} re=${re} now=${now} close=${() => setExpanded(false)} />`}
   </article>`;
 }
 
@@ -255,7 +290,8 @@ export function HistoryView({ state, refresh }) {
   useEffect(() => {
     const onHash = () => { if (location.hash.startsWith(HISTORY_ROUTE)) setS(parseHash(location.hash)); };
     const onKey = (e) => {
-      if (e.key === "/" && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+      if (e.key === "/" && !document.querySelector("dialog[open]")
+          && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) {
         e.preventDefault();
         inputRef.current?.focus();
       }

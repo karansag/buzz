@@ -38,13 +38,13 @@ function historyState() {
   return state;
 }
 
-async function openHistory() {
-  const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+async function openHistory(state = historyState(), viewport = { width: 1100, height: 900 }) {
+  const page = await browser.newPage({ viewport });
   page.setDefaultTimeout(5000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('dialog', d => { errors.push(`native ${d.type()}: ${d.message()}`); d.dismiss(); });
-  await mock(page, historyState());
+  await mock(page, state);
   await page.goto(base + '#/tasks');
   await page.waitForSelector('.h-search');
   return { page, errors };
@@ -101,6 +101,44 @@ test('several words keep the usual AND search', async () => {
                      ['status', '#310', '#312']);
     // No task 310 here, so the number is plain text: only 311's title fits.
     assert.deepEqual(await search(page, '310 passing', ['#311']), ['#311']);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('task details show the full text at a readable size and return focus on close', async () => {
+  const state = historyState();
+  const [task] = state.tasks;
+  task.description = 'First paragraph.\n\n' + 'More task context. '.repeat(60) + 'End of description.';
+  task.note = 'Verify this step. '.repeat(30) + 'End of verification.';
+  const viewport = { width: 390, height: 680 };
+  const { page, errors } = await openHistory(state, viewport);
+  try {
+    await search(page, '310', ['#310']);
+    const expand = page.getByRole('button', { name: 'Expand task #310' });
+    const preview = page.locator('.htile .h-field').first();
+    assert.ok(!(await preview.textContent()).includes('End of description.'));
+    await expand.focus();
+    await expand.press('Enter');
+    const dialog = page.getByRole('dialog', { name: task.title });
+    await dialog.waitFor();
+    const sections = dialog.locator('.task-details-text');
+    assert.deepEqual(await sections.allTextContents(), [task.description, task.note]);
+    const previewSize = await preview.evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+    const fullSize = await sections.first().evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+    assert.ok(fullSize > previewSize);
+    const bounds = await dialog.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= viewport.width);
+    assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= viewport.height);
+    const scrollable = dialog.locator('.task-details-body');
+    assert.ok(await scrollable.evaluate(el => el.scrollHeight > el.clientHeight));
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Expand task #310');
+    assert.equal(await page.locator('.h-search').inputValue(), '310');
+
+    await expand.click();
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await dialog.waitFor({ state: 'hidden' });
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });
