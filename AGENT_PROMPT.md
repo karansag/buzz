@@ -169,7 +169,8 @@ changed. The note is stored on the task and shown on its dashboard card, so it
 is the record of what you did, not a formality. Do not close a task you cannot
 describe this way; say so to the owner instead.
 
-Say what you are doing whenever you start on something new, task or not:
+Keep your status line current as the work moves — at the start, at each
+milestone, and when it is done — task or not:
 
 ```bash
 buzz status "working on #42: close notes"

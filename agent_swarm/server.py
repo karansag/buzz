@@ -48,21 +48,20 @@ OWNER = "owner"
 # The server itself, when it signs a message (the supervisor's digest nudges).
 HUB = "hub"
 
-# Said the same way wherever a worker meets it: in the assignment message, in
-# the protocol brief, and in the error it gets if it tries to close without one.
+# What a note needs, said where a worker meets it when it matters: the error it
+# gets if it tries to close without one. Task messages only say a note is
+# required, so they stay short.
 NOTE_GUIDANCE = (
-    "Say how to verify the work: for a feature, how to use it; for a fix, how "
-    "to reproduce the problem it solves; and where to look - the command to "
-    "run, the endpoint or screen to open, or the files that changed. Write it "
-    "for someone coming back to this later with no memory of the work."
+    "Say how to verify it: how to use the feature or reproduce the fix, and "
+    "where to look - the command, endpoint, screen or files that changed."
 )
 
 # The dashboard shows each agent's latest status line, so the owner can see
 # what everyone is doing (and did last) without a task to go by.
 STATUS_GUIDANCE = (
-    "Whenever you start on something new, run `buzz status \"working on "
-    "<what, in a few words>\"` so the owner's dashboard shows what you are "
-    "doing; say when you finish, e.g. `buzz status \"done: <what>\"`."
+    "Keep `buzz status` current as the work moves (\"testing #12\", "
+    "\"waiting on review\") and end with \"done: #12\"; the owner's "
+    "dashboard shows each agent's latest line."
 )
 
 
@@ -597,16 +596,12 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         f"shell.\n"
         f"\n"
         f"The owner can assign you tasks. They arrive as messages tagged "
-        f"'task #N'. When you start one, run "
-        f"`buzz task-update N --status picked_up`; when you finish, "
-        f"run `buzz task-update N --status done --note \"...\"`. "
-        f"The note is required: closing without one is refused. {NOTE_GUIDANCE} "
-        f"It stays on the task, so the owner can open it later and see how to "
-        f"check the work. "
-        f"List tasks anytime: `buzz tasks`. You can file work for the "
-        f"shared board with `buzz task-create \"title\"` (optionally "
-        f"add `--description`, `--assignee`, or `--depends-on 3,5` to record "
-        f"ordering; dependencies show as a graph on the dashboard).\n"
+        f"'task #N'. Record the worktree when you start with `buzz task-update "
+        f"N --worktree <path> --status picked_up`, and close with `buzz "
+        f"task-update N --status done --note \"...\"`: closing without a note "
+        f"is refused, and the refusal says what one needs. List tasks with "
+        f"`buzz tasks`; file one with `buzz task-create \"title\"` "
+        f"(optionally --description, --assignee, --depends-on 3,5).\n"
         f"\n"
         f"{STATUS_GUIDANCE}\n"
         f"\n"
@@ -1872,38 +1867,19 @@ def create_app(
             },
         )
 
-    def _team_line(user_id: str) -> str:
-        """One sentence telling an agent who its teammates are right now:
-        only the ones running, since an offline one cannot answer."""
-        recipient = db.get_recipient(conn, user_id)
-        if recipient is None or not recipient.get("team_id"):
-            return ""
-        team = db.get_team(conn, recipient["team_id"])
-        if team is None:
-            return ""
-        live = {r["user_id"] for r in _annotated_recipients() if r["alive"]}
-        others = [m for m in team["members"] if m != user_id and m in live]
-        mates = ", ".join(others) if others else "no one else running"
-        line = f" You are on team '{team['name']}' with {mates}"
-        if team["queen"] in live:
-            line += f" (queen: {team['queen']})"
-        return line + "."
-
     def _notify_assignment(task: dict, actor: str):
         hint = (
-            f"Before editing, use branch task/{task['id']} in a dedicated git worktree. "
-            f"Record it when you start: buzz task-update {task['id']} "
-            f"--worktree /absolute/path --status picked_up. "
-            f"When finished: buzz task-update {task['id']} --status done "
-            f"--note \"...\". The note is required and the close is refused "
-            f"without one. {NOTE_GUIDANCE} "
-            f"When you start, also run buzz status \"working on "
-            f"#{task['id']}: <a few words>\" so the dashboard shows it."
+            f"Use branch task/{task['id']} in its own git worktree, and record it as you "
+            f"start: buzz task-update {task['id']} --worktree /absolute/path --status picked_up. "
+            f"Keep `buzz status` current as the work moves (\"testing #{task['id']}\", "
+            f"\"waiting on review\") and end with \"done: #{task['id']}\". "
+            f"Close with buzz task-update {task['id']} --status done --note \"...\": "
+            f"the note is required."
         )
         content = f"You are assigned task #{task['id']}: {task['title']}."
         if task.get("description"):
             content += f" Details: {task['description']}."
-        content += f" {hint}{_team_line(task['assignee'])}"
+        content += f" {hint}"
         try:
             _deliver_as(actor, task["assignee"], content, f"task #{task['id']}", task.get("attachments") or [])
         except HTTPException:
@@ -1917,23 +1893,21 @@ def create_app(
         detail = f" Details: {task['description']}." if task.get("description") else ""
         if team["queen"]:
             content = (
-                f"Task #{task['id']} is assigned to your team '{team['name']}': "
-                f"{task['title']}.{detail} As queen, parcel it out: split it into "
-                f"subtasks or hand it to a teammate with buzz task-update "
-                f"{task['id']} --assignee <member>, then monitor progress."
+                f"Task #{task['id']} for your team '{team['name']}': "
+                f"{task['title']}.{detail} As queen, parcel it out with buzz "
+                f"task-update {task['id']} --assignee <member>, then keep an eye on it."
             )
             targets = [team["queen"]]
         else:
             content = (
-                f"Task #{task['id']} is assigned to your team '{team['name']}' "
-                f"(no queen yet): {task['title']}.{detail} Coordinate with your "
-                f"teammates; whoever takes it should run buzz task-update "
+                f"Task #{task['id']} for your team '{team['name']}' (no queen yet): "
+                f"{task['title']}.{detail} Whoever takes it: buzz task-update "
                 f"{task['id']} --assignee <yourself>."
             )
             targets = team["members"]
         for target in targets:
             try:
-                _deliver_as(actor, target, content + _team_line(target), context, task.get("attachments") or [])
+                _deliver_as(actor, target, content, context, task.get("attachments") or [])
             except HTTPException:
                 pass  # membership validated; a pane may still be gone
 

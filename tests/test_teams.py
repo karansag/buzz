@@ -194,20 +194,23 @@ def test_team_task_reaches_queen_and_clears_assignee(client):
     assert task["team_id"] == team["id"] and task["assignee"] is None
     delivered = [text for _, text, *_ in client._calls[calls_before:]]
     assert len(delivered) == 1  # only the queen is notified
-    assert "assigned to your team 'buildcrew'" in delivered[0]
+    assert "for your team 'buildcrew'" in delivered[0]
     assert "parcel it out" in delivered[0]
-    # the notification names the teammates
-    assert f"You are on team 'buildcrew' with {a}" in delivered[0]
+    # The message names the work, not the roster: `buzz team` and the
+    # registration brief cover who is around.
+    assert "You are on team" not in delivered[0]
+    assert len(delivered[0]) < 400
 
-    # queen hands it to a member: assignee set, team cleared, and the
-    # member still learns its team roster with the assignment
+    # queen hands it to a member: assignee set, team cleared, and the member
+    # gets the same short assignment hint as any other assignment
     calls_before = len(client._calls)
     r = client.patch(f"/tasks/{task['id']}", json={"assignee": a})
     task = r.json()["task"]
     assert task["assignee"] == a and task["team_id"] is None
     delivered = [text for _, text, *_ in client._calls[calls_before:]]
     assert len(delivered) == 1
-    assert f"You are on team 'buildcrew' with {b} (queen: {b})" in delivered[0]
+    assert f"You are assigned task #{task['id']}" in delivered[0]
+    assert "You are on team" not in delivered[0]
 
     # and back to the team: assignee cleared again
     r = client.patch(f"/tasks/{task['id']}", json={"team_id": team["id"]})
@@ -230,9 +233,9 @@ def test_team_task_without_queen_notifies_members(client):
     delivered = [text for _, text, *_ in client._calls[calls_before:]]
     assert len(delivered) == 2
     assert all("no queen yet" in text for text in delivered)
-    # each member is told who the rest of the team is
-    rosters = sorted(d.split("You are on team 'leaderless' with ")[1] for d in delivered)
-    assert rosters == sorted([f"{a}.", f"{b}."])
+    assert all("--assignee <yourself>" in text for text in delivered)
+    # No roster: each member looks up the team with `buzz team`.
+    assert all("You are on team" not in text for text in delivered)
 
 
 def test_task_dependency_graph(client):
@@ -281,14 +284,24 @@ def _crew_with_one_offline(client):
     return a, b, c, team
 
 
-def test_team_line_names_only_running_teammates(client):
+def test_assignment_message_stays_short(client):
+    # The owner's ask (#537): a task message is the work plus three sentences
+    # of instructions, with no roster and no second copy of the note guidance.
     a, b, c, team = _crew_with_one_offline(client)
-    client.patch(f"/teams/{team['id']}", json={"queen": c, "objective": "x"})
     calls_before = len(client._calls)
     client.post("/tasks", json={"title": "solo", "assignee": a})
     delivered = [text for _, text, *_ in client._calls[calls_before:]]
-    assert f"You are on team 'crew' with {b}." in delivered[0]
-    assert c not in delivered[0]
+    assert len(delivered) == 1
+    message = delivered[0]
+    assert len(message) < 600, message
+    assert "worktree" in message and "--status picked_up" in message
+    assert "--status done --note" in message and "the note is required" in message
+    # Status is asked for as the work moves, not once at the start.
+    assert 'buzz status' in message and '"done: #' in message
+    # The roster and the long note guidance stay out of every task message.
+    assert "You are on team" not in message
+    assert "how to use it" not in message
+    assert b not in message and c not in message
 
 
 def test_retire_forgets_offline_agents_and_refuses_live_ones(client):

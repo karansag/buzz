@@ -1271,8 +1271,9 @@ def test_closing_a_task_requires_a_verification_note(client):
     assert r.status_code == 422
     detail = r.json()["detail"]
     assert "note" in detail["error"]
-    # The refusal carries the same guidance the agent was given up front.
-    assert "how to use it" in detail["note"]
+    # The refusal carries the note guidance, in one sentence.
+    assert detail["note"] == server.NOTE_GUIDANCE
+    assert "how to use the feature" in detail["note"]
     assert client.get("/tasks").json()["tasks"][0]["status"] == "open"
 
     # A note supplied with the close is enough, and it is kept on the task.
@@ -1308,12 +1309,19 @@ def test_reopening_and_other_updates_never_need_a_note(client):
 def test_assignment_message_and_brief_tell_agents_to_leave_a_note(client):
     client.post("/register", json={"tmux_pane": "0:1.0", "requested_user": "ibis"})
     brief = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["protocol_brief"]
-    assert "--note" in brief and "required" in brief
+    assert "--note" in brief and "closing without a note" in brief
+    # The brief points at the refusal instead of repeating NOTE_GUIDANCE.
+    assert "how to use the feature" not in brief
 
     client.post("/tasks", json={"title": "Do a thing", "assignee": "ibis"})
     delivered = client._calls[-1][1]
     assert "--note" in delivered
-    assert "how to use it" in delivered
+    # The long "how to verify" wording is what the refusal carries, not
+    # something repeated in every task message.
+    assert "how to use the feature" not in delivered
+    refusal = client.patch(f"/tasks/1", json={"status": "done"})
+    assert refusal.json()["detail"]["note"] == server.NOTE_GUIDANCE
+    assert "how to use the feature" in server.NOTE_GUIDANCE
 
 
 def test_task_card_links_to_the_assigned_agent_and_shows_the_note():
