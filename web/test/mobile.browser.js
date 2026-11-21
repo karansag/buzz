@@ -1087,7 +1087,9 @@ test('two quick Alt+] presses step two teammates', async () => {
   try {
     await page.goto(base + '#/agent/stoat');
     await page.waitForSelector('.team-strip');
-    // The second press comes before the first switch has rendered.
+    // Back to back, with no settle in between: the second press used to land
+    // while the agent page was remounting and its key listener was detached,
+    // so it was dropped (#542). Do not add a wait here; it would hide that.
     await page.keyboard.press('Alt+BracketRight');
     await page.keyboard.press('Alt+BracketRight');
     await page.waitForFunction(() => location.hash === '#/agent/numbat-claude-opus-karansmbp');

@@ -1840,10 +1840,13 @@ let switchCarry = null;
 // typed character. Vimium only binds keys outside text fields, and Chrome
 // leaves Alt+brackets free (Alt+digits switch tabs on Linux).
 function useTeammateKeys(members) {
-  // One listener for the page's lifetime. The agent to step from is read
-  // from the URL, not the rendered page: a second Alt+] pressed before the
-  // last switch has rendered must step from where the URL already is, or it
-  // lands on the wrong teammate.
+  // One listener for the app's lifetime, so it never detaches: the agent page
+  // remounts on every switch, and a listener owned by it was gone for a few
+  // frames while the next page mounted, long enough for a second quick Alt+]
+  // to vanish (task #542, about one run in seven under load).
+  // The agent to step from is read from the URL, not the rendered page: a
+  // second Alt+] pressed before the last switch has rendered must step from
+  // where the URL already is, or it lands on the wrong teammate.
   const current = useRef(null);
   current.current = members;
   useEffect(() => {
@@ -2090,8 +2093,6 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
     // is what stops a second request, so it is not a dependency.
   }, [messageId, jumpId, history.loaded, look.id, look.status]);
   const crew = useMemo(() => teammates(state.recipients, state.teams, user), [state.recipients, state.teams, user]);
-  const members = useMemo(() => crew && crew.members, [crew && crew.members.map(m => m.user_id).join(" ")]);
-  useTeammateKeys(members);
   // Arriving by a teammate switch: put the cursor back in the reply box.
   useEffect(() => {
     const carry = switchCarry;
@@ -2295,6 +2296,13 @@ function App() {
   const [connected, setConnected] = useState(true);
   const [clock, setClock] = useState(new Date().toLocaleTimeString());
   const [route, setRoute] = useState(location.hash);
+  // Alt+[ / Alt+] belong to the app, not to the agent page (see the hook).
+  const routeUser = parseAgentRoute(route)?.user ?? null;
+  const routeCrew = useMemo(
+    () => teammates(state?.recipients || [], state?.teams || [], routeUser),
+    [state?.recipients, state?.teams, routeUser],
+  );
+  useTeammateKeys(routeCrew && routeCrew.members);
   const [freshIds, setFreshIds] = useState(new Set());
   const seen = useRef({ maxId: 0, first: true, byAgent: {} });
   // Snapshot ownership is independent of message read cursors.

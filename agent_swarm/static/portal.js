@@ -14610,7 +14610,6 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
 		state.teams,
 		user
 	]);
-	useTeammateKeys(T(() => crew && crew.members, [crew && crew.members.map((m) => m.user_id).join(" ")]));
 	h(() => {
 		const carry = switchCarry;
 		switchCarry = null;
@@ -14804,6 +14803,13 @@ function App() {
 	const [connected, setConnected] = d(true);
 	const [clock, setClock] = d((/* @__PURE__ */ new Date()).toLocaleTimeString());
 	const [route, setRoute] = d(location.hash);
+	const routeUser = parseAgentRoute(route)?.user ?? null;
+	const routeCrew = T(() => teammates(state?.recipients || [], state?.teams || [], routeUser), [
+		state?.recipients,
+		state?.teams,
+		routeUser
+	]);
+	useTeammateKeys(routeCrew && routeCrew.members);
 	const [freshIds, setFreshIds] = d(/* @__PURE__ */ new Set());
 	const seen = A({
 		maxId: 0,
