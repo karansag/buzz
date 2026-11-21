@@ -27,7 +27,7 @@ function historyState() {
     depends_on: [], attachments: [],
   });
   state.tasks = [
-    task(310, 'Search by task number', 'A bare number should find its own task.', 'picked_up'),
+    { ...task(310, 'Search by task number', 'A bare number should find its own task.', 'picked_up'), assignee: 'stoat' },
     task(311, 'Mention 310 in passing', 'Unrelated work: 310 was fixed elsewhere.', 'open'),
     task(312, 'Search fix for 310', 'Both words appear here, so a two-word query still matches.', 'done'),
     task(313, 'Notes about 999', 'No such task exists, so 999 is searched as text.', 'open'),
@@ -74,6 +74,56 @@ test('a bare task number shows only that task, not every mention of it', async (
   } finally { await page.close(); }
 });
 
+test('status lines are hidden until the chip is turned on, and the choice is kept', async () => {
+  const { page, errors } = await openHistory();
+  const chip = () => page.getByRole('button', { name: /^status lines/ });
+  const heading = () => page.locator('.history h2 .count').textContent();
+  try {
+    // Nothing to add while not searching or filtering: no chip.
+    assert.equal(await chip().count(), 0);
+    assert.deepEqual(await search(page, '310 search', ['#310', '#312']), ['#310', '#312']);
+    assert.equal(await heading(), '· 2 of 4 tasks');
+    assert.equal(await chip().getAttribute('aria-pressed'), 'false');
+    assert.equal((await chip().textContent()).trim(), 'status lines 1');
+    // On: the line shows, and the heading counts it.
+    await chip().click();
+    await page.waitForFunction(() => document.querySelectorAll('.h-grid .htile.status-line').length === 1);
+    assert.equal(await chip().getAttribute('aria-pressed'), 'true');
+    assert.match(await heading(), /^· 3 of 4 tasks \+ \d+ status lines$/);
+    // Remembered across a reload, still on.
+    await page.reload();
+    await page.waitForSelector('.h-search');
+    await page.locator('.h-search').fill('310 search');
+    await page.waitForSelector('.htile.status-line');
+    assert.equal(await chip().getAttribute('aria-pressed'), 'true');
+    // Off again: hidden, and a status chip also hides the toggle.
+    await chip().click();
+    await page.waitForFunction(() => document.querySelectorAll('.htile.status-line').length === 0);
+    assert.equal(await heading(), '· 2 of 4 tasks');
+    await page.getByRole('button', { name: /^done/ }).click();
+    assert.equal(await chip().count(), 0);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('agent chips count tasks only while status lines are hidden', async () => {
+  const { page, errors } = await openHistory();
+  try {
+    await page.locator('.h-search').fill('310 search');
+    await page.waitForSelector('.h-agentchip');
+    const counts = async () => Object.fromEntries(await page.locator('.h-agentchip').evaluateAll(
+      chips => chips.map(c => [c.childNodes[0].textContent.trim(), +c.querySelector('.n').textContent])));
+    // stoat has task 310; the status line's agent is the first recipient.
+    const hidden = await counts();
+    assert.deepEqual(hidden, { stoat: 1 });
+    await page.getByRole('button', { name: /^status lines/ }).click();
+    await page.waitForSelector('.htile.status-line');
+    const shown = await counts();
+    assert.equal(Object.values(shown).reduce((a, n) => a + n, 0), 2, JSON.stringify(shown));
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
 test('#310 picks the same task', async () => {
   const { page, errors } = await openHistory();
   try {
@@ -96,7 +146,10 @@ test('several words keep the usual AND search', async () => {
   try {
     // In a longer query a number still matches its task's id, as before, and
     // "search" then has to appear too: 310's title and 312's both have it.
-    // The status line holds both words and is the newest record.
+    // The status line holds both words and is the newest record, but status
+    // lines stay hidden until the chip is on.
+    assert.deepEqual(await search(page, '310 search', ['#310', '#312']), ['#310', '#312']);
+    await page.getByRole('button', { name: /^status lines/ }).click();
     assert.deepEqual(await search(page, '310 search', ['status', '#310', '#312']),
                      ['status', '#310', '#312']);
     // No task 310 here, so the number is plain text: only 311's title fits.

@@ -12,9 +12,9 @@ import { Crown } from "./queen.js";
    search. Its main job is to answer "who was working on X".
 
    Search runs over a flat list of *records*: tasks, and each agent's status
-   lines ("working on X"). Status lines only show while searching or filtering
-   by agent, and never under a status chip, so the plain view stays a list of
-   tasks. Another source is one more `xxxRecords()` builder returning the same
+   lines ("working on X"). Status lines are off by default; the "status lines"
+   chip turns them on, and they then show only while searching or filtering by
+   agent, never under a status chip, so the plain view stays a list of tasks. Another source is one more `xxxRecords()` builder returning the same
    shape, plus a tile renderer for its `kind`. A record is:
 
      { key, kind, id?, status?, ts, agents: [user_id], fields: { name: text }, src }
@@ -26,6 +26,12 @@ import { Crown } from "./queen.js";
 */
 
 export const HISTORY_ROUTE = "#/tasks";
+
+// The "status lines" chip is a per-viewer choice, so it lives in localStorage
+// (the hash holds the shareable search). Storage can be blocked: off then.
+const LINES_KEY = "agent-swarm.history.statusLines";
+const readLines = () => { try { return localStorage.getItem(LINES_KEY) === "1"; } catch { return false; } };
+const saveLines = (on) => { try { localStorage.setItem(LINES_KEY, on ? "1" : "0"); } catch { /* not remembered */ } };
 
 const STATUSES = [
   ["", "all"],
@@ -284,6 +290,7 @@ const TILE = { task: TaskTile, status: StatusTile };
 
 export function HistoryView({ state, refresh }) {
   const [s, setS] = useState(() => parseHash(location.hash));
+  const [showLines, setShowLines] = useState(readLines);
   const inputRef = useRef(null);
 
   // Follow real navigation (links, back button, a pasted URL).
@@ -318,11 +325,16 @@ export function HistoryView({ state, refresh }) {
   const tokens = tokenize(s.q);
   const re = markRe(tokens);
   const picked = taskNumber(tokens, tasks);
-  const withLines = !picked && (tokens.length || s.agent) && !s.status;
+  // Lines can appear only while searching or filtering by agent, and never under a status chip.
+  const linesPossible = !picked && !!(tokens.length || s.agent) && !s.status;
+  const withLines = linesPossible && showLines;
   const records = picked ? [picked] : withLines ? tasks.concat(lines) : tasks;
   const textHits = !tokens.length || picked ? records : records.filter(r => matches(r, tokens));
   const inStatus = (r) => !s.status || r.status === s.status;
   const hasAgent = (r) => !s.agent || r.agents.includes(s.agent);
+  // What the chip would add: the lines matching the search and agent filter.
+  const lineCount = linesPossible
+    ? lines.filter(r => (!tokens.length || matches(r, tokens)) && hasAgent(r)).length : 0;
 
   // Each count ignores its own filter, so every chip shows what clicking it gives.
   const statusCount = {};
@@ -355,6 +367,9 @@ export function HistoryView({ state, refresh }) {
           class=${`h-chip ${s.status === v ? "on" : ""}`} aria-pressed=${s.status === v}
           onClick=${() => update({ status: v })}>${label} <span class="n">${statusCount[v] || 0}</span></button>`)}
       </div>
+      ${linesPossible && html`<button type="button" class=${`h-chip h-lines ${showLines ? "on" : ""}`} aria-pressed=${showLines}
+        title=${showLines ? "Hide agents' status lines" : "Also search agents' status lines"}
+        onClick=${() => { saveLines(!showLines); setShowLines(!showLines); }}>status lines <span class="n">${lineCount}</span></button>`}
       <button type="button" class="mini h-sort" onClick=${() => update({ sort: s.sort === "oldest" ? "newest" : "oldest" })}
         title="Flip the order (by creation time)">${s.sort === "oldest" ? "oldest first ↑" : "newest first ↓"}</button>
     </div>

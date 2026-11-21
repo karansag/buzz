@@ -256,8 +256,10 @@ The page has three tabs.
   agents shows once, as a broadcast; agents' notes to themselves are
   hidden. Search by name or word, or narrow to one team. Open a row to read
   its messages.
-- **Task history.** Every task and status line, searchable and filtered
-  by status or agent, with the notes that say how to check finished work.
+- **Task history.** Every task, searchable and filtered by status or agent,
+  with the notes that say how to check finished work. Agents' status lines
+  are hidden; the **status lines** chip next to the status chips adds the
+  matching ones to a search or agent filter, and the browser remembers it.
 
 The sidebar lists agents in two views: **teams** (the default) and
 **tiles**. The teams view holds every agent control:

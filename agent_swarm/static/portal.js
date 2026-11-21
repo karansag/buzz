@@ -11787,6 +11787,19 @@ function agentChips(agentCount, recipients, selected) {
 //#endregion
 //#region web/src/history.js
 var HISTORY_ROUTE = "#/tasks";
+var LINES_KEY = "agent-swarm.history.statusLines";
+var readLines = () => {
+	try {
+		return localStorage.getItem(LINES_KEY) === "1";
+	} catch {
+		return false;
+	}
+};
+var saveLines = (on) => {
+	try {
+		localStorage.setItem(LINES_KEY, on ? "1" : "0");
+	} catch {}
+};
 var STATUSES = [
 	["", "all"],
 	["open", "open"],
@@ -12031,6 +12044,7 @@ var TILE = {
 };
 function HistoryView({ state, refresh }) {
 	const [s, setS] = d(() => parseHash(location.hash));
+	const [showLines, setShowLines] = d(readLines);
 	const inputRef = A(null);
 	h(() => {
 		const onHash = () => {
@@ -12067,11 +12081,13 @@ function HistoryView({ state, refresh }) {
 	const tokens = tokenize(s.q);
 	const re = markRe(tokens);
 	const picked = taskNumber(tokens, tasks);
-	const withLines = !picked && (tokens.length || s.agent) && !s.status;
+	const linesPossible = !picked && !!(tokens.length || s.agent) && !s.status;
+	const withLines = linesPossible && showLines;
 	const records = picked ? [picked] : withLines ? tasks.concat(lines) : tasks;
 	const textHits = !tokens.length || picked ? records : records.filter((r) => matches(r, tokens));
 	const inStatus = (r) => !s.status || r.status === s.status;
 	const hasAgent = (r) => !s.agent || r.agents.includes(s.agent);
+	const lineCount = linesPossible ? lines.filter((r) => (!tokens.length || matches(r, tokens)) && hasAgent(r)).length : 0;
 	const statusCount = {};
 	for (const r of textHits) {
 		if (!hasAgent(r)) continue;
@@ -12103,6 +12119,12 @@ function HistoryView({ state, refresh }) {
           class=${`h-chip ${s.status === v ? "on" : ""}`} aria-pressed=${s.status === v}
           onClick=${() => update({ status: v })}>${label} <span class="n">${statusCount[v] || 0}</span></button>`)}
       </div>
+      ${linesPossible && m$1`<button type="button" class=${`h-chip h-lines ${showLines ? "on" : ""}`} aria-pressed=${showLines}
+        title=${showLines ? "Hide agents' status lines" : "Also search agents' status lines"}
+        onClick=${() => {
+		saveLines(!showLines);
+		setShowLines(!showLines);
+	}}>status lines <span class="n">${lineCount}</span></button>`}
       <button type="button" class="mini h-sort" onClick=${() => update({ sort: s.sort === "oldest" ? "newest" : "oldest" })}
         title="Flip the order (by creation time)">${s.sort === "oldest" ? "oldest first ↑" : "newest first ↓"}</button>
     </div>
