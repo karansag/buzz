@@ -103,6 +103,10 @@ class SqliteAsIs:
     def page(self, user, before=None):
         return db.agent_messages_page(self.conn, user, 300, before=before)["messages"]
 
+    def chats(self, query=""):
+        """The Chats list as /api/chats builds it (only the hub's own code has it)."""
+        return db.owner_chats(self.conn, query)
+
     def around(self, user, mid):
         return db.agent_messages_page(self.conn, user, 300, around=mid)["messages"]
 
@@ -460,6 +464,9 @@ def run(backend, plan: dict, reps: int) -> dict:
         backend.state()
     out["state"] = _summary([_ms(backend.state) for _ in range(reps)])
     out["owner_chats_all"] = _summary([_ms(backend.owner_chats) for _ in range(max(3, reps // 8))])
+    if hasattr(backend, "chats"):
+        out["chats_list"] = _summary([_ms(backend.chats) for _ in range(reps)])
+        out["chats_search tpu"] = _summary([_ms(backend.chats, "tpu") for _ in range(max(3, reps // 4))])
     out["agent_talk_4000"] = _summary([_ms(backend.agent_talk) for _ in range(max(3, reps // 8))])
     out["history_open"] = _summary([_ms(backend.page, u) for _ in range(max(1, reps // 4)) for u in users])
 
@@ -493,6 +500,9 @@ def answers(backend, plan: dict) -> dict:
         for q in QUERIES:
             got[f"search {u} {q}"] = backend.search(u, q)
     got["owner_chats"] = len(json.loads(backend.owner_chats()))
+    if hasattr(backend, "chats"):
+        for q in ("", *QUERIES):
+            got[f"chats {q}"] = json.loads(json.dumps(backend.chats(q), default=str))
     return got
 
 

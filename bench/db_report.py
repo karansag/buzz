@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 SETUPS = ["sqlite-asis", "sqlite-idx", "sqlite-tuned", "pg-asis", "pg-tuned"]
-ROWS = ["state", "owner_chats_all", "agent_talk_4000", "history_open", "history_scroll_5_pages",
+ROWS = ["state", "chats_list", "chats_search tpu", "owner_chats_all", "agent_talk_4000", "history_open", "history_scroll_5_pages",
         "jump_to_old", "search the", "search tpu", "search snowball eval", 'search "model switch"',
         "search zqxjkv", "search from:owner merge", "search -done error", "write"]
 

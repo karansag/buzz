@@ -46,6 +46,10 @@ CREATE INDEX IF NOT EXISTS idx_messages_recipient_ts
 CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(ts);
 CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender, id);
 CREATE INDEX IF NOT EXISTS idx_messages_recipient_id ON messages(recipient, id);
+-- The Chats list (owner_chats): count and newest message per conversation,
+-- from each side, without reading rows (ts sits after the long content).
+CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient_ts ON messages(sender, recipient, ts);
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_sender_ts ON messages(recipient, sender, ts);
 
 CREATE TABLE IF NOT EXISTS tasks (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1276,28 +1280,52 @@ def owner_chats(conn: sqlite3.Connection, query: str = "",
     `match`. With a query only conversations with a match are returned and
     they sort by that match. `agents` limits the rows to those handles.
     """
-    agent = "CASE WHEN sender='owner' THEN recipient ELSE sender END"
-    scope = "(sender='owner' OR recipient='owner') AND NOT (sender='owner' AND recipient='owner')"
-    args: list = []
-    if agents is not None:
-        if not agents:
-            return []
-        scope += f" AND {agent} IN ({','.join('?' for _ in agents)})"
-        args = list(agents)
+    if agents is not None and not agents:
+        return []
     clause, params = search.matches(query) if query.strip() else ("", [])
+    narrow, narrow_args = message_index.prefilter(conn, query) if clause else ("", [])
 
-    def latest(extra: str, extra_args: list) -> dict[str, dict]:
-        rows = conn.execute(
-            f"SELECT a, id, n FROM ("
-            f"  SELECT {agent} AS a, id, ROW_NUMBER() OVER ("
-            f"    PARTITION BY {agent} ORDER BY ts DESC, id DESC) AS r, "
-            f"    COUNT(*) OVER (PARTITION BY {agent}) AS n "
-            f"  FROM messages WHERE {scope}{extra}) WHERE r=1",
-            (*args, *extra_args)).fetchall()
-        return {r["a"]: {"id": r["id"], "n": r["n"]} for r in rows}
+    def latest(extra: str, extra_args: list, pre: str = "", pre_args: tuple = ()) -> dict[str, dict]:
+        """agent -> the id of its newest message (by ts, then id) and the count.
+
+        Each side of the conversation is grouped on its own covering index,
+        then the two sides are merged here; a window over both sides at once
+        sorted every owner message and cost ~50 ms at 10k of them.
+        """
+        best: dict[str, dict] = {}
+        sides = (("recipient", "sender", "idx_messages_sender_recipient_ts"),
+                 ("sender", "recipient", "idx_messages_recipient_sender_ts"))
+        for agent_col, owner_col, index in sides:
+            # Without ANALYZE statistics the planner takes the (sender, id)
+            # index and reads every row; name the covering one. A trigram
+            # prefilter has already picked the few rows, so it goes by id.
+            using = "" if pre else f" INDEXED BY {index}"
+            only, only_args = "", []
+            if agents is not None:
+                only = f" AND {agent_col} IN ({','.join('?' for _ in agents)})"
+                only_args = list(agents)
+            where = f"{owner_col}='owner' AND {agent_col}<>'owner'{only}{extra}"
+            # The newest row of each group, by id among equal ts. The lookup
+            # repeats the exact clause but not the prefilter, which would
+            # rerun the trigram search once per conversation.
+            rows = conn.execute(
+                f"SELECT a, n, ts, (SELECT id FROM messages WHERE {where} AND {agent_col}=g.a "
+                f"AND ts=g.ts ORDER BY id DESC LIMIT 1) AS id FROM ("
+                f"SELECT {agent_col} AS a, COUNT(*) AS n, MAX(ts) AS ts FROM messages{using} "
+                f"WHERE {pre}{where} GROUP BY {agent_col}) AS g",
+                (*only_args, *extra_args, *pre_args, *only_args, *extra_args)).fetchall()
+            for r in rows:
+                seen = best.get(r["a"])
+                if seen is None:
+                    best[r["a"]] = {"id": r["id"], "n": r["n"], "key": (r["ts"], r["id"])}
+                else:
+                    seen["n"] += r["n"]
+                    if (r["ts"], r["id"]) > seen["key"]:
+                        seen["id"], seen["key"] = r["id"], (r["ts"], r["id"])
+        return best
 
     last = latest("", [])
-    match = latest(f" AND ({clause})", list(params)) if clause else {}
+    match = latest(f" AND ({clause})", list(params), narrow, tuple(narrow_args)) if clause else {}
     wanted = {a for a in last if not clause or a in match}
     ids = [last[a]["id"] for a in wanted] + [match[a]["id"] for a in wanted if a in match]
     if not ids:
@@ -1313,8 +1341,8 @@ def owner_chats(conn: sqlite3.Connection, query: str = "",
             chat["match"] = by_id[match[a]["id"]]
             chat["matches"] = match[a]["n"]
         chats.append(chat)
-    key = (lambda c: c["match"]["ts"]) if clause else (lambda c: c["last"]["ts"])
-    return sorted(chats, key=key, reverse=True)
+    shown = "match" if clause else "last"
+    return sorted(chats, key=lambda c: (c[shown]["ts"], c[shown]["id"]), reverse=True)
 
 
 def search_agent_messages(conn: sqlite3.Connection, user: str, query: str,
