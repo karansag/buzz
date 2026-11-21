@@ -162,6 +162,7 @@ def test_queen_promotion_delivers_scoped_prompt(client):
     assert b in delivered[0]  # teammates are listed
     assert "Ship the widget" in delivered[0]
     assert "parcel them out" in delivered[0]
+    assert "`buzz team`" in delivered[0]  # the queen learns the team view
     promo = client.get("/messages", params={"user": a}).json()["messages"][0]
     assert promo["context"] == "queen-promotion"
 
