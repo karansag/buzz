@@ -213,7 +213,12 @@ integrate. Leave worktree removal to whoever integrates the branch.
 The owner groups agents into teams on the dashboard (or via
 `POST /agents/<handle>/team`). Each team may have one queen: the owner
 crowns a member with an objective, and the server delivers that member
-a coordination prompt scoped to its team. The queen decomposes the
+a coordination prompt scoped to its team. When the queen changes, the server
+tells the old queen to stop coordinating and send the new queen a handover of
+branches, worktrees, pending owner decisions, and promises. The new queen is
+told to expect it and start with `buzz team`; other members get a short
+notice. Clearing the crown or moving the queen out of the team tells the old
+queen to stop, without requesting a handover. The queen decomposes the
 objective into tasks (`buzz task-create`, using `--depends-on` to
 record ordering as a graph the dashboard draws), parcels team-assigned
 tasks out to teammates, and monitors their progress with `buzz team`

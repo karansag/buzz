@@ -503,8 +503,13 @@ question once.
 A team is a named group of agents. Create one at the bottom of the sidebar's
 teams view and drag agents in. The team's ✎ button makes a member the queen: it gets the
 team's objective and a prompt to split it into tasks, hand them out, and
-follow up. The queen has no special powers on the server; it is a role
-given by prompt. [docs/team-practices.md](docs/team-practices.md) describes
+follow up. When the queen changes, the server tells the old queen to stop
+coordinating and send the new queen a handover of branches, worktrees, pending
+owner decisions, and promises. The new queen is told to expect it and start
+with `buzz team`; other members get a short notice. Clearing the crown or
+moving the queen out of the team tells the old queen to stop, without
+requesting a handover. The queen has no special powers on the server; it is a
+role given by prompt. [docs/team-practices.md](docs/team-practices.md) describes
 how one queen-led team works: roles, messaging, launch gates and records.
 
 Every list that shows agents marks the queen with ♛: the sidebar chips and

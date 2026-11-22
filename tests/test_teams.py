@@ -165,18 +165,120 @@ def test_queen_promotion_delivers_scoped_prompt(client):
     assert "`buzz team`" in delivered[0]  # the queen learns the team view
     promo = client.get("/messages", params={"user": a}).json()["messages"][0]
     assert promo["context"] == "queen-promotion"
+    assert "handover is coming" not in promo["content"]
 
-    # clearing the queen sends nothing
-    calls_before = len(client._calls)
-    r = client.patch(f"/teams/{team['id']}", json={"queen": None})
-    assert r.status_code == 200
-    assert r.json()["team"]["queen"] is None
-    assert len(client._calls) == calls_before
 
-    # a queen who leaves the team loses the crown
-    client.patch(f"/teams/{team['id']}", json={"queen": a, "objective": "x"})
-    client.post(f"/agents/{a}/team", json={"team_id": None})
+
+def _queen_messages(client, user):
+    return [m for m in client.get("/messages", params={"user": user}).json()["messages"]
+            if m["context"] in ("queen-promotion", "queen-handover", "queen-status")]
+
+
+@pytest.mark.parametrize("offline", ["old", "member"])
+def test_offline_handover_recipient_does_not_block_promotion(client, offline):
+    old = _register(client, "0:0.0")
+    new = _register(client, "0:1.0")
+    shell = _register(client, "0:2.0")
+    team = _make_team(client)
+    for user in (old, new, shell):
+        client.post(f"/agents/{user}/team", json={"team_id": team["id"]})
+    # A shell queen cannot receive its promotion, but the crown is still set.
+    previous = shell if offline == "old" else old
+    client.patch(f"/teams/{team['id']}", json={"queen": previous})
+    response = client.patch(f"/teams/{team['id']}", json={"queen": new})
+    assert response.status_code == 200
+    assert response.json()["promotion"]["ok"] is True
+    assert _queen_messages(client, new)[0]["context"] == "queen-promotion"
+    failed = _queen_messages(client, shell)[0]
+    assert failed["status"] == "failed"
+    assert failed["context"] == ("queen-handover" if offline == "old" else "queen-status")
+
+
+def test_rejected_or_unchanged_queen_membership_does_not_notify(client):
+    old = _register(client)
+    team = _make_team(client)
+    client.post(f"/agents/{old}/team", json={"team_id": team["id"]})
+    client.patch(f"/teams/{team['id']}", json={"queen": old})
+    before = len(client._calls)
+    assert client.patch(f"/teams/{team['id']}", json={"queen": "nobody"}).status_code == 400
+    assert client.post(f"/agents/{old}/team", json={"team_id": 999}).status_code == 404
+    assert client.post(f"/agents/{old}/team", json={"team_id": team["id"]}).status_code == 200
+    assert len(client._calls) == before
+    assert client.get("/teams").json()["teams"][0]["queen"] == old
+
+
+def test_queen_replacement_notifies_old_new_and_other_members(client, monkeypatch):
+    from agent_swarm import tmux
+
+    # Add a third live agent so the member notice is a real delivery.
+    table = tmux.pane_table()
+    table["0:3.0"] = {"label": "0:3.0", "command": "claude", "title": ""}
+    monkeypatch.setattr(tmux, "pane_table", lambda: table)
+    monkeypatch.setattr(tmux, "list_panes", lambda: set(table))
+    monkeypatch.setattr(tmux, "live_agent_panes", lambda: {"0:0.0", "0:1.0", "0:3.0"})
+    old, new, member = [_register(client, pane) for pane in ("0:0.0", "0:1.0", "0:3.0")]
+    team = _make_team(client, "skunkworks")
+    for user in (old, new, member):
+        client.post(f"/agents/{user}/team", json={"team_id": team["id"]})
+    client.patch(f"/teams/{team['id']}", json={"queen": old})
+    before = len(client._calls)
+    response = client.patch(f"/teams/{team['id']}", json={"queen": new, "objective": "Ship"})
+    assert response.status_code == 200
+    assert response.json()["promotion"]["ok"] is True
+    assert len(client._calls) - before == 3
+    handover = _queen_messages(client, old)[0]
+    assert handover["context"] == "queen-handover"
+    assert handover["sender"] == "owner"
+    assert handover["content"] == (
+        "You are no longer queen of team 'skunkworks'. "
+        f"{new} is now queen. Send {new} a handover now with "
+        f'`buzz send --to {new} --context queen-handover --message "..."`: '
+        "branches waiting for review or landing, worktrees to clean up, "
+        "decisions pending with the owner, and promises to other teams or agents. "
+        "Stop coordinating this team."
+    )
+    promotion = _queen_messages(client, new)
+    assert len(promotion) == 1
+    assert promotion[0]["context"] == "queen-promotion"
+    assert f"The previous queen was {old}; a handover is coming. Start with `buzz team`." in promotion[0]["content"]
+    notices = _queen_messages(client, member)
+    assert len(notices) == 1
+    assert notices[0]["context"] == "queen-status"
+    assert notices[0]["content"] == f"The queen of team 'skunkworks' is now {new}."
+
+    # Re-applying the queen may refresh the objective, but is not a handover.
+    before = len(client._calls)
+    response = client.patch(f"/teams/{team['id']}", json={"queen": new, "objective": "New goal"})
+    assert response.status_code == 200
+    assert len(client._calls) - before == 1
+    assert "handover is coming" not in _queen_messages(client, new)[0]["content"]
+    assert len(_queen_messages(client, old)) == 2  # first promotion + handover
+    assert len(_queen_messages(client, member)) == 1
+
+
+@pytest.mark.parametrize("change", ["clear", "leave", "move"])
+def test_queen_clearing_or_leaving_notifies_only_the_old_queen(client, change):
+    old = _register(client, "0:0.0")
+    member = _register(client, "0:1.0")
+    team = _make_team(client, "skunkworks")
+    for user in (old, member):
+        client.post(f"/agents/{user}/team", json={"team_id": team["id"]})
+    client.patch(f"/teams/{team['id']}", json={"queen": old})
+    before = len(client._calls)
+    if change == "clear":
+        response = client.patch(f"/teams/{team['id']}", json={"queen": None})
+        assert response.json()["promotion"] is None
+    else:
+        target = _make_team(client, "other")["id"] if change == "move" else None
+        response = client.post(f"/agents/{old}/team", json={"team_id": target})
+    assert response.status_code == 200
     assert client.get("/teams").json()["teams"][0]["queen"] is None
+    assert len(client._calls) - before == 1
+    message = _queen_messages(client, old)[0]
+    assert message["context"] == "queen-handover"
+    assert message["content"] == "You are no longer queen of team 'skunkworks'. Stop coordinating this team."
+    assert not _queen_messages(client, member)
+
 
 
 def test_team_task_reaches_queen_and_clears_assignee(client):

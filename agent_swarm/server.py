@@ -454,13 +454,19 @@ class AgentModelReq(BaseModel):
     )
 
 
-def _queen_prompt(team: dict, objective: str) -> str:
+def _queen_prompt(team: dict, objective: str, previous_queen: str | None = None) -> str:
     teammates = [m for m in team["members"] if m != team["queen"]]
     roster = ", ".join(teammates) if teammates else "(no teammates yet)"
+    handover = (
+        f"The previous queen was {previous_queen}; a handover is coming. "
+        "Start with `buzz team`.\n\n"
+        if previous_queen else ""
+    )
     return (
         f"The owner has made you Queen of team '{team['name']}'. "
         f"Your teammates: {roster}.\n\n"
         f"Objective: {objective}\n\n"
+        f"{handover}"
         "Act as the owner's coordination point for this team until the owner ends "
         "or changes this role. Immediately notify each teammate, using context "
         "queen-status, that you coordinate this team for this objective and that "
@@ -2298,8 +2304,36 @@ def create_app(
             raise HTTPException(status_code=422, detail={"error": str(exc)}) from exc
         return {"ok": True, "teams": db.list_teams(conn)}
 
+    def _queen_handover(team: dict, old_queen: str):
+        content = f"You are no longer queen of team '{team['name']}'. "
+        if team["queen"]:
+            new_queen = team["queen"]
+            content += (
+                f"{new_queen} is now queen. Send {new_queen} a handover now with "
+                f"`buzz send --to {new_queen} --context queen-handover --message \"...\"`: "
+                "branches waiting for review or landing, worktrees to clean up, "
+                "decisions pending with the owner, and promises to other teams or agents. "
+            )
+        content += "Stop coordinating this team."
+        try:
+            _deliver_as(OWNER, old_queen, content, "queen-handover")
+        except HTTPException:
+            pass  # Failed delivery is recorded; continue notifying the new team.
+        if team["queen"]:
+            for member in team["members"]:
+                if member not in (old_queen, team["queen"]):
+                    try:
+                        _deliver_as(
+                            OWNER, member,
+                            f"The queen of team '{team['name']}' is now {team['queen']}.",
+                            "queen-status",
+                        )
+                    except HTTPException:
+                        pass  # An offline member must not block the promotion.
+
     @app.patch("/teams/{team_id}")
     def teams_update(team_id: int, req: TeamUpdateReq, _: None = Depends(_require_owner)):
+        previous = db.get_team(conn, team_id)
         kwargs = {}
         if req.name is not None:
             kwargs["name"] = req.name.strip()
@@ -2315,6 +2349,10 @@ def create_app(
             raise HTTPException(status_code=400, detail={"error": str(exc)})
         if team is None:
             raise HTTPException(status_code=404, detail={"error": "unknown team"})
+        old_queen = previous["queen"] if previous else None
+        changed = old_queen is not None and old_queen != team["queen"]
+        if changed:
+            _queen_handover(team, old_queen)
         promotion = None
         if kwargs.get("queen"):
             objective = (req.objective or "").strip() or (
@@ -2322,7 +2360,7 @@ def create_app(
             )
             promotion = _deliver_as(
                 OWNER,
-                team["queen"], _queen_prompt(team, objective), "queen-promotion"
+                team["queen"], _queen_prompt(team, objective, old_queen if changed else None), "queen-promotion"
             )
         return {"ok": True, "team": team, "promotion": promotion}
 
@@ -2334,12 +2372,20 @@ def create_app(
 
     @app.post("/agents/{user_id}/team")
     def agents_set_team(user_id: str, req: AgentTeamReq, _: None = Depends(_require_owner)):
+        previous_recipient = db.get_recipient(conn, user_id)
+        previous_team = (
+            db.get_team(conn, previous_recipient["team_id"])
+            if previous_recipient and previous_recipient.get("team_id") is not None else None
+        )
         try:
             recipient = db.set_agent_team(conn, user_id, req.team_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail={"error": str(exc)})
         if recipient is None:
             raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        if (previous_team and previous_team["queen"] == user_id
+                and previous_team["id"] != req.team_id):
+            _queen_handover({**previous_team, "queen": None}, user_id)
         return {"ok": True, "recipient": recipient}
 
     def _recipients_with_activity() -> list[dict]:
