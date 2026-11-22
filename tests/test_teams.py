@@ -386,6 +386,61 @@ def _crew_with_one_offline(client):
     return a, b, c, team
 
 
+def _assignment_text(client, assignee):
+    calls_before = len(client._calls)
+    client.post("/tasks", json={"title": "solo", "assignee": assignee})
+    delivered = [text for _, text, *_ in client._calls[calls_before:]]
+    assert len(delivered) == 1
+    return delivered[0]
+
+
+def test_assignment_names_the_team_and_queen_to_report_to(client):
+    a = _register(client, "0:0.0")
+    b = _register(client, "0:1.0")
+    team = _make_team(client, "crew")
+    for user in (a, b):
+        client.post(f"/agents/{user}/team", json={"team_id": team["id"]})
+    client.patch(f"/teams/{team['id']}", json={"queen": b, "objective": "x"})
+    message = _assignment_text(client, a)
+    assert f"Team 'crew'; queen {b}: report progress to them." in message
+    # No roster: `buzz team` lists the members.
+    assert message.count(b) == 1
+
+
+def test_assignment_to_the_queen_herself_omits_the_team_line(client):
+    a = _register(client, "0:0.0")
+    b = _register(client, "0:1.0")
+    team = _make_team(client, "crew")
+    for user in (a, b):
+        client.post(f"/agents/{user}/team", json={"team_id": team["id"]})
+    client.patch(f"/teams/{team['id']}", json={"queen": b, "objective": "x"})
+    message = _assignment_text(client, b)
+    assert "Team '" not in message
+    assert a not in message
+
+
+def test_assignment_names_the_queen_even_when_she_is_offline(client):
+    # The queen is who to report to, live or not: an offline one still holds
+    # the role until the owner appoints another.
+    a, b, c, team = _crew_with_one_offline(client)
+    client.patch(f"/teams/{team['id']}", json={"queen": c, "objective": "x"})
+    message = _assignment_text(client, a)
+    assert f"queen {c}: report progress to them." in message
+    assert b not in message
+
+
+def test_assignment_names_a_team_with_no_queen(client):
+    a = _register(client, "0:0.0")
+    team = _make_team(client, "leaderless")
+    client.post(f"/agents/{a}/team", json={"team_id": team["id"]})
+    assert "Team 'leaderless' (no queen)." in _assignment_text(client, a)
+
+
+def test_assignment_to_an_agent_outside_any_team_has_no_team_line(client):
+    a = _register(client, "0:0.0")
+    assert "Team '" not in _assignment_text(client, a)
+
+
 def test_assignment_message_stays_short(client):
     # The owner's ask (#537): a task message is the work plus three sentences
     # of instructions, with no roster and no second copy of the note guidance.

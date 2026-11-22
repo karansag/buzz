@@ -1874,6 +1874,20 @@ def create_app(
         )
 
     def _notify_assignment(task: dict, actor: str):
+        def team_line(user_id: str) -> str:
+            """Which team to report progress to, unless the assignee is its queen.
+
+            The queen counts even when she is offline: she is who to report to.
+            The other members are left to `buzz team`.
+            """
+            recipient = db.get_recipient(conn, user_id)
+            team = recipient and recipient.get("team_id") and db.get_team(conn, recipient["team_id"])
+            if not team or team.get("queen") == user_id:
+                return ""
+            if team.get("queen"):
+                return f" Team '{team['name']}'; queen {team['queen']}: report progress to them."
+            return f" Team '{team['name']}' (no queen)."
+
         hint = (
             f"Use branch task/{task['id']} in its own git worktree, and record it as you "
             f"start: buzz task-update {task['id']} --worktree /absolute/path --status picked_up. "
@@ -1885,7 +1899,7 @@ def create_app(
         content = f"You are assigned task #{task['id']}: {task['title']}."
         if task.get("description"):
             content += f" Details: {task['description']}."
-        content += f" {hint}"
+        content += f" {hint}{team_line(task['assignee'])}"
         try:
             _deliver_as(actor, task["assignee"], content, f"task #{task['id']}", task.get("attachments") or [])
         except HTTPException:
