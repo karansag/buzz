@@ -308,3 +308,98 @@ def test_codex_target_is_seeded_with_a_handoff_file(fake_homes, monkeypatch, tmp
     assert "handoff" in body and "4417" in body
     assert calls and "codex" in calls[0] and str(handed) in calls[0]
     assert "Read " in calls[0]
+
+
+def compact_fixture(tmp_path, records, name="fake-session.jsonl"):
+    path = tmp_path / name
+    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+    return path
+
+
+def test_claude_handoff_keeps_the_latest_summary_and_preserved_segment(tmp_path):
+    def message(uid, content, **fields):
+        return {"type": "user", "uuid": uid, "message": {"content": content}, **fields}
+
+    path = compact_fixture(tmp_path, [
+        message("old", "discarded"),
+        {"type": "system", "subtype": "compact_boundary"},
+        message("first", "superseded", isCompactSummary=True),
+        message("kept", "kept", parentUuid="first"),
+        message("end", "end of retained segment", parentUuid="kept"),
+        message("noise", "outside retained segment"),
+        {"type": "system", "subtype": "compact_boundary", "compactMetadata": {
+            "preservedSegment": {"headUuid": "kept", "tailUuid": "end", "anchorUuid": "latest"},
+        }},
+        message("latest", "latest summary", isMeta=True, isCompactSummary=True),
+        message("last", "new turn", parentUuid="latest"),
+    ])
+    turns = handoff.read_turns("claude", path)
+    assert turns[0].summary and turns[0].text.endswith("latest summary")
+    assert [t.text for t in turns[1:]] == ["kept", "end of retained segment", "new turn"]
+
+
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_codex_handoff_uses_replacement_history(tmp_path, encrypted):
+    def message(text, role="user"):
+        return {"type": "message", "role": role, "content": [{"type": "input_text", "text": text}]}
+
+    path = compact_fixture(tmp_path, [
+        {"type": "response_item", "payload": message("discarded")},
+        {"type": "compacted", "payload": {"message": "superseded", "replacement_history": []}},
+        {"type": "compacted", "payload": {
+            "message": "" if encrypted else "latest summary",
+            "replacement_history": [message("developer instructions", "developer"), message("kept"),
+                                    {"type": "compaction", "encrypted_content": "opaque"}],
+        }},
+        {"type": "response_item", "payload": message("new turn")},
+    ])
+    turns = handoff.read_turns("codex", path)
+    assert turns[0].summary
+    assert ("encrypted form" if encrypted else "latest summary") in turns[0].text
+    assert [t.text for t in turns[1:]] == ["kept", "new turn"]
+
+
+def test_pi_handoff_uses_latest_compaction_on_active_branch(tmp_path):
+    def message(uid, parent, text):
+        return {"type": "message", "id": uid, "parentId": parent, "message": {"role": "user", "content": text}}
+
+    def compact(uid, parent, first):
+        return {"type": "compaction", "id": uid, "parentId": parent,
+                "firstKeptEntryId": first, "summary": uid + " summary"}
+
+    path = compact_fixture(tmp_path, [
+        message("root", None, "discarded"),
+        compact("older", "root", "root"),
+        message("kept", "older", "kept"),
+        compact("active", "kept", "kept"),
+        message("other", "root", "other branch"),
+        compact("abandoned", "other", "other"),
+        message("last", "active", "new turn"),
+    ])
+    turns = handoff.read_turns("pi", path)
+    assert turns[0].summary and turns[0].text.endswith("active summary")
+    assert [t.text for t in turns[1:]] == ["kept", "new turn"]
+
+
+def test_agy_handoff_reads_the_latest_checkpoint_from_the_full_log(tmp_path):
+    def checkpoint(index, content, status="DONE"):
+        return {"type": "CHECKPOINT", "source": "SYSTEM", "status": status,
+                "step_index": index, "content": content}
+
+    prefix = [*AGY_RECORDS, checkpoint(5, "superseded"), AGY_RECORDS[-1]]
+    tail = [checkpoint(8, "", "RUNNING"), {"type": "PLANNER_RESPONSE", "content": "new turn"}]
+    path = compact_fixture(tmp_path, prefix + [checkpoint(7, "clipped")] + tail, "transcript.jsonl")
+    compact_fixture(tmp_path, prefix + [checkpoint(7, "complete summary")] + tail, "transcript_full.jsonl")
+    turns = handoff.read_turns("agy", path)
+    assert turns[0].summary and turns[0].text.endswith("complete summary")
+    assert [t.text for t in turns[1:]] == ["new turn"]
+
+
+def test_fit_keeps_the_complete_summary_and_last_turn_under_pressure():
+    summary = handoff.Turn("user", "summary " * 2000, summary=True)
+    last = handoff.Turn("assistant", "last turn")
+    turns = [summary] + [handoff.Turn("user", "x" * 8000)] * 30 + [last]
+    kept, dropped = handoff.fit(turns, 20000)
+    assert kept == [summary, last] and dropped == 30
+    assert handoff.fit(turns, 1) == ([summary, last], 30)
+    assert handoff.fit([summary], 1) == ([summary], 0)

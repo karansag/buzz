@@ -486,9 +486,12 @@ Claude (`~/.claude/projects/...`) and Pi (`~/.pi/agent/sessions/...`), and for
 Codex, whose rollout files are written by its app server, a markdown handoff
 file in the agent's folder that a fresh session is told to read. The source
 transcript is only ever read, so going back is always possible by switching
-again. `--max-chars` caps how much conversation travels (default 150k
-characters, roughly 37k tokens); the oldest turns are dropped first and the new
-session opens with a note saying so.
+again. If the source harness compacted the conversation, the handoff begins
+with the latest summary, followed by the retained turns and new messages.
+Codex can store an encrypted summary. In that case the handoff labels it as
+unavailable and carries the readable turns. `--max-chars` sets the budget
+(default 150k characters, roughly 37k tokens). The summary and the last turn
+stay even when together they exceed the budget.
 
 The pane is respawned in place and the target harness launched on the new
 session, so the agent keeps its handle, pane and history. It needs the agent's

@@ -10,9 +10,9 @@ conversation.
 
 What travels: the user and assistant turns, in order. What does not: thinking
 blocks, tool-call structure, attachments, and any harness-specific state. A
-large transcript is clipped per turn and then trimmed from the oldest end to
-fit a character budget, so a resume never starts by blowing the target
-model's context.
+large transcript is clipped per ordinary turn and trimmed to a character
+budget. A compaction summary and the last turn are kept in full after this
+per-turn processing, even if together they exceed the budget.
 """
 
 from __future__ import annotations
@@ -76,6 +76,7 @@ def _iso(ts: float) -> str:
 class Turn:
     role: str  # "user" or "assistant"
     text: str
+    summary: bool = False
 
 
 @dataclass
@@ -220,9 +221,9 @@ def _result_note(output) -> str:
     return _clip(f"[tool result] {output}", NOTE_CLIP)
 
 
-def _claude_turn(record: dict) -> Turn | None:
+def _claude_turn(record: dict, *, summary: bool = False) -> Turn | None:
     kind = record.get("type")
-    if kind not in ("user", "assistant") or record.get("isMeta"):
+    if kind not in ("user", "assistant") or (record.get("isMeta") and not summary):
         return None
     message = record.get("message") or {}
     content = message.get("content")
@@ -241,6 +242,8 @@ def _claude_turn(record: dict) -> Turn | None:
                 parts.append(_result_note(block.get("content")))
             # thinking, redacted_thinking and images are dropped.
     text = "\n".join(part for part in parts if part and part.strip())
+    if summary:
+        return _summary("claude", text)
     return Turn(kind, _clip(text, TURN_CLIP)) if text.strip() else None
 
 
@@ -322,44 +325,174 @@ def _agy_turn(record: dict) -> Turn | None:
     return None
 
 
-READERS = {"claude": _claude_turn, "codex": _codex_turn, "pi": _pi_turn, "agy": _agy_turn}
+def _summary(flavor: str, text) -> Turn | None:
+    if isinstance(text, str) and text.strip():
+        return Turn("user", f"[Earlier-context summary from {flavor}]\n{text.strip()}", summary=True)
+    return None
 
 
-def read_turns(flavor: str, path: Path) -> list[Turn]:
-    """The conversation in one harness's transcript, as plain turns."""
-    reader = READERS.get(flavor)
-    if reader is None:
-        raise ValueError(f"cannot read {flavor} transcripts")
-    turns: list[Turn] = []
+def _records(path: Path):
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for line in handle:
-            line = line.strip()
-            if not line:
-                continue
             try:
                 record = json.loads(line)
             except ValueError:
                 continue
-            if not isinstance(record, dict):
-                continue
-            turn = reader(record)
-            if turn is not None:
-                turns.append(turn)
+            if isinstance(record, dict):
+                yield record
+
+
+def _claude_turns(records) -> list[Turn]:
+    turns = []
+    by_id = {}
+    boundary = None
+    for record in records:
+        if record.get("subtype") == "compact_boundary" and not record.get("isSidechain"):
+            boundary = record.get("compactMetadata") or {}
+        if boundary is not None and record.get("isCompactSummary") and not record.get("isSidechain"):
+            segment = boundary.get("preservedSegment") or {}
+            anchor = segment.get("anchorUuid")
+            if not anchor or anchor == record.get("uuid"):
+                summary = _claude_turn(record, summary=True)
+                if summary:
+                    preserved = boundary.get("preservedMessages") or {}
+                    ids = preserved.get("uuids")
+                    if not isinstance(ids, list):
+                        # Older Claude logs identify the preserved range by its endpoints.
+                        ids = []
+                        uid = segment.get("tailUuid")
+                        while uid in by_id and uid not in ids:
+                            ids.append(uid)
+                            if uid == segment.get("headUuid"):
+                                break
+                            uid = by_id[uid][0]
+                        ids.reverse()
+                    turns = [summary] + [by_id[uid][1] for uid in ids
+                                         if uid in by_id and by_id[uid][1] is not None]
+                    boundary = None
+                    continue
+        turn = _claude_turn(record)
+        if uid := record.get("uuid"):
+            by_id[uid] = (record.get("parentUuid"), turn)
+        if turn is not None and (not turns or not turns[0].summary or not record.get("isSidechain")):
+            turns.append(turn)
     return turns
 
 
-def fit(turns: list[Turn], max_chars: int) -> tuple[list[Turn], int]:
-    """Trim the oldest turns until the conversation fits `max_chars`.
+def _codex_turns(records) -> list[Turn]:
+    turns = []
+    for record in records:
+        if record.get("type") == "compacted":
+            payload = record.get("payload") or {}
+            history = payload.get("replacement_history")
+            summary = _summary("codex", payload.get("message"))
+            if isinstance(history, list):
+                retained = []
+                for item in history:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("type") == "compaction":
+                        if summary is None:
+                            summary = _summary("codex", "Codex stores this summary in an encrypted form.")
+                        continue
+                    turn = _codex_turn({"type": "response_item", "payload": item})
+                    if turn is not None:
+                        retained.append(turn)
+                turns = ([summary] if summary else []) + retained
+            elif summary:
+                # Legacy local compaction retained the preceding user messages.
+                turns = [summary] + [turn for turn in turns if turn.role == "user"
+                                     and not turn.summary and not turn.text.startswith("[tool result]")]
+            continue
+        turn = _codex_turn(record)
+        if turn is not None:
+            turns.append(turn)
+    return turns
 
-    Returns the kept turns and how many were dropped. The most recent turn is
-    always kept: a handoff with no last message is not a handoff.
-    """
+
+def _pi_turns(records) -> list[Turn]:
+    leaf = None
+    legacy = []
+    by_id = {}
+    has_compaction = False
+    for record in records:
+        turn = _pi_turn(record)
+        if turn is not None:
+            legacy.append(turn)
+        if record.get("type") == "session" or not (uid := record.get("id")):
+            continue
+        compact = record.get("type") == "compaction"
+        has_compaction |= compact
+        by_id[uid] = (record.get("parentId"), turn, record if compact else None)
+        leaf = uid
+    if not has_compaction:
+        return legacy
+    path = []
+    seen = set()
+    uid = leaf
+    while uid in by_id and uid not in seen:
+        path.append(uid)
+        seen.add(uid)
+        uid = by_id[uid][0]
+    path.reverse()
+    for index in range(len(path) - 1, -1, -1):
+        record = by_id[path[index]][2]
+        if record is None:
+            continue
+        summary = _summary("pi", record.get("summary"))
+        if summary is None:
+            continue
+        first = record.get("firstKeptEntryId")
+        start = next((i for i in range(index) if path[i] == first), index)
+        return [summary] + [turn for uid in path[start:] if (turn := by_id[uid][1]) is not None]
+    return legacy
+
+
+def _agy_turns(path: Path) -> list[Turn]:
+    turns = []
+    checkpoint = None
+    for record in _records(path):
+        if record.get("type") == "CHECKPOINT" and record.get("status") == "DONE":
+            if summary := _summary("agy", record.get("content")):
+                turns = [summary]
+                checkpoint = record.get("step_index")
+            continue
+        if turn := _agy_turn(record):
+            turns.append(turn)
+    # Preserve ordinary turns from the original log. The sibling full log
+    # supplies the complete checkpoint text when agy clipped it in this log.
+    full = path.with_name("transcript_full.jsonl")
+    if checkpoint is not None and path.name == "transcript.jsonl" and full.is_file():
+        for record in _records(full):
+            if record.get("type") == "CHECKPOINT" and record.get("step_index") == checkpoint:
+                if summary := _summary("agy", record.get("content")):
+                    turns[0] = summary
+                break
+    return turns
+
+
+def read_turns(flavor: str, path: Path) -> list[Turn]:
+    """Read the conversation from its latest compaction, when available."""
+    if flavor == "claude":
+        return _claude_turns(_records(path))
+    if flavor == "codex":
+        return _codex_turns(_records(path))
+    if flavor == "pi":
+        return _pi_turns(_records(path))
+    if flavor == "agy":
+        return _agy_turns(path)
+    raise ValueError(f"cannot read {flavor} transcripts")
+
+
+def fit(turns: list[Turn], max_chars: int) -> tuple[list[Turn], int]:
+    """Trim ordinary turns, even if the summary and last turn exceed the budget."""
     total = sum(len(turn.text) for turn in turns)
-    dropped = 0
-    while total > max_chars and len(turns) - dropped > 1:
-        total -= len(turns[dropped].text)
-        dropped += 1
-    return turns[dropped:], dropped
+    start = int(bool(turns and turns[0].summary))
+    end = start
+    while total > max_chars and len(turns) - end > 1:
+        total -= len(turns[end].text)
+        end += 1
+    return turns[:start] + turns[end:], end - start
 
 
 # ---------- writing: plain turns into the target harness's format ----------
@@ -539,7 +672,7 @@ def _write_pi(turns, *, cwd, model, session_id, now) -> Path:
 
 def preamble(switch: Switch) -> Turn:
     from_note = f" from {switch.from_flavor}" if switch.from_flavor else ""
-    dropped = (f" The oldest {switch.dropped} turns were left out to fit this "
+    dropped = (f" {switch.dropped} older turns were left out to fit this "
                "session's context; ask if you need them.") if switch.dropped else ""
     return Turn("user", (
         f"[handoff] This conversation continues as the agent {switch.handle}, moved{from_note} to "
