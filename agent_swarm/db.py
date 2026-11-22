@@ -113,6 +113,15 @@ CREATE TABLE IF NOT EXISTS summaries (
 );
 CREATE INDEX IF NOT EXISTS idx_summaries_user_ts ON summaries(user_id, ts);
 
+-- The newest snapshot each node posted, so a machine that lost its disk, or
+-- never saved one, can still be restored from the hub (#546).
+CREATE TABLE IF NOT EXISTS node_snapshots (
+    node        TEXT PRIMARY KEY,
+    -- The snapshot's own stamp, ISO 8601 with its offset, as restore writes it.
+    taken_at    TEXT NOT NULL,
+    snapshot    TEXT NOT NULL
+);
+
 -- Messages the owner pinned in the dashboard.
 CREATE TABLE IF NOT EXISTS pins (
     message_id  INTEGER PRIMARY KEY,
@@ -1576,6 +1585,33 @@ def touch_node(
         ),
     )
     conn.commit()
+
+
+@_writes
+def save_node_snapshot(conn: sqlite3.Connection, node: str, snapshot: dict) -> None:
+    """Keep `node`'s newest snapshot, replacing the one before it."""
+    conn.execute(
+        "INSERT INTO node_snapshots(node, taken_at, snapshot) VALUES(?,?,?) "
+        "ON CONFLICT(node) DO UPDATE SET taken_at=excluded.taken_at, snapshot=excluded.snapshot",
+        (node, str(snapshot.get("taken_at") or ""), json.dumps(snapshot)),
+    )
+
+
+def node_snapshot(conn: sqlite3.Connection, node: str) -> dict | None:
+    """The newest snapshot `node` posted, or None if it never did."""
+    row = conn.execute("SELECT snapshot FROM node_snapshots WHERE node=?", (node,)).fetchone()
+    if row is None:
+        return None
+    try:
+        return json.loads(row["snapshot"])
+    except ValueError:
+        return None
+
+
+def node_snapshot_names(conn: sqlite3.Connection) -> list[dict]:
+    """Which nodes the hub holds a snapshot for: name and when it was taken."""
+    rows = conn.execute("SELECT node, taken_at FROM node_snapshots ORDER BY node").fetchall()
+    return [dict(r) for r in rows]
 
 
 def list_nodes(conn: sqlite3.Connection) -> list[dict]:

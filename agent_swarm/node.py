@@ -39,12 +39,16 @@ from pathlib import Path
 
 import httpx
 
-from . import attachments, config, nodes, protocol, tmux
+from . import attachments, config, nodes, protocol, restore, tmux
 
 log = logging.getLogger("agent_swarm.node")
 
 DAY = 24 * 60 * 60
 HOUR = 60 * 60
+# A node snapshots its tmux every five minutes, the interval the hub machine's
+# timer used: any machine that runs `buzz-node` then has a snapshot to restore,
+# macOS included, with no second service to install (#546).
+SNAPSHOT_EVERY = 5 * 60.0
 MAX_QUEUED = 64  # commands admitted per session, waiting or running
 COMMAND_WORKERS = 4
 
@@ -389,10 +393,12 @@ class Daemon:
         interval: float = 5.0,
         max_queued: int = MAX_QUEUED,
         maintenance: Callable[[], None] | None = None,
+        snapshot_every: float = SNAPSHOT_EVERY,
     ):
         self.settings = settings
         self.executor = executor
         self.interval = interval
+        self.snapshot_every = snapshot_every
         self.max_queued = max_queued
         self.maintenance = maintenance
         self.watched: dict[str, str | None] = {}  # pane -> tmux_server the hub expects
@@ -515,6 +521,46 @@ class Daemon:
             for task in list(tasks):
                 task.cancel()
 
+    def _hub_headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.settings.token}"} if self.settings.token else {}
+
+    def recipients(self) -> list[dict]:
+        """The hub's registrations, which say which agent runs in which pane."""
+        r = httpx.get(f"{self.settings.hub}/recipients", headers=self._hub_headers(), timeout=10)
+        r.raise_for_status()
+        return r.json().get("recipients") or []
+
+    def snapshot_once(self) -> dict | None:
+        """Save this machine's snapshot locally, then hand it to the hub.
+
+        The local copy is written first: a hub that is down must not cost the
+        machine its own snapshot. Every node that runs this daemon gets one, so
+        no machine needs the hub's timer (#546).
+        """
+        server = tmux.server_id()
+        if server is None:
+            return None  # no tmux here; nothing to save
+        snapshot = restore.capture(restore.read_layout(), self.recipients(), self.settings.node, server)
+        restore.save(snapshot)
+        try:
+            r = httpx.post(
+                f"{self.settings.hub}/nodes/snapshot", json={"snapshot": snapshot},
+                headers=self._hub_headers(), timeout=10,
+            )
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            # The hub copy is a backup; the local one is what restore reads.
+            log.warning("could not hand the snapshot to %s: %s", self.settings.hub, e)
+        return snapshot
+
+    async def _snapshots(self) -> None:
+        while self.snapshot_every:
+            await asyncio.sleep(self.snapshot_every)
+            try:
+                await asyncio.to_thread(self.snapshot_once)
+            except Exception:  # noqa: BLE001 - a snapshot never ends the daemon
+                log.exception("snapshot failed")
+
     async def _maintain(self) -> None:
         while True:
             await asyncio.sleep(HOUR)
@@ -528,6 +574,7 @@ class Daemon:
         from websockets.asyncio.client import connect
 
         upkeep = asyncio.create_task(self._maintain())
+        snapshots = asyncio.create_task(self._snapshots())
         backoff = 1.0
         try:
             while True:
@@ -548,6 +595,7 @@ class Daemon:
                 backoff = min(backoff * 2, 30.0)
         finally:
             upkeep.cancel()
+            snapshots.cancel()
 
 
 def _run() -> None:

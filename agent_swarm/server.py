@@ -184,6 +184,10 @@ class PruneReq(BaseModel):
     )
 
 
+class NodeSnapshotReq(BaseModel):
+    snapshot: dict
+
+
 class PinReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     pinned: bool
@@ -2718,6 +2722,59 @@ def create_app(
         """What the hub takes the caller for; `buzz join` checks this."""
         p = request.state.principal
         return {"kind": p.kind, "node": p.node if p.kind == "node" else fleet.local.name}
+
+    @app.post("/nodes/snapshot")
+    def node_snapshot_post(req: NodeSnapshotReq, request: Request):
+        """Keep the newest snapshot a machine posts, so the hub can hand it back.
+
+        A node may only post its own; the owner (the hub's own timer, or a
+        machine's `buzz snapshot`) may post for the node the snapshot names.
+        """
+        principal = request.state.principal
+        snapshot = req.snapshot
+        name = snapshot.get("node")
+        if not isinstance(name, str) or not name:
+            raise HTTPException(status_code=422, detail={"error": "a snapshot must name its node"})
+        if principal.kind == "node":
+            if name != principal.node:
+                raise HTTPException(
+                    status_code=403,
+                    detail={"error": f"node {principal.node} may not post a snapshot for {name}"},
+                )
+        elif name != fleet.local.name and not any(n["name"] == name for n in db.list_nodes(conn)):
+            # The owner posts the hub's own snapshot, or one from an enrolled node.
+            raise HTTPException(status_code=404, detail={"error": f"unknown node {name}"})
+        if not isinstance(snapshot.get("sessions"), list):
+            raise HTTPException(status_code=422, detail={"error": "a snapshot needs its sessions"})
+        db.save_node_snapshot(conn, name, snapshot)
+        return {"ok": True, "node": name, "taken_at": snapshot.get("taken_at")}
+
+    @app.get("/nodes/snapshot")
+    def node_snapshot_get(request: Request, node: str | None = None):
+        """The newest snapshot for a machine: a node asks for its own, the owner for any."""
+        principal = request.state.principal
+        if principal.kind == "node":
+            if node and node != principal.node:
+                raise HTTPException(
+                    status_code=403,
+                    detail={"error": f"node {principal.node} may not read the snapshot for {node}"},
+                )
+            wanted = principal.node
+        else:
+            wanted = node or fleet.local.name
+        snapshot = db.node_snapshot(conn, wanted)
+        if snapshot is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": f"the hub has no snapshot for {wanted}",
+                        "hint": "a machine's buzz-node posts one every five minutes, and `buzz snapshot` posts one too"},
+            )
+        return snapshot
+
+    @app.get("/nodes/snapshots")
+    def node_snapshots_list(_: None = Depends(_require_owner)):
+        """Which machines the hub holds a snapshot for, and when each was taken."""
+        return {"snapshots": db.node_snapshot_names(conn), "local": fleet.local.name}
 
     @app.get("/nodes")
     def nodes_list(_: None = Depends(_require_owner)):

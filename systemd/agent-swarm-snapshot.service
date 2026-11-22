@@ -1,4 +1,6 @@
 [Unit]
+# For the hub machine only. Every other machine that runs `buzz-node` takes
+# this snapshot itself every 5 minutes and hands the hub a copy (#546).
 Description=Save the tmux layout and the agent in each pane, for buzz restore
 Documentation=file:%h/agent-swarm/docs/reboot-restore.md
 

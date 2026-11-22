@@ -33,6 +33,15 @@ Codex agents are always restarted with `codex resume ID --yolo`.
 layout), and pane (index, working directory), and for each pane running a
 registered agent, its handle, harness, session id, and model. A snapshot
 identical to the newest one is not written again; the newest 100 are kept.
+It also hands the hub a copy, which keeps only the newest snapshot per
+machine: that is what restores a machine whose disk is gone.
+
+Every machine that runs `buzz-node` takes that snapshot itself, every five
+minutes, so a Mac or a Linux worker needs no timer or launchd agent for it.
+`buzz-node` saves locally first and then posts the copy, so a hub that is
+down (or a machine that never reaches it) still has its own snapshots. On
+the hub machine, which runs no node daemon of its own, the systemd timer
+below does the same job.
 
 `buzz restore` reads the newest snapshot taken under an earlier tmux
 server (snapshots of the new, near-empty server after the reboot are
@@ -69,7 +78,9 @@ Restore is safe to run more than once, and alongside tmux-resurrect:
 
 ## Use
 
-Install once (the timer takes a snapshot every 5 minutes):
+On the hub machine only (its own node daemon is the hub, so nothing else
+takes its snapshots). A worker machine needs no unit at all: `buzz-node`
+snapshots it. Install once:
 
 ```bash
 cp ~/agent-swarm/systemd/agent-swarm-snapshot.{service,timer} ~/.config/systemd/user/
@@ -88,6 +99,20 @@ tmux attach
 
 `buzz restore --from ~/.agent-swarm/snapshots/<time>.json` restores an
 older snapshot.
+
+`buzz restore --from-hub` restores this machine from the copy the hub keeps,
+which is the case where the disk is gone and there is no local snapshot left:
+
+```bash
+buzz restore --from-hub           # dry run, using the hub's copy
+buzz restore --from-hub --apply   # do it
+```
+
+It fetches the hub's newest snapshot for this machine, keeps it in the local
+snapshot directory, and then plans and applies exactly as `--from` does. The
+hub answers a node with its own snapshot only; the owner can ask for any
+machine's with `buzz` on the hub (`GET /nodes/snapshot?node=<name>`), and
+`GET /nodes/snapshots` lists which machines have one and when each was taken.
 
 ### One stopped agent
 
@@ -145,8 +170,9 @@ for that folder, and restores and restarts after that start without a prompt.
 - The snapshot is up to 5 minutes old. An agent started in the last 5
   minutes before the reboot is missed; one stopped in that window comes back.
 - Restore runs on the machine whose tmux it restores; each node keeps its own
-  snapshots. The timer here is for Linux; a Mac node would need a launchd
-  agent running `buzz snapshot`.
+  snapshots. A machine running `buzz-node` snapshots itself, macOS included;
+  only the hub machine needs the systemd timer. Without a local snapshot,
+  `buzz restore --from-hub` restores from the copy the hub keeps.
 - It does not start at boot by itself: an agent coming back costs memory and
   tokens, so restoring is a command you run.
 

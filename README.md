@@ -751,9 +751,12 @@ All state is in `~/.agent-swarm/db.sqlite`. Copy it before upgrading.
 Deleting it (with the server stopped) starts from nothing.
 
 **After a reboot.** The hub's service brings the hub back; tmux and the
-agents need `buzz restore`. `buzz snapshot`, run every 5
-minutes by `systemd/agent-swarm-snapshot.timer`, saves each tmux session,
-window, and pane with the harness session id of the agent in it. After the
+agents need `buzz restore`. `buzz snapshot` saves each tmux session, window,
+and pane with the harness session id of the agent in it. Every machine that
+runs `buzz-node` takes one every 5 minutes by itself, and hands the hub a
+copy; the hub machine uses `systemd/agent-swarm-snapshot.timer` for the same
+job. A machine that lost its disk restores from the hub's copy with
+`buzz restore --from-hub`. After the
 reboot, `buzz restore` shows the plan and `buzz restore --apply`
 recreates the layout and resumes each agent by its session id (`claude
 --resume ID`, `codex resume ID --yolo`, ...), so agents sharing a directory come
@@ -795,7 +798,7 @@ buzz spawn [--flavor claude|codex|pi|agy|hermes] [--model <m>] [--node <machine>
 buzz stop <handle>
 buzz prune [--include-shells]   # forget agents whose pane is gone
 buzz snapshot             # save tmux layout + each pane's agent session
-buzz restore [--apply] [--from <file>] [--stagger 5]   # after a reboot
+buzz restore [--apply] [--from <file> | --from-hub] [--stagger 5]   # after a reboot
 buzz restore <handle> [--apply]   # one stopped agent; "smew" for smew-claude-opus-... when unambiguous
 buzz restart <handle>... | --all [--flavor <f>] [--force] [--apply]   # after a harness upgrade
 buzz node-token <name>    # hub: enrol or rotate a machine

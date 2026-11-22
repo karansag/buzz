@@ -555,6 +555,14 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
     panes = sum(len(w["panes"]) for sess in snap["sessions"] for w in sess["windows"])
     summary = f"{len(snap['sessions'])} sessions, {panes} panes, {len(restore.agents_in(snap))} agents"
     print(f"saved {path}: {summary}" if path else f"unchanged since the last snapshot: {summary}")
+    # Keep a copy on the hub too, so this machine can be restored after losing
+    # its disk. The local file above is what restore reads first.
+    try:
+        up = httpx.post(f"{base_url()}/nodes/snapshot", json={"snapshot": snap},
+                        headers=_headers(), timeout=10)
+        up.raise_for_status()
+    except httpx.HTTPError as e:
+        print(f"the hub did not keep a copy: {e}", file=sys.stderr)
     return 0
 
 
@@ -663,14 +671,34 @@ def _run_restore(steps: list, args: argparse.Namespace, recipients: list[dict]) 
     return 1 if outcome.failed or outcome.blocked else 0
 
 
+def _restore_from_hub(args: argparse.Namespace, directory: Path, recipients: list[dict]) -> int:
+    """Restore from the copy the hub keeps, for a machine that lost its own."""
+    r = httpx.get(f"{base_url()}/nodes/snapshot", headers=_headers(), timeout=10)
+    if r.status_code == 404:
+        print("the hub has no snapshot for this machine yet", file=sys.stderr)
+        return 1
+    r.raise_for_status()
+    snap = r.json()
+    if snap.get("node") != local_node():
+        print(f"the hub's snapshot is for {snap.get('node')}, not {local_node()}", file=sys.stderr)
+        return 1
+    path = restore.save(snap, directory) or directory
+    running = restore.running_sessions(recipients, restore.agents_in(snap))
+    steps = restore.plan(snap, restore.read_layout(), running)
+    print(f"snapshot from the hub (taken {snap.get('taken_at')}, "
+          f"{len(restore.agents_in(snap))} agents, kept at {path})")
+    return _run_restore(steps, args, recipients)
+
+
 def cmd_restore(args: argparse.Namespace) -> int:
     directory = Path(args.dir).expanduser()
     r = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5)
     r.raise_for_status()
     recipients = r.json()["recipients"]
     if args.handle:
-        if args.from_file:
-            print("--from restores a whole snapshot; leave it out to restore one agent", file=sys.stderr)
+        if args.from_file or args.from_hub:
+            print("--from and --from-hub restore a whole snapshot; leave them out "
+                  "to restore one agent", file=sys.stderr)
             return 2
         row, why = restore.find_agent(recipients, args.handle)
         if row is None:
@@ -683,6 +711,11 @@ def cmd_restore(args: argparse.Namespace) -> int:
             print(why, file=sys.stderr)
             return 1
         return _run_restore(steps, args, recipients)
+    if args.from_hub:
+        if args.from_file:
+            print("pass --from or --from-hub, not both", file=sys.stderr)
+            return 2
+        return _restore_from_hub(args, directory, recipients)
     path = Path(args.from_file).expanduser() if args.from_file else restore.pick(directory, tmux.server_id())
     if path is None:
         print(f"no snapshot from an earlier tmux server in {directory}", file=sys.stderr)
@@ -1184,6 +1217,10 @@ def main(argv: list[str] | None = None) -> int:
     rst.add_argument(
         "--from", dest="from_file",
         help="snapshot file (default: newest one from an earlier tmux server); not with a handle",
+    )
+    rst.add_argument(
+        "--from-hub", action="store_true",
+        help="restore this machine from the copy the hub keeps; not with a handle",
     )
     rst.add_argument("--apply", action="store_true", help="do it; without this, only print the plan")
     rst.add_argument("--stagger", type=float, default=5.0, help="seconds between agent launches")
