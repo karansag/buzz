@@ -19,7 +19,7 @@
     buzz spawn [--flavor claude|codex|pi|agy|hermes] [--model M] [--node N]
     buzz stop HANDLE   # kill that agent's tmux pane
     buzz model HANDLE... --to MODEL | --team --to MODEL   # switch agents' models (owner or their queen)
-    buzz switch HANDLE --to claude|codex|pi|agy [--model M] [--apply]   # move it to another harness, keeping the conversation
+    buzz switch HANDLE... --to claude|codex|pi|agy [--model M] [--team] [--apply]   # move them to another harness
     buzz snapshot      # save this machine's tmux layout and the agent in each pane
     buzz restore [--from FILE] [--apply] [--stagger SECONDS]   # after a reboot
     buzz restart HANDLE... | --all [--flavor F] [--force] [--apply]   # e.g. after a harness upgrade
@@ -958,19 +958,56 @@ def cmd_spawn(args: argparse.Namespace) -> int:
 
 
 def cmd_switch(args: argparse.Namespace) -> int:
-    """Move an agent to another harness, carrying its conversation over."""
+    """Move agents to another harness, carrying their conversations over.
+
+    Several handles switch one after another; the caller's own agent goes last,
+    because a switch respawns the pane this command is running in.
+    """
+    recipients = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5).json()["recipients"]
+    by_name = {r["user_id"]: r for r in recipients}
+    me = whoami_lookup(caller()).get("user_id")
+    handles = list(args.handles)
+    if args.team:
+        mine = by_name.get(me or "")
+        if mine is None or mine.get("team_id") is None:
+            print("error: --team needs a registered agent on a team", file=sys.stderr)
+            return 2
+        handles += [r["user_id"] for r in recipients
+                    if r.get("team_id") == mine["team_id"] and r["user_id"] != me]
+    if not handles:
+        print("error: name at least one agent, or pass --team", file=sys.stderr)
+        return 2
+    ordered = list(dict.fromkeys(handles))
+    unknown = [h for h in ordered if h not in by_name]
+    if unknown:
+        # Check them all before switching any, so a typo moves nothing.
+        print(f"error: unknown agent(s): {', '.join(unknown)}; nothing was switched", file=sys.stderr)
+        return 2
+    if me in ordered:
+        ordered.remove(me)
+        ordered.append(me)
+        print(f"{me}: switching last, so this command is not cut off by its own pane", file=sys.stderr)
+
     payload = {"to": args.to, "model": args.model, "max_chars": args.max_chars,
                "force": args.force, "dry_run": not args.apply}
-    r = httpx.post(f"{base_url()}/agents/{quote(args.handle, safe='')}/switch",
-                   json=payload, headers=_headers(), timeout=120)
-    body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"detail": r.text}
-    if not r.is_success:
-        detail = body.get("detail")
-        print(json.dumps(detail if isinstance(detail, dict) else {"error": detail or r.text}, indent=2),
-              file=sys.stderr)
-        return 1
-    print(json.dumps(body, indent=2))
-    return 0
+    failed = 0
+    for h in ordered:
+        r = httpx.post(f"{base_url()}/agents/{quote(h, safe='')}/switch",
+                       json=payload, headers=_headers(), timeout=120)
+        body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        if not r.is_success:
+            failed += 1
+            detail = body.get("detail")
+            reason = detail.get("error") if isinstance(detail, dict) else (detail or r.text or r.status_code)
+            print(f"{h}: failed: {reason}", file=sys.stderr)
+            continue
+        plan = body.get("plan") or {}
+        if not args.apply:
+            print(json.dumps(body, indent=2))
+            continue
+        session = plan.get("session_id") if plan.get("route") != "seed" else None
+        print(f"{h}: now {plan.get('to') or args.to}" + (f" (session {session})" if session else ""))
+    return 1 if failed else 0
 
 
 def cmd_stop(args: argparse.Namespace) -> int:
@@ -1379,9 +1416,12 @@ def main(argv: list[str] | None = None) -> int:
     sp.set_defaults(func=cmd_spawn)
 
     swt = sub.add_parser(
-        "switch", help="move an agent to another harness (claude, codex, pi, agy), keeping its conversation"
+        "switch", help="move agents to another harness (claude, codex, pi, agy), keeping their conversations"
     )
-    swt.add_argument("handle")
+    swt.add_argument("handles", nargs="*", metavar="handle",
+                     help="one or more agents to move")
+    swt.add_argument("--team", action="store_true",
+                     help="also switch every member of your team")
     swt.add_argument("--to", required=True, help="the harness to move it to")
     swt.add_argument("--model", help="model for the new harness, if it takes one of that harness's models")
     swt.add_argument("--max-chars", type=int, default=handoff.DEFAULT_MAX_CHARS,

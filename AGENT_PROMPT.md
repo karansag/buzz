@@ -316,6 +316,11 @@ All endpoints accept/return JSON. The CLI is a thin wrapper.
   the cursor for the next call.
 - `GET /supervisor` / `PUT /supervisor` `{user_id, objective?}` / `DELETE /supervisor`
   — the swarm supervisor role (owner only to set or clear).
+- `POST /agents/<handle>/switch` — body: `{to, model?, max_chars?, force?, dry_run}`.
+  Moves one agent to another harness, keeping its conversation (owner only, and
+  only for agents on the hub's own machine). `buzz switch a b c --to claude --apply`
+  moves several in one go: the CLI sends one request per agent, checks every
+  handle before switching any, and switches the caller last.
 
 ---
 

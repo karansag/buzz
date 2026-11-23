@@ -477,7 +477,17 @@ is what you want when you run out of credits on one provider:
 buzz switch otter --to claude            # prints the plan
 buzz switch otter --to pi --apply        # does it: same pane, same handle
 buzz switch otter --to codex --model gpt-6.1-sol --apply
+buzz switch otter stoat marten --to claude --apply   # several at once
+buzz switch --team --to claude --apply   # every member of your team
 ```
+
+Several handles switch one after another, and every handle is checked before
+any of them moves, so a typo switches nothing. A failure (an agent that is not
+running, say) does not stop the rest: each agent gets its own line and the
+command exits 1 if any failed. `--model`, `--max-chars` and `--force` apply to
+every agent. `--team` adds the members of the caller's team, minus the caller.
+When the caller is in the list it goes last, because a switch respawns the pane
+the command is running in.
 
 The hub reads the agent's own transcript from the harness it is running, turns
 it into plain turns (tool calls and results become short bracketed notes), and
