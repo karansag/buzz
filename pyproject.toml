@@ -13,6 +13,7 @@ dependencies = [
     "anyio>=4.14.2",
     "fastapi>=0.136.1",
     "httpx>=0.28.1",
+    "orjson>=3.13.0",
     "starlette>=1.7.0",
     "uvicorn[standard]>=0.46.0",
 ]

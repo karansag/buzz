@@ -7,6 +7,7 @@ import asyncio
 import contextlib
 import hashlib
 import logging
+import math
 import os
 import re
 import time
@@ -19,7 +20,9 @@ import threading
 from dataclasses import dataclass
 
 import httpx
+import orjson
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +30,38 @@ from pydantic import BaseModel, ConfigDict, Field
 from . import activity, attachments, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restore, team_view, tmux
 
 log = logging.getLogger("agent_swarm.monitor")
+
+_JSON_SCALARS = {str, int, bool, type(None)}
+
+
+def _plain_json(value: dict) -> bool:
+    """Check without copying the JSON tree or walking the contents of strings.
+
+    orjson silently writes NaN and infinity as null and handles some Python
+    types on its own. Let FastAPI keep its original behavior for those values.
+    The fast encoder already rejects non-string keys and out-of-range ints.
+    """
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        kind = type(item)
+        if kind is dict:
+            pending.extend(item.values())
+        elif kind is list:
+            pending.extend(item)
+        elif kind not in _JSON_SCALARS and (kind is not float or not math.isfinite(item)):
+            return False
+    return True
+
+
+def _read_json(value: dict) -> Response:
+    if _plain_json(value):
+        try:
+            return Response(orjson.dumps(value), media_type="application/json")
+        except orjson.JSONEncodeError:
+            pass
+    return JSONResponse(jsonable_encoder(value))
+
 
 # Default activity shown when the monitor is off or hasn't observed an agent
 # yet. The dashboard must tolerate this shape.
@@ -1759,7 +1794,7 @@ def create_app(
             if found is None:
                 raise HTTPException(status_code=404, detail={"error": f"no message {id}"})
             return {"messages": [found]}
-        return {"messages": db.fetch_messages(conn, user, limit)}
+        return _read_json({"messages": db.fetch_messages(conn, user, limit)})
 
     @app.get("/api/chats")
     def owner_chats(q: str = Query("", max_length=1000), queens: bool = False,
@@ -1768,7 +1803,7 @@ def create_app(
         agents = None
         if queens:
             agents = sorted({t["queen"] for t in db.list_teams(conn) if t.get("queen")})
-        return {"chats": db.owner_chats(conn, q, agents)}
+        return _read_json({"chats": db.owner_chats(conn, q, agents)})
 
     @app.get("/api/agents/{user_id}/messages")
     def agent_messages(user_id: str, limit: int = Query(300, ge=1, le=500),
@@ -1778,7 +1813,7 @@ def create_app(
                        _: None = Depends(_require_owner)):
         if sum(option is not None for option in (before, after, around)) > 1:
             raise HTTPException(status_code=422, detail="Use only one of before, after or around")
-        return db.agent_messages_page(conn, user_id, limit, before, after, around)
+        return _read_json(db.agent_messages_page(conn, user_id, limit, before, after, around))
 
     @app.post("/api/messages/{message_id}/pin")
     def pin_message(message_id: int, req: PinReq, _: None = Depends(_require_owner)):
@@ -1938,7 +1973,7 @@ def create_app(
 
     @app.get("/tasks")
     def tasks_list():
-        return {"tasks": db.list_tasks(conn)}
+        return _read_json({"tasks": db.list_tasks(conn)})
 
     @app.get("/teams/{team_ref}/tasks")
     def team_tasks(team_ref: str):
@@ -2843,7 +2878,7 @@ def create_app(
             n["spawn_dirs"] = live.spawn_dirs if live is not None else []
         local = {"name": fleet.local.name, "local": True, "connected": True,
                  "spawn_dirs": fleet.local.spawn_dirs}
-        return {
+        return _read_json({
             "now": time.time(),
             "recipients": recipients,
             "retired_agents": [
@@ -2858,7 +2893,7 @@ def create_app(
             "teams": db.list_teams(conn),
             "supervisor": db.get_supervisor(conn),
             "tabs": [t["name"] for t in extra_tabs()],
-        }
+        })
 
     # Response headers worth passing back from a tab's page. The body arrives
     # decoded, so length and encoding are the hub's to set.

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 import uvicorn
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from agent_swarm import db, message_index, search_query, server, tmux
 from bench.db_scale import QUERIES
@@ -92,7 +92,7 @@ def instrument(app, direct_json=False):
             timing = phases.get()
             timing["build"] += clock() - start
             # These benchmark handlers already return JSON primitives.
-            return JSONResponse(value) if direct_json else value
+            return JSONResponse(value) if direct_json and not isinstance(value, Response) else value
 
         # FastAPI records the callable in its dependant at route construction,
         # retaining the original signature used to resolve request arguments.
@@ -102,6 +102,8 @@ def instrument(app, direct_json=False):
 def snapshot(app):
     run_state = next(r.endpoint for r in app.routes if getattr(r, "path", "") == "/api/state")
     value = run_state(limit=300)
+    if isinstance(value, Response):
+        value = json.loads(value.body)
     value.pop("messages")
     return value
 

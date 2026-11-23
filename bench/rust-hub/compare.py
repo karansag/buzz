@@ -54,7 +54,7 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
-def parity(targets, paths, plan):
+def parity(targets, paths, plan, *, ignore_state_now=False):
     results = collections.defaultdict(lambda: {"cases": 0, "byte_equal": 0})
     with httpx.Client(base_url=targets[0], timeout=30) as left, \
          httpx.Client(base_url=targets[1], timeout=30) as right:
@@ -68,6 +68,10 @@ def parity(targets, paths, plan):
                 a.raise_for_status()
                 b.raise_for_status()
                 first, second = a.json(), b.json()
+                if ignore_state_now and key == "state":
+                    # Two real hubs take their snapshots at different instants.
+                    first.pop("now")
+                    second.pop("now")
                 if canonical(first) != canonical(second):
                     keys = [k for k in first if canonical(first[k]) != canonical(second.get(k))]
                     # No private response body or handle goes in the report.
@@ -222,6 +226,9 @@ def main():
     ap.add_argument("--db", type=Path, required=True)
     ap.add_argument("--base", required=True)
     ap.add_argument("--other")
+    ap.add_argument("--ignore-state-now", action="store_true")
+    ap.add_argument("--dashboard-variants", action="store_true",
+                    help="also measure Chats filters, the between-agents list, and tasks")
     ap.add_argument("--pid", type=int, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--reps", type=int, default=40)
@@ -233,9 +240,16 @@ def main():
     args = ap.parse_args()
     plan = pick_users(args.db)
     paths = endpoints(plan)
+    if args.dashboard_variants:
+        paths.update({
+            "chats tpu": ["/api/chats?q=tpu"],
+            "chats queens": ["/api/chats?queens=true"],
+            "between agents": ["/messages?limit=4000"],
+            "tasks": ["/tasks"],
+        })
     result = {}
     if args.other:
-        result["parity"] = parity((args.base, args.other), paths, plan)
+        result["parity"] = parity((args.base, args.other), paths, plan, ignore_state_now=args.ignore_state_now)
     single_paths = {"state": paths["state"]} if args.state_only else paths
     result["single"] = sequential(args.base, args.pid, single_paths, args.reps)
     if args.seconds:
