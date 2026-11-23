@@ -33,6 +33,7 @@ import {
   agentShown,
   harnessStyle,
   HarnessFilter,
+  retiredLabel,
 } from "./shared.js";
 import { deliveryOutcome, draftClientId, spawnOutcome, spawnTarget, unansweredOutcome } from "./outcome.js";
 import { machineColor, machineList, machineName } from "./machines.js";
@@ -116,14 +117,35 @@ async function stopAgent(r, state, focusUser, refresh) {
 // Retiring forgets agents that are not running: their registration, team
 // membership, and status lines. Messages and tasks stay. The hub refuses
 // any that are running. Returns the hub's answer, or null if not confirmed.
+async function retireOne(user, refresh) {
+  if (!await confirmDialog(`Retire ${user}? This stops its pane if running, archives its history, reopens unfinished tasks, and frees the name for a new agent.`)) return;
+  try {
+    const response = await fetch(`/agents/${encodeURIComponent(user)}/retire`, { method: "POST" });
+    const result = await response.json();
+    if (!response.ok || !result.ok) {
+      await showNotice(`Could not retire ${user}: ${result.detail?.error || "request failed"}`);
+      return;
+    }
+    location.hash = agentHash(result.archive_id);
+    refresh();
+    if (result.reopened_tasks.length) {
+      await showNotice("Reopened and unassigned: " + result.reopened_tasks.map(t => `#${t.id} ${t.title}`).join(", "));
+    }
+  } catch {
+    await showNotice("Retirement not confirmed. Check the agent's status before retrying.");
+  }
+}
+
 async function retireAgents(ids, refresh) {
   const names = ids.length > 6 ? `${ids.slice(0, 6).join(", ")} and ${ids.length - 6} more` : ids.join(", ");
-  if (!ids.length || !await confirmDialog(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. Messages and tasks are kept, but a retired agent can no longer be resumed.`)) return null;
+  if (!ids.length || !await confirmDialog(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. History is archived, unfinished tasks are reopened, and the names can be used again.`)) return null;
   try {
     const response = await fetch("/recipients/retire", { method: "POST", headers: JSONH, body: JSON.stringify({ user_ids: ids }) });
     const body = await response.json().catch(() => null);
     if (!response.ok || !body?.ok) { await showNotice("Could not retire. Try again."); return null; }
     if (body.kept_live.length) await showNotice(`Still running, so not retired: ${body.kept_live.join(", ")}`);
+    if (Object.keys(body.failures || {}).length) await showNotice(Object.entries(body.failures)
+      .map(([user, error]) => `Could not retire ${user}: ${error}`).join("\n"));
     return body;
   } catch { await showNotice("Could not retire. Try again."); return null; }
   finally { refresh(); }
@@ -168,8 +190,11 @@ function StopAgentButton({ r, refresh }) {
     ${r.pane_alive
       ? html`<button type="button" class="mini stop-agent" disabled=${busy} onClick=${stop}>
           ${busy ? "stopping…" : "stop agent"}</button>`
-      : html`<${ResumeAgentButton} r=${r} refresh=${refresh} />
-        <${RetireButton} ids=${[r.user_id]} refresh=${refresh} label="retire agent" onDone=${() => { location.hash = "#/"; }} />`}
+      : html`<${ResumeAgentButton} r=${r} refresh=${refresh} />`}
+    <button type="button" class="mini retire" disabled=${busy} onClick=${async () => {
+      setBusy(true);
+      try { await retireOne(r.user_id, refresh); } finally { setBusy(false); }
+    }}>retire agent</button>
     ${message && html`<span role="status"> ${message}</span>`}
   </span>`;
 }
@@ -1427,7 +1452,7 @@ const OLDER_PX = 300;
 const gapLabel = ({ count, after, before }) =>
   `${count} message${count === 1 ? "" : "s"} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
 
-function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null, pins = [] }) {
+function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null, pins = [], readOnly = false }) {
   useLayoutEffect(() => { if (search?.open) setExpanded(true); }, [search?.open]);
   const boxRef = useRef(null);
   const follower = useRef(null);
@@ -1435,7 +1460,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   const resizeRef = useRef(null);
   const previousHistory = useRef(null);
   const [historyHeight, setHistoryHeight] = useState(null);
-  const recipient = a === "owner" ? b : b === "owner" ? a : null;
+  const recipient = readOnly ? null : a === "owner" ? b : b === "owner" ? a : null;
   // Scrolled up from the newest message: the id that was newest then, so the
   // jump button can count what arrived since. Null while at the bottom.
   const [awayFrom, setAwayFrom] = useState(null);
@@ -2022,6 +2047,8 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
   // list is fetched again when the search or the newest message changes.
   const newest = state.messages.reduce((n, m) => Math.max(n, m.id), 0);
   const queens = (state.teams || []).map(t => t.queen || "").join(",");
+  const archives = new Map((state.retired_agents || []).map(r => [r.archive_id, retiredLabel(r)]));
+  const archiveVersion = [...archives.keys()].join(",");
   useEffect(() => {
     let live = true;
     const params = new URLSearchParams({ q: query });
@@ -2033,7 +2060,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
         .catch(() => { if (live) setChats(c => c || []); });
     }, query ? 150 : 0);
     return () => { live = false; clearTimeout(timer); };
-  }, [query, queensOnly, newest, queens]);
+  }, [query, queensOnly, newest, queens, archiveVersion]);
   const update = (q) => {
     setQuery(q);
     const params = new URLSearchParams();
@@ -2063,7 +2090,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
             ${r ? html`<${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />`
               : html`<span class="chat-gone" aria-hidden="true">◌</span>`}
             <span class="chat-main">
-              <span class="chat-who">${c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
+              <span class="chat-who">${archives.get(c.agent) || c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && html`<span class="team-mate-unread" title="new reply">●</span>`}
                 <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
               <span class="chat-line">${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
@@ -2105,13 +2132,14 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
   const nextThreadOrder = useRef(0);
   const registered = new Set(state.recipients.map(x => x.user_id));
   const r = state.recipients.find(x => x.user_id === user);
-  if (!r) return html`<div class="empty">No agent named "${user}".
+  const archived = state.retired_agents?.find(x => x.archive_id === user);
+  if (!r && !archived) return html`<div class="empty">No agent named "${user}".
     <br /><br /><button class="mini" onClick=${() => { location.hash = "#/"; }}>back to overview</button></div>`;
-  const flavor = (r.flavor || "generic").toLowerCase();
-  const status = agentStatus(r);
+  const flavor = (r?.flavor || "generic").toLowerCase();
+  const status = r ? agentStatus(r) : "unknown";
   const st = STATE[status] || STATE.unknown;
-  const detail = r.activity && r.activity.detail;
-  const ctx = r.pane_alive ? contextChip(r.activity?.context) : null;
+  const detail = r?.activity?.detail;
+  const ctx = r?.pane_alive ? contextChip(r.activity?.context) : null;
   // A queen's page lists the whole team's work: tasks held by any member,
   // and tasks assigned to the team itself.
   const queened = (state.teams || []).filter(t => t.queen === user);
@@ -2119,7 +2147,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
   const teamIds = new Set(queened.map(t => t.id));
   const myTasks = state.tasks.filter(t => crewIds.has(t.assignee) || teamIds.has(t.team_id));
   const agentIds = state.recipients.filter(x => x.pane_alive).map(x => x.user_id);
-  const taskIds = agentIds.includes(user) ? agentIds : agentIds.concat(user);
+  const taskIds = archived || agentIds.includes(user) ? agentIds : agentIds.concat(user);
   const groups = new Map();
   for (const m of messages) {
     if (m.sender !== user && m.recipient !== user) continue;
@@ -2160,14 +2188,15 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       jumpTo=${msgs === jumpThread ? jumpId : null}
       gaps=${history.gaps} loadGap=${history.loadGap}
       older=${{ more: history.more, busy: history.busy, load: history.loadOlder }}
-      pins=${pinsOf(state.pins, a, b)} />`;
+      pins=${pinsOf(state.pins, a, b)} readOnly=${!!archived} />`;
   };
   return html`<div>
     <div class="focus-top">
       <button type="button" class="focus-back" onClick=${() => { location.hash = "#/"; }}>← back to overview</button>
       ${crew && html`<${TeamStrip} crew=${crew} user=${user} unreadFor=${unreadFor} />`}
     </div>
-    <div class="fhead">
+    ${archived ? html`<h1>${retiredLabel(archived)}</h1>
+      <${Doing} summaries=${archived.summaries || []} now=${state.now} />` : html`<div class="fhead">
       <${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} working=${status === "working"} />
       <div class="who">
         <div class="nm">${user}<${Crown} teams=${state.teams} user=${user} word=${true} teamName=${true} /><span class=${`status ${st.cls}`} title=${st.word}></span></div>
@@ -2188,7 +2217,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
     <h2>status updates</h2>
     <${Doing} summaries=${r.summaries || []} now=${state.now} />
     <${OwnerNote} key=${user} agent=${r} refresh=${refresh} />
-    <${Scope} key=${user} user=${user} refresh=${refresh} />
+    <${Scope} key=${user} user=${user} refresh=${refresh} />`}
     <h2>conversations ${hasOwnerThread && html`<span class="count">· 1</span>`}</h2>
     ${history.error && html`<p role="status">${history.error}</p>`}
     ${!history.loaded && !history.error && html`<p role="status">Loading conversation history…</p>`}
@@ -2208,8 +2237,8 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       <${ConversationSearchBar} search=${conversationSearch} />
       ${threads.length > 0
         ? html`<div class="bar">${disp("owner")} <span class="swap">⇄</span> ${user}</div>`
-        : history.loaded && html`<div class="empty">Nothing yet. Start a conversation with ${user} below.</div>`}
-      <${MessageComposer} recipient=${user} refresh=${refresh} autoFocus /></div>`}
+        : history.loaded && html`<div class="empty">No conversation history.</div>`}
+      ${!archived && html`<${MessageComposer} recipient=${user} refresh=${refresh} autoFocus />`}</div>`}
     ${peerThreads.length > 0 && html`<button type="button" class="mini agent-chats-toggle"
       aria-label=${showAgentChats ? "Hide agent chats" : "Show agent chats"}
       aria-expanded=${showAgentChats} aria-controls=${peerChatsId}
@@ -2219,7 +2248,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
     <h2 style="margin-top:26px">tasks ${myTasks.length > 0 && html`<span class="count">· ${myTasks.length}</span>`}
       ${queened.length > 0 && html`<span class="count team-scope">· whole team</span>`}
       ${myTasks.length > 0 && html`<a class="h2-link" href=${historyHash({ agent: user })}>search ${user}'s history →</a>`}</h2>
-    <${TaskComposer} key=${user} user=${user} state=${state} refresh=${refresh} folded />
+    ${!archived && html`<${TaskComposer} key=${user} user=${user} state=${state} refresh=${refresh} folded />`}
     ${myTasks.length === 0
       ? html`<div class="empty">No tasks assigned to ${user}${queened.length ? " or their team" : ""} yet.</div>`
       : myTasks.map(t => html`<${AgentTaskRow} key=${t.id} t=${t} taskIds=${taskIds}
@@ -2304,7 +2333,7 @@ function App() {
   );
   useTeammateKeys(routeCrew && routeCrew.members);
   const [freshIds, setFreshIds] = useState(new Set());
-  const seen = useRef({ maxId: 0, first: true, byAgent: {} });
+  const seen = useRef({ maxId: 0, first: true, byAgent: {}, archives: new Set() });
   // Snapshot ownership is independent of message read cursors.
   const polling = useRef({ generation: 0, inFlight: null, queued: false, active: true });
   const [pending, setPending] = useState([]);
@@ -2366,6 +2395,12 @@ function App() {
           if (!st.first && fresh.length) {
             setFreshIds(new Set(fresh.map(m => m.id)));
           }
+          for (const { archive_id, original_id } of s.retired_agents || []) {
+            if (st.archives.has(archive_id)) continue;
+            st.archives.add(archive_id);
+            st.byAgent[archive_id] = st.byAgent[original_id] ?? maxId;
+            delete st.byAgent[original_id];
+          }
           for (const rec of s.recipients) {
             if (st.first || !(rec.user_id in st.byAgent)) st.byAgent[rec.user_id] = maxId;
           }
@@ -2373,7 +2408,8 @@ function App() {
           // A page opened straight onto an agent that has since gone (a
           // bookmark, or the Mac app reopening where it was) shows the overview.
           const opened = parseAgentRoute(location.hash);
-          if (st.first && opened && !s.recipients.some(r => r.user_id === opened.user))
+          if (st.first && opened && !s.recipients.some(r => r.user_id === opened.user)
+              && !s.retired_agents?.some(r => r.archive_id === opened.user))
             location.replace("#/");
           st.first = false;
           setState(s);

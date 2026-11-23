@@ -461,20 +461,22 @@ def test_assignment_message_stays_short(client):
     assert b not in message and c not in message
 
 
-def test_retire_forgets_offline_agents_and_refuses_live_ones(client):
+def test_retire_archives_offline_agents_and_refuses_live_ones(client):
     a, b, c, team = _crew_with_one_offline(client)
     client.post("/send", json={"tmux_pane": "0:0.0", "recipient": c, "content": "old note"})
     r = client.post("/recipients/retire", json={"user_ids": [c, a, "nobody", c]})
-    assert r.json() == {"ok": True, "retired": [c], "kept_live": [a], "unknown": ["nobody"]}
+    assert r.json() == {"ok": True, "retired": [c], "kept_live": [a], "unknown": ["nobody"], "failures": {}}
     state = client.get("/api/state").json()
     assert sorted(r["user_id"] for r in state["recipients"]) == sorted([a, b])
     assert sorted(client.get("/teams").json()["teams"][0]["members"]) == sorted([a, b])
     # Its messages stay in the history.
-    assert any(m["recipient"] == c for m in state["messages"])
+    archive = state["retired_agents"][0]
+    assert archive["original_id"] == c
+    assert any(m["recipient"] == archive["archive_id"] for m in state["messages"])
     assert client.post("/recipients/retire", json={"user_ids": []}).status_code == 422
 
 
-def test_a_spawned_agent_never_gets_a_retired_agents_name(client, monkeypatch):
+def test_a_spawned_agent_reuses_a_retired_agents_name(client, monkeypatch):
     # Task #288: a retired agent's name, reissued, showed its old messages
     # and tasks as the new agent's history.
     from agent_swarm import names
@@ -482,13 +484,12 @@ def test_a_spawned_agent_never_gets_a_retired_agents_name(client, monkeypatch):
     a, b, c, team = _crew_with_one_offline(client)
     client.post("/send", json={"tmux_pane": "0:0.0", "recipient": c, "content": "old note"})
     client.post("/recipients/retire", json={"user_ids": [c]})
-    # The retired name is the only one in the pool, so the new agent gets a
-    # numbered variant of it rather than the name itself.
+    # The original name is available now that its history is archived.
     monkeypatch.setattr(names, "POOL", [c])
     r = client.post("/agents/spawn", json={"flavor": "claude"})
     assert r.status_code == 200
-    assert r.json()["user_id"] == f"{c}-2"
-    assert not client.get(f"/api/agents/{c}-2/messages?limit=50").json().get("messages")
+    assert r.json()["user_id"] == c
+    assert not client.get(f"/api/agents/{c}/messages?limit=50").json().get("messages")
 
 
 def test_task_title_and_description_can_be_edited(client):

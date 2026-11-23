@@ -671,7 +671,7 @@ def _run_restore(steps: list, args: argparse.Namespace, recipients: list[dict]) 
     return 1 if outcome.failed or outcome.blocked else 0
 
 
-def _restore_from_hub(args: argparse.Namespace, directory: Path, recipients: list[dict]) -> int:
+def _restore_from_hub(args: argparse.Namespace, directory: Path, recipients: list[dict], retired: set[str]) -> int:
     """Restore from the copy the hub keeps, for a machine that lost its own."""
     r = httpx.get(f"{base_url()}/nodes/snapshot", headers=_headers(), timeout=10)
     if r.status_code == 404:
@@ -684,7 +684,7 @@ def _restore_from_hub(args: argparse.Namespace, directory: Path, recipients: lis
         return 1
     path = restore.save(snap, directory) or directory
     running = restore.running_sessions(recipients, restore.agents_in(snap))
-    steps = restore.plan(snap, restore.read_layout(), running)
+    steps = restore.plan(snap, restore.read_layout(), running, retired=retired)
     print(f"snapshot from the hub (taken {snap.get('taken_at')}, "
           f"{len(restore.agents_in(snap))} agents, kept at {path})")
     return _run_restore(steps, args, recipients)
@@ -692,9 +692,11 @@ def _restore_from_hub(args: argparse.Namespace, directory: Path, recipients: lis
 
 def cmd_restore(args: argparse.Namespace) -> int:
     directory = Path(args.dir).expanduser()
-    r = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5)
+    r = httpx.get(f"{base_url()}/recipients", headers=_headers(), params={"include_retired_sessions": "true"}, timeout=5)
     r.raise_for_status()
-    recipients = r.json()["recipients"]
+    data = r.json()
+    recipients = data["recipients"]
+    retired = set(data.get("retired_sessions", []))
     if args.handle:
         if args.from_file or args.from_hub:
             print("--from and --from-hub restore a whole snapshot; leave them out "
@@ -715,7 +717,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
         if args.from_file:
             print("pass --from or --from-hub, not both", file=sys.stderr)
             return 2
-        return _restore_from_hub(args, directory, recipients)
+        return _restore_from_hub(args, directory, recipients, retired)
     path = Path(args.from_file).expanduser() if args.from_file else restore.pick(directory, tmux.server_id())
     if path is None:
         print(f"no snapshot from an earlier tmux server in {directory}", file=sys.stderr)
@@ -725,7 +727,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
         print(f"{path} was taken on {snap.get('node')}, not {local_node()}", file=sys.stderr)
         return 1
     running = restore.running_sessions(recipients, restore.agents_in(snap))
-    steps = restore.plan(snap, restore.read_layout(), running)
+    steps = restore.plan(snap, restore.read_layout(), running, retired=retired)
     print(f"snapshot {path} (taken {snap['taken_at']}, {len(restore.agents_in(snap))} agents)")
     return _run_restore(steps, args, recipients)
 
@@ -1014,6 +1016,33 @@ def cmd_stop(args: argparse.Namespace) -> int:
     r = httpx.post(f"{base_url()}/agents/{quote(args.handle, safe='')}/stop", headers=_headers(), timeout=15)
     print(r.text)
     return 0 if r.is_success else 1
+
+
+def cmd_retire(args: argparse.Namespace) -> int:
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("Use --yes to confirm retirement when stdin is not a terminal.", file=sys.stderr)
+            return 2
+        try:
+            answer = input(f"Retire {args.handle}, archive its history, and free its name? [y/N] ")
+        except (EOFError, KeyboardInterrupt):
+            return 1
+        if answer.strip().lower() not in {"y", "yes"}:
+            return 1
+    try:
+        response = httpx.post(f"{base_url()}/agents/{quote(args.handle, safe='')}/retire",
+                              headers=_headers(), timeout=30)
+    except httpx.HTTPError as exc:
+        print(f"Retirement not confirmed: {exc}", file=sys.stderr)
+        return 1
+    if not response.is_success:
+        print(response.text, file=sys.stderr)
+        return 1
+    result = response.json()
+    print(f"Retired {args.handle}. History: {result['archive_id']}. The name is available again.")
+    for task in result["reopened_tasks"]:
+        print(f"Reopened and unassigned #{task['id']}: {task['title']}")
+    return 0
 
 
 def cmd_join(args: argparse.Namespace) -> int:
@@ -1433,6 +1462,11 @@ def main(argv: list[str] | None = None) -> int:
     stp = sub.add_parser("stop", help="kill an agent's tmux pane")
     stp.add_argument("handle")
     stp.set_defaults(func=cmd_stop)
+
+    retire = sub.add_parser("retire", help="stop an agent, archive its history, and free its name (owner only)")
+    retire.add_argument("handle")
+    retire.add_argument("--yes", action="store_true", help="confirm retirement")
+    retire.set_defaults(func=cmd_retire)
 
     join = sub.add_parser(
         "join", help="point this machine at a hub (writes ~/.agent-swarm/node.toml)"

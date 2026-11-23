@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import wraps
+from datetime import datetime, timezone
 import json
 import math
 import re
@@ -26,6 +27,15 @@ CREATE TABLE IF NOT EXISTS recipients (
     submit_key  TEXT,
     registered_at REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS retired_agents (
+    archive_id TEXT PRIMARY KEY,
+    original_id TEXT NOT NULL,
+    agent_id TEXT,
+    retired_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_retired_agent_id ON retired_agents(agent_id);
+CREATE INDEX IF NOT EXISTS idx_retired_original_id ON retired_agents(original_id);
 
 CREATE TABLE IF NOT EXISTS messages (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -374,20 +384,20 @@ def name_taken_by_other(
 def rename_recipient(conn: sqlite3.Connection, old_id: str, new_id: str) -> None:
     """Move a handle, carrying its message history, tasks and team role along.
 
-    The handle is a bare string in four tables rather than a foreign key, so
+    The handle is a bare string in several tables rather than a foreign key, so
     every reference is rewritten in one transaction.
     """
     _ensure_columns(conn)
-    with conn:
-        conn.execute(
-            "UPDATE recipients SET user_id=? WHERE user_id=?", (new_id, old_id)
-        )
-        conn.execute("UPDATE messages SET sender=? WHERE sender=?", (new_id, old_id))
-        conn.execute(
-            "UPDATE messages SET recipient=? WHERE recipient=?", (new_id, old_id)
-        )
-        conn.execute("UPDATE tasks SET assignee=? WHERE assignee=?", (new_id, old_id))
-        conn.execute("UPDATE teams SET queen=? WHERE queen=?", (new_id, old_id))
+    conn.execute(
+        "UPDATE recipients SET user_id=? WHERE user_id=?", (new_id, old_id)
+    )
+    conn.execute("UPDATE messages SET sender=? WHERE sender=?", (new_id, old_id))
+    conn.execute(
+        "UPDATE messages SET recipient=? WHERE recipient=?", (new_id, old_id)
+    )
+    conn.execute("UPDATE tasks SET assignee=? WHERE assignee=?", (new_id, old_id))
+    conn.execute("UPDATE teams SET queen=? WHERE queen=?", (new_id, old_id))
+    conn.execute("UPDATE summaries SET user_id=? WHERE user_id=?", (new_id, old_id))
 
 
 @_writes
@@ -620,6 +630,66 @@ def delete_recipient(conn: sqlite3.Connection, user_id: str) -> bool:
         if _supervisor_row(conn).get("user_id") == user_id:
             conn.execute("DELETE FROM meta WHERE key='supervisor'")
     return cur.rowcount > 0
+
+
+def retired_agents(conn: sqlite3.Connection) -> list[dict]:
+    return [dict(row) for row in conn.execute("SELECT * FROM retired_agents ORDER BY archive_id")]
+
+
+def is_retired(conn: sqlite3.Connection, *, archive_id: str | None = None,
+               agent_id: str | None = None) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM retired_agents WHERE archive_id=? OR agent_id=? LIMIT 1",
+        (archive_id, agent_id),
+    ).fetchone() is not None
+
+
+def was_retired(conn: sqlite3.Connection, original_id: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM retired_agents WHERE original_id=? LIMIT 1", (original_id,)
+    ).fetchone() is not None
+
+
+@_writes
+def retire_recipient(conn: sqlite3.Connection, expected: dict) -> dict | None:
+    """Archive one registration in a single transaction after its pane stops."""
+    user = expected["user_id"]
+    if get_recipient(conn, user) != expected:
+        return None
+    now = time.time()
+    day = datetime.fromtimestamp(now, timezone.utc).strftime("%Y%m%d")
+    taken = names.used(conn)
+    number = 1
+    while True:
+        # An archive starting with the old handle would reserve the bare
+        # pool name through names.pick's legacy suffix rule.
+        prefix = f"retired-{day}-"
+        suffix = f"-{number}" if number > 1 else ""
+        archive = names.normalize_requested(prefix + user[:48 - len(prefix) - len(suffix)] + suffix)
+        if archive not in taken:
+            break
+        number += 1
+
+    tasks = [dict(row) for row in conn.execute(
+        "SELECT id, title, status FROM tasks WHERE assignee=? AND status!='done' ORDER BY id",
+        (user,),
+    )]
+    conn.execute("UPDATE teams SET queen=NULL WHERE queen=?", (user,))
+    if _supervisor_row(conn).get("user_id") == user:
+        conn.execute("DELETE FROM meta WHERE key=?", (SUPERVISOR_KEY,))
+    conn.execute(
+        """UPDATE tasks SET assignee=NULL, status='open', updated_at=?
+           WHERE assignee=? AND status!='done'""",
+        (now, user),
+    )
+    # Keep message IDs, which are also the keys for pins and replies.
+    rename_recipient(conn, user, archive)
+    conn.execute("DELETE FROM recipients WHERE user_id=?", (archive,))
+    conn.execute(
+        "INSERT INTO retired_agents VALUES (?, ?, ?, ?)",
+        (archive, user, expected.get("agent_id"), now),
+    )
+    return {"archive_id": archive, "retired_at": now, "reopened_tasks": tasks}
 
 
 # ---- supervisor: the one agent the owner talks to about the whole swarm ----

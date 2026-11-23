@@ -222,7 +222,8 @@ def running_sessions(recipients: list[dict], candidates: Iterable[dict] = ()) ->
     return ids | {r["agent_id"] for r in [*recipients, *candidates] if r.get("agent_id") in words}
 
 
-def plan(snapshot: dict, live: list[dict], running: set[str] = frozenset()) -> list[Step]:
+def plan(snapshot: dict, live: list[dict], running: set[str] = frozenset(), *,
+         retired: set[str] = frozenset()) -> list[Step]:
     """What to do to bring `live` (read_layout) back to `snapshot`.
 
     Missing sessions and windows are created with their panes and layout.
@@ -287,6 +288,9 @@ def plan(snapshot: dict, live: list[dict], running: set[str] = frozenset()) -> l
                     continue
                 label = f"{name}:{idx}.{pane['index']}"
                 who = f"{agent['handle']} ({agent['flavor']}) at {label}"
+                if agent["agent_id"] in retired:
+                    steps.append(Step(f"skip {who}: its session was retired"))
+                    continue
                 command = resume_command(agent)
                 if command is None:
                     steps.append(Step(f"skip {who}: no resume command for this harness"))

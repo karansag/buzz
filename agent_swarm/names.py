@@ -159,6 +159,7 @@ _HISTORY = (
     " UNION SELECT recipient FROM messages"
     " UNION SELECT assignee FROM tasks WHERE assignee IS NOT NULL"
     " UNION SELECT user_id FROM summaries"
+    " UNION SELECT archive_id FROM retired_agents"
 )
 
 
@@ -172,7 +173,7 @@ def pick_unused(conn: sqlite3.Connection, rng: random.Random | None = None) -> s
     """A pool name no agent, past or present, has used.
 
     A new agent given a retired agent's name would show that agent's
-    history as its own (task #288), so retired names are never reissued.
+    history as its own (task #288), so we check history as well as active registrations.
     """
     return pick(used(conn), rng)
 

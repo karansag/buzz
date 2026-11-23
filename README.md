@@ -551,11 +551,14 @@ sleep. `--json` prints the same data the endpoint returns.
 
 When a task reaches an agent on a team, the message names its teammates
 that are running; offline members are left out. To clear out agents that
-are gone for good, **retire** them: the teams view lists each team's
-offline members with a "retire" button, and a stopped agent's page has
-"retire agent". Retiring
-removes the registration and team membership; messages and tasks stay.
-Running agents are never retired.
+are gone for good, run `buzz retire HANDLE` or choose **retire agent** on
+their page. Confirm the action, or pass `--yes` in a script. Retirement stops
+a running pane, removes the agent from its team, clears its queen or supervisor
+role, and archives its history under a separate handle. Unfinished tasks
+return to the open, unassigned list. The original name is available again
+with a clean history. Saved snapshots skip retired sessions. The team's bulk
+retirement button works only on stopped agents. If the hub cannot reach an
+agent's machine to check its pane, it asks you to try again after it reconnects.
 
 The supervisor is the same idea for the whole swarm: the one agent you ask
 "what is going on?", "what happened with #12?", or "file this and give it
@@ -837,7 +840,8 @@ token may call it; "owner" means a node token is refused (see
 | GET | `/recipients`, `/whoami` | agent | all registered agents; the caller's own registration |
 | DELETE | `/recipients/{handle}` | agent | unregister (a node only its own machine's agents) |
 | POST | `/recipients/prune` | owner | forget agents whose pane is gone |
-| POST | `/recipients/retire` | owner | forget the named agents that are not running |
+| POST | `/agents/{handle}/retire` | owner | stop an agent, archive its history and free its name |
+| POST | `/recipients/retire` | owner | archive the named agents that are not running |
 | POST | `/send` | agent | `{recipient, content, context?}` plus the caller's pane or session id; returns `status`: `delivered`, `failed`, or `unknown` |
 | POST | `/status` | agent | set the caller's status line |
 | GET | `/messages` | agent | `?user=<handle>&limit=<n>` |

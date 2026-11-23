@@ -2,7 +2,7 @@ import { AttachmentList } from "./attachments.js";
 import { html } from "htm/preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
-import { Avatar, SUMMARY_SOURCE, focusHash, hue, patchTask, rel } from "./shared.js";
+import { Avatar, SUMMARY_SOURCE, focusHash, hue, patchTask, rel, retiredLabel } from "./shared.js";
 import { agentChips } from "./agent-chips.js";
 import { TaskStatusActions } from "./task-status.js";
 import { TaskTrash } from "./task-trash.js";
@@ -91,7 +91,7 @@ function statusRecords(recipients) {
     ts: s.ts,
     agents: [r.user_id],
     fields: { status: s.text, agent: r.user_id },
-    src: { ...s, user_id: r.user_id, current: i === 0 },
+    src: { ...s, user_id: r.user_id, current: !r.archive_id && i === 0 },
   })));
 }
 
@@ -201,7 +201,7 @@ function TaskMeta({ task: t, fields: f, re, now }) {
     </div>`;
 }
 
-function TaskDetails({ task: t, fields: f, re, now, close }) {
+function TaskDetails({ task: t, fields: f, re, now, close, agentLabel }) {
   const ref = useRef(null);
   useEffect(() => { ref.current.showModal(); }, []);
 
@@ -214,7 +214,7 @@ function TaskDetails({ task: t, fields: f, re, now, close }) {
     <div class="task-details-body" tabindex="0">
       <h2 id=${`task-details-title-${t.id}`}>${hl(f.title, re)}</h2>
       <div class="task-details-status">
-        ${t.assignee && html`<a class="agent-link" href=${focusHash(t.assignee)}>${hl(t.assignee, re)}</a>`}
+        ${t.assignee && html`<a class="agent-link" href=${focusHash(t.assignee)}>${hl(agentLabel(t.assignee), re)}</a>`}
         <span class=${`pill ${t.status}`}>${t.status.replace("_", " ")}</span>
       </div>
       ${f.description && html`<div class="task-details-text">${hl(f.description, re)}</div>`}
@@ -228,7 +228,7 @@ function TaskDetails({ task: t, fields: f, re, now, close }) {
   </dialog>`;
 }
 
-function TaskTile({ rec, re, now, teams, filterAgent, refresh }) {
+function TaskTile({ rec, re, now, teams, filterAgent, refresh, agentLabel }) {
   const t = rec.src;
   const f = rec.fields;
   const [editing, setEditing] = useState(false);
@@ -244,7 +244,7 @@ function TaskTile({ rec, re, now, teams, filterAgent, refresh }) {
       ${t.assignee
         ? html`<${Avatar} name=${t.assignee} size="tiny" />
           <a class="agent-link h-agent" href=${focusHash(t.assignee)}
-            title=${`Open ${t.assignee} and message it`}>${hl(t.assignee, re)}</a><${Crown} teams=${teams} user=${t.assignee} />
+            title=${`Open ${agentLabel(t.assignee)}`}>${hl(agentLabel(t.assignee), re)}</a><${Crown} teams=${teams} user=${t.assignee} />
           <button type="button" class="h-only" onClick=${() => filterAgent(t.assignee)}
             title=${`Show only ${t.assignee}'s tasks`} aria-label=${`Show only ${t.assignee}'s tasks`}>⌕</button>`
         : html`<span class="h-noagent">unassigned</span>`}
@@ -263,17 +263,17 @@ function TaskTile({ rec, re, now, teams, filterAgent, refresh }) {
       <${TaskStatusActions} task=${t} refresh=${refresh} />
       <${TaskTrash} task=${t} refresh=${refresh} />
     </div>
-    ${expanded && html`<${TaskDetails} task=${t} fields=${f} re=${re} now=${now} close=${() => setExpanded(false)} />`}
+    ${expanded && html`<${TaskDetails} task=${t} fields=${f} re=${re} now=${now} agentLabel=${agentLabel} close=${() => setExpanded(false)} />`}
   </article>`;
 }
 
-function StatusTile({ rec, re, now, teams, filterAgent }) {
+function StatusTile({ rec, re, now, teams, filterAgent, agentLabel }) {
   const s = rec.src;
   return html`<article class="htile status-line">
     <div class="h-who">
       <${Avatar} name=${s.user_id} size="tiny" />
       <a class="agent-link h-agent" href=${focusHash(s.user_id)}
-        title=${`Open ${s.user_id} and message it`}>${hl(s.user_id, re)}</a><${Crown} teams=${teams} user=${s.user_id} />
+        title=${`Open ${agentLabel(s.user_id)}`}>${hl(agentLabel(s.user_id), re)}</a><${Crown} teams=${teams} user=${s.user_id} />
       <button type="button" class="h-only" onClick=${() => filterAgent(s.user_id)}
         title=${`Show only ${s.user_id}`} aria-label=${`Show only ${s.user_id}`}>⌕</button>
       <span class="pill statusline">${s.current ? "status now" : "status"}</span>
@@ -321,7 +321,12 @@ export function HistoryView({ state, refresh }) {
     () => taskRecords(state.tasks, state.teams),
     [state.tasks, state.teams],
   );
-  const lines = useMemo(() => statusRecords(state.recipients), [state.recipients]);
+  const archives = new Map((state.retired_agents || []).map(r => [r.archive_id, retiredLabel(r)]));
+  const agentLabel = (id) => archives.get(id) || id;
+  const lines = useMemo(() => statusRecords([
+    ...state.recipients,
+    ...(state.retired_agents || []).map(r => ({ ...r, user_id: r.archive_id })),
+  ]), [state.recipients, state.retired_agents]);
   const tokens = tokenize(s.q);
   const re = markRe(tokens);
   const picked = taskNumber(tokens, tasks);
@@ -381,7 +386,7 @@ export function HistoryView({ state, refresh }) {
             class=${`h-agentchip ${s.agent === a ? "on" : ""}`} aria-pressed=${s.agent === a}
             style=${`--hue: hsl(${hue(a)} 42% 58%)`}
             title=${s.agent === a ? "Clear the agent filter" : `Show only ${a}'s tasks`}
-            onClick=${() => filterAgent(a)}>${a}<${Crown} teams=${state.teams} user=${a} /> <span class="n">${n}</span></button>`)}
+            onClick=${() => filterAgent(a)}>${agentLabel(a)}<${Crown} teams=${state.teams} user=${a} /> <span class="n">${n}</span></button>`)}
       ${(s.q || s.status || s.agent) && html`<button type="button" class="mini" onClick=${() => update({ q: "", status: "", agent: "" })}>clear filters</button>`}
     </div>
     ${shown.length === 0
@@ -390,7 +395,7 @@ export function HistoryView({ state, refresh }) {
           ${shown.map(r => {
             const Tile = TILE[r.kind];
             return html`<${Tile} key=${r.key} rec=${r} re=${re} now=${state.now} teams=${state.teams}
-              filterAgent=${filterAgent} refresh=${refresh} />`;
+              filterAgent=${filterAgent} refresh=${refresh} agentLabel=${agentLabel} />`;
           })}
         </div>`}
   </div>`;

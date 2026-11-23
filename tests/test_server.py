@@ -2108,3 +2108,87 @@ def test_chats_endpoint(client):
     assert client.get("/api/chats", params={"q": "zephyr"}).json()["chats"][0]["matches"] == 1
     assert client.get("/api/chats", params={"q": "nope"}).json()["chats"] == []
     assert client.get("/api/chats", params={"queens": "true"}).json()["chats"] == []
+
+
+def test_retire_live_agent_archives_history_and_releases_name(client, tmp_path):
+    db_conn = db.connect(tmp_path / "db.sqlite")
+    user = "coyote"
+    assert client.post("/register", json={"tmux_pane": "0:0.0", "agent_id": "old-session",
+                                          "requested_user": user}).status_code == 200
+    task = db.create_task(db_conn, "unfinished", None, user)
+    db.update_task(db_conn, task["id"], status="picked_up", worktree="/work/old")
+    done = db.create_task(db_conn, "completed", None, user)
+    db.update_task(db_conn, done["id"], status="done", note="verified")
+    mid = db.record_message(db_conn, user, "owner", None, "old note", "delivered")
+    assert db.set_pinned(db_conn, mid, True)
+    team = db.create_team(db_conn, "Pack")
+    db.set_agent_team(db_conn, user, team["id"])
+    db.update_team(db_conn, team["id"], queen=user)
+    db.set_supervisor(db_conn, user, "coordinate", mid)
+    db.record_summary(db_conn, user, "old status", "agent")
+
+    response = client.post(f"/agents/{user}/retire")
+    assert response.status_code == 200, response.text
+    retired = response.json()
+    archive = retired["archive_id"]
+    assert client._kills == ["0:0.0"]
+    assert retired["reopened_tasks"] == [{"id": task["id"], "title": "unfinished", "status": "picked_up"}]
+    assert db.get_recipient(db_conn, archive) is None
+    assert db.get_team(db_conn, team["id"])["queen"] is None
+    assert db.get_supervisor(db_conn) is None
+    assert db.list_pins(db_conn)[0]["sender"] == archive
+    assert db.summaries_by_user(db_conn)[archive][0]["text"] == "old status"
+    assert db.get_task(db_conn, done["id"])["assignee"] == archive
+    reopened = db.get_task(db_conn, task["id"])
+    assert (reopened["status"], reopened["assignee"], reopened["worktree"]) == ("open", None, "/work/old")
+    from agent_swarm import names
+    assert user not in names.used(db_conn)
+    assert archive in names.used(db_conn)
+
+    assert client.post("/owner/send", json={"recipient": user, "content": "stale address"}).status_code == 404
+    assert user not in names.used(db_conn)
+
+    register = {"tmux_pane": "0:1.0", "requested_user": user}
+    assert client.post("/register", json={**register, "agent_id": "old-session"}).status_code == 409
+    assert client.post("/register", json={**register, "requested_user": archive}).status_code == 409
+    assert client.post("/register", json={**register, "agent_id": "new-session"}).status_code == 200
+    assert client.get(f"/api/agents/{user}/messages").json()["messages"] == []
+    assert all(t["assignee"] != user for t in db.list_tasks(db_conn))
+    assert user not in db.summaries_by_user(db_conn)
+
+
+def test_retire_stopped_agent_and_unknown_handle(client):
+    assert client.post("/agents/ghost/retire").status_code == 404
+    assert client.post("/register", json={"tmux_pane": "0:2.0",
+                                          "requested_user": "alpaca"}).status_code == 200
+    result = client.post("/agents/alpaca/retire")
+    assert result.status_code == 200
+    assert result.json()["already_stopped"]
+    assert client._kills == []
+    assert client.post("/agents/alpaca/retire").status_code == 404
+
+
+def test_retire_remote_agent_waits_for_a_confirmed_stop(client, tmp_path):
+    from types import SimpleNamespace
+
+    conn = db.connect(tmp_path / "db.sqlite")
+    db.register(conn, "alpaca", "%8", agent_id="remote-session", node="retire-test-node",
+                tmux_server="remote-server")
+    fleet = client.app.state.nodes
+    assert client.post("/agents/alpaca/retire").status_code == 409
+    assert db.get_recipient(conn, "alpaca") is not None
+    calls = []
+
+    def kill(op, pane, server):
+        calls.append((pane, server))
+        return nodes.Result("unknown" if len(calls) == 1 else "ok")
+
+    fleet.add(SimpleNamespace(
+        name="retire-test-node", kill=kill,
+        snapshot=lambda: nodes.PaneSnapshot("remote-server", None, {"%8"}, {"%8"}, {}),
+    ))
+    assert client.post("/agents/alpaca/retire").status_code == 502
+    assert db.get_recipient(conn, "alpaca") is not None
+    assert client.post("/agents/alpaca/retire").status_code == 200
+    assert calls == [("%8", "remote-server")] * 2
+    assert db.get_recipient(conn, "alpaca") is None

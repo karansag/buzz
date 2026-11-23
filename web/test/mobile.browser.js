@@ -928,6 +928,13 @@ test('offline agents show per team and can be retired, there or from their page'
     state.recipients = state.recipients.filter(x => !ids.includes(x.user_id));
     await r.fulfill({ json: { ok: true, retired: ids, kept_live: [], unknown: [] } });
   });
+  await page.route('**/agents/stopped-agent/retire', async r => {
+    asked.push(['stopped-agent']);
+    state.recipients = state.recipients.filter(x => x.user_id !== 'stopped-agent');
+    state.retired_agents = [{ original_id: 'stopped-agent', archive_id: 'archive-id',
+      retired_at: Date.UTC(2026, 10, 22) / 1000 }];
+    await r.fulfill({ json: { ok: true, archive_id: 'archive-id', reopened_tasks: [] } });
+  });
   try {
     await page.goto(base + '#/');
     const team = page.locator('#agent-sidebar .team-bees-group', { hasText: 'agent-swarm' });
@@ -936,12 +943,15 @@ test('offline agents show per team and can be retired, there or from their page'
     const question = await answer(page);
     await page.locator('#agent-sidebar .team-bees-offline', { hasText: 'old-ghost' }).waitFor({ state: 'detached' });
     assert.deepEqual(asked, [['old-ghost']]);
-    assert.match(question, /Retire old-ghost\? It leaves the dashboard and its team\. Messages and tasks are kept, but a retired agent can no longer be resumed\./);
+    assert.match(question, /Retire old-ghost\? It leaves the dashboard and its team\. History is archived, unfinished tasks are reopened, and the names can be used again\./);
     // A stopped agent's own page offers retire instead of stop.
     await page.goto(base + '#/agent/stopped-agent');
     await page.locator('.fhead button.retire', { hasText: 'retire agent' }).click();
     await answer(page);
-    await page.waitForFunction(() => location.hash === '#/');
+    await page.getByRole('heading', { name: 'stopped-agent (retired Nov 22)' }).waitFor();
+    assert.equal(await page.locator('.stage .composer').count(), 0);
+    await page.reload();
+    await page.getByRole('heading', { name: 'stopped-agent (retired Nov 22)' }).waitFor();
     assert.deepEqual(asked[1], ['stopped-agent']);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }

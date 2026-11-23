@@ -158,3 +158,10 @@ export function Bee({ node, flavor, size = "", working = false, error = null }) 
     </g>`}
   </svg>`;
 }
+
+export function retiredLabel(agent) {
+  const date = new Date(agent.retired_at * 1000).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", timeZone: "UTC",
+  });
+  return `${agent.original_id} (retired ${date})`;
+}

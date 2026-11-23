@@ -12,6 +12,7 @@ def _conn():
     conn.execute("CREATE TABLE messages (sender TEXT, recipient TEXT)")
     conn.execute("CREATE TABLE tasks (assignee TEXT)")
     conn.execute("CREATE TABLE summaries (user_id TEXT)")
+    conn.execute("CREATE TABLE retired_agents (archive_id TEXT PRIMARY KEY)")
     return conn
 
 
@@ -65,10 +66,9 @@ def test_pick_unused_falls_back_to_numeric_suffix_when_pool_exhausted():
     assert again == f"{base}-3"
 
 
-def test_a_retired_agents_name_is_never_reissued():
-    # A retired agent leaves no recipients row, but its messages, tasks and
-    # status lines still carry its handle. Reissuing the name would hand that
-    # history to a new agent.
+def test_a_handle_left_in_history_is_not_reissued():
+    # Unregistering leaves history on the original handle. Automatic naming
+    # must skip it until the history has been moved to an archive.
     for leftover in (
         "INSERT INTO messages VALUES ('{0}', 'owner')",
         "INSERT INTO messages VALUES ('owner', '{0}')",

@@ -654,6 +654,7 @@ def create_app(
     # Per-agent activity state, mutated by the monitor loop and read by
     # /api/state. Keyed by user_id; see agent_swarm.activity.step for the shape.
     registry: dict[str, dict] = {}
+    retirement_lock = threading.Lock()
     interval = float(
         os.environ.get(
             "AGENT_SWARM_MONITOR_INTERVAL",
@@ -1129,6 +1130,8 @@ def create_app(
         existing_id = None
         session = req.agent_id or None
         if session:
+            if db.is_retired(conn, agent_id=session):
+                raise HTTPException(status_code=409, detail={"error": "this agent session has been retired"})
             existing_id = db.lookup_user_by_agent_id(conn, session)
             if existing_id is not None:
                 # A node naming another machine's agent is refused outright.
@@ -1182,6 +1185,8 @@ def create_app(
             # A handle whose agent is offline can be reclaimed, so a restarted
             # agent gets its name and history back from a new pane; but only
             # on the machine it was on, unless the owner is doing it.
+            if db.is_retired(conn, archive_id=requested):
+                raise HTTPException(status_code=409, detail={"error": "this handle is a retired archive"})
             _own_row_or_403(request, requested)
             if (
                 db.name_taken_by_other(
@@ -1425,8 +1430,11 @@ def create_app(
         )
 
     @app.get("/recipients")
-    def recipients():
-        return {"recipients": _annotated_recipients()}
+    def recipients(include_retired_sessions: bool = False):
+        result = {"recipients": _annotated_recipients()}
+        if include_retired_sessions:
+            result["retired_sessions"] = [r["agent_id"] for r in db.retired_agents(conn) if r["agent_id"]]
+        return result
 
     @app.get("/whoami")
     def whoami(
@@ -1490,21 +1498,22 @@ def create_app(
 
     @app.post("/recipients/retire")
     def retire_recipients(req: RetireReq, _: None = Depends(_require_owner)):
-        """Forget agents that are not running: their registration, team
-        membership, and status lines go; messages and tasks stay. A live
-        agent is never retired, so a stale page cannot remove one."""
-        by_id = {r["user_id"]: r for r in _annotated_recipients()}
-        retired, live, unknown = [], [], []
+        """Archive stopped agents. The bulk action never stops a running pane."""
+        retired, live, unknown, failures = [], [], [], {}
         for user_id in dict.fromkeys(req.user_ids):
-            row = by_id.get(user_id)
-            if row is None:
-                unknown.append(user_id)
-            elif row["alive"]:
-                live.append(user_id)
-            elif db.delete_recipient(conn, user_id):
+            try:
+                _retire(user_id, stop_live=False)
+            except HTTPException as exc:
+                if exc.status_code == 404:
+                    unknown.append(user_id)
+                elif exc.detail.get("live"):
+                    live.append(user_id)
+                else:
+                    failures[user_id] = exc.detail["error"]
+            else:
                 retired.append(user_id)
-                _refresh_watch(row["node"])
-        return {"ok": True, "retired": retired, "kept_live": live, "unknown": unknown}
+        return {"ok": True, "retired": retired, "kept_live": live, "unknown": unknown,
+                "failures": failures}
 
     @app.delete("/recipients/{user_id}")
     def unregister(user_id: str, request: Request):
@@ -1570,30 +1579,24 @@ def create_app(
         files = files or []
         recipient = db.get_recipient(conn, recipient_id)
         if recipient is None:
-            mid = db.record_message(
-                conn,
-                sender,
-                recipient_id,
-                context,
-                content,
-                status="failed",
-                delivery_error="recipient not registered",
-                attachments=files, reply_to=reply_original["id"] if reply_original else None,
-            )
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": "recipient not registered",
-                    "recipient": recipient_id,
-                    "message_id": mid,
-                },
-            )
+            _missing_recipient(sender, recipient_id, context, content, files,
+                               reply_original["id"] if reply_original else None)
         node = _reach(sender, recipient, context, content, files)
         mid, status, err = _dispatch(node, sender, recipient, context, content, files, client_id, reply_original)
         return {
             "ok": status == "delivered", "status": status,
             "message_id": mid, "delivery_error": err,
         }
+
+    def _missing_recipient(sender, recipient, context, content, files=None, reply_to=None):
+        detail = {"error": "recipient not registered", "recipient": recipient}
+        # A stale address must not create history on a name we just freed.
+        if not db.was_retired(conn, recipient) and not db.is_retired(conn, archive_id=recipient):
+            detail["message_id"] = db.record_message(
+                conn, sender, recipient, context, content, status="failed",
+                delivery_error=detail["error"], attachments=files, reply_to=reply_to,
+            )
+        raise HTTPException(status_code=404, detail=detail)
 
     # Node result -> message status.
     MESSAGE_STATUS = {"ok": "delivered", "failed": "failed", "unknown": "unknown"}
@@ -1718,23 +1721,7 @@ def create_app(
                     "delivered_to_pane": None, "delivery_error": None}
         recipient = db.get_recipient(conn, req.recipient)
         if recipient is None:
-            mid = db.record_message(
-                conn,
-                sender,
-                req.recipient,
-                req.context,
-                req.content,
-                status="failed",
-                delivery_error="recipient not registered", reply_to=req.reply_to,
-            )
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": "recipient not registered",
-                    "recipient": req.recipient,
-                    "message_id": mid,
-                },
-            )
+            _missing_recipient(sender, req.recipient, req.context, req.content, reply_to=req.reply_to)
         node = _reach(sender, recipient, req.context, req.content)
         mid, status, err = _dispatch(node, sender, recipient, req.context, req.content, reply_original=original)
         return {
@@ -2164,6 +2151,10 @@ def create_app(
         recipient = db.get_recipient(conn, user_id)
         if recipient is None:
             raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        return _stop_agent(recipient)
+
+    def _stop_agent(recipient: dict, *, stop_live: bool = True) -> dict:
+        user_id = recipient["user_id"]
         pane = recipient["tmux_pane"]
         node = _node_of(recipient)
         if node is None:
@@ -2184,6 +2175,8 @@ def create_app(
                 "ok": True, "user_id": user_id, "tmux_pane": pane,
                 "already_stopped": True,
             }
+        if not stop_live:
+            raise HTTPException(status_code=409, detail={"error": "agent is still running", "live": True})
         killed = node.kill(nodes.new_op_id(), pane, recipient.get("tmux_server"))
         if not killed.ok:
             raise HTTPException(
@@ -2198,6 +2191,23 @@ def create_app(
             "ok": True, "user_id": user_id, "tmux_pane": pane,
             "already_stopped": False,
         }
+
+    def _retire(user_id: str, *, stop_live: bool) -> dict:
+        with retirement_lock:
+            recipient = db.get_recipient(conn, user_id)
+            if recipient is None:
+                raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+            stopped = _stop_agent(recipient, stop_live=stop_live)
+            archived = db.retire_recipient(conn, recipient)
+            if archived is None:
+                raise HTTPException(status_code=409, detail={"error": "registration changed during retirement"})
+            registry.pop(user_id, None)
+            _refresh_watch(recipient["node"])
+            return {**stopped, **archived}
+
+    @app.post("/agents/{user_id}/retire")
+    def agents_retire(user_id: str, _: None = Depends(_require_owner)):
+        return _retire(user_id, stop_live=True)
 
     @app.post("/agents/{user_id}/switch")
     def agents_switch(user_id: str, req: SwitchReq, _: None = Depends(_require_owner)):
@@ -2406,9 +2416,10 @@ def create_app(
             _queen_handover({**previous_team, "queen": None}, user_id)
         return {"ok": True, "recipient": recipient}
 
-    def _recipients_with_activity() -> list[dict]:
+    def _recipients_with_activity(summaries: dict | None = None) -> list[dict]:
         recipients = _annotated_recipients()
-        summaries = db.summaries_by_user(conn, db.SUMMARY_HISTORY)
+        if summaries is None:
+            summaries = db.summaries_by_user(conn, db.SUMMARY_HISTORY)
         for r in recipients:
             r["pane_alive"] = r["alive"]
             r["summaries"] = summaries.get(r["user_id"], [])
@@ -2821,7 +2832,8 @@ def create_app(
     @app.get("/api/state")
     def state(limit: int = 300, _: None = Depends(_require_owner)):
         # All summaries that are kept, so the history search finds older lines too.
-        recipients = _recipients_with_activity()
+        summaries = db.summaries_by_user(conn, db.SUMMARY_HISTORY)
+        recipients = _recipients_with_activity(summaries)
         msgs = db.fetch_messages(conn, None, limit)
         msgs.reverse()  # oldest first for thread rendering
         enrolled = db.list_nodes(conn)
@@ -2834,6 +2846,11 @@ def create_app(
         return {
             "now": time.time(),
             "recipients": recipients,
+            "retired_agents": [
+                {"archive_id": r["archive_id"], "original_id": r["original_id"],
+                 "retired_at": r["retired_at"], "summaries": summaries.get(r["archive_id"], [])}
+                for r in db.retired_agents(conn)
+            ],
             "nodes": [local, *enrolled],
             "messages": msgs,
             "pins": db.list_pins(conn),

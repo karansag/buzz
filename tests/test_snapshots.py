@@ -218,7 +218,7 @@ def test_restore_from_hub_uses_the_hubs_copy(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "_run_restore", fake_run)
     args = SimpleNamespace(from_hub=True, from_file=None, dir=str(tmp_path), apply=False, stagger=0.0)
-    assert cli._restore_from_hub(args, tmp_path, []) == 0
+    assert cli._restore_from_hub(args, tmp_path, [], set()) == 0
     # The copy is kept locally, so a second restore needs no hub.
     assert list(tmp_path.glob("*.json"))
     assert seen["steps"] == restore.plan(snap, [], set())
@@ -227,5 +227,12 @@ def test_restore_from_hub_uses_the_hubs_copy(tmp_path, monkeypatch):
 def test_restore_from_hub_says_so_when_the_hub_has_none(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli.httpx, "get", lambda url, **kw: SimpleNamespace(status_code=404))
     args = SimpleNamespace(from_hub=True, from_file=None)
-    assert cli._restore_from_hub(args, tmp_path, []) == 1
+    assert cli._restore_from_hub(args, tmp_path, [], set()) == 1
     assert "no snapshot for this machine" in capsys.readouterr().err
+
+def test_snapshot_restore_skips_retired_sessions():
+    retired = {a["agent_id"] for a in restore.agents_in(SNAPSHOT)}
+    assert retired
+    steps = restore.plan(SNAPSHOT, [], retired=retired)
+    assert any("its session was retired" in step.describe for step in steps)
+    assert all(step.launch is None for step in steps)
