@@ -13,21 +13,23 @@ const FILL_PAGES = 10;
 // touch the newest page, so the hook tracks which stretches of ids are loaded
 // and reports the holes as `gaps`, for the view to offer to fill, rather than
 // showing a conversation that is quietly missing its middle.
-export function useAgentHistory(user) {
-  const [history, setHistory] = useState({ messages: [], loaded: false, more: false, busy: false, error: "", gaps: [] });
+export function useAgentHistory(user, returnState = null) {
+  const [history, setHistory] = useState(() => returnState?.history ?? {
+    messages: [], loaded: false, more: false, busy: false, error: "", gaps: [],
+  });
   // The last "open at message" lookup: idle, loading, found, missing (this
   // conversation has no such message) or failed (try again).
+  const [caughtUp, setCaughtUp] = useState(false);
   const [lookup, setLookup] = useState({ id: null, status: "idle" });
   const commands = useRef({ older: () => {}, around: () => {}, gap: () => {} });
   useEffect(() => {
     let active = true, polling = false, busy = false;
     // Ids loaded so far, as ascending, disjoint, non-touching spans.
-    let spans = [];
+    let spans = returnState?.spans ?? [];
     // The highest id seen, so polling asks only for what arrived after it.
-    let newest = null;
+    let newest = returnState?.newest ?? null;
     const abort = new AbortController();
-    setHistory({ messages: [], loaded: false, more: false, busy: false, error: "", gaps: [] });
-    setLookup({ id: null, status: "idle" });
+
 
     const read = async query => {
       const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages?${query}`, { signal: abort.signal });
@@ -102,6 +104,7 @@ export function useAgentHistory(user) {
           page = await read(`after=${newest}&limit=${PAGE}`);
           merge(page);
         }
+        if (active) setCaughtUp(true);
       } catch {
         fail("Could not load conversation history. Retrying…");
       } finally { polling = false; }
@@ -168,10 +171,17 @@ export function useAgentHistory(user) {
 
     poll();
     const timer = setInterval(poll, POLL_MS);
-    return () => { active = false; abort.abort(); clearInterval(timer); };
+    return () => {
+      active = false;
+      abort.abort();
+      clearInterval(timer);
+      if (returnState) Object.assign(returnState, { spans, newest });
+    };
   }, [user]);
+  if (returnState) returnState.history = { ...history, busy: false };
   return {
     ...history,
+    caughtUp,
     lookup,
     loadOlder: () => commands.current.older(),
     loadAround: mid => commands.current.around(mid),

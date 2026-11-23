@@ -912,7 +912,73 @@ test('Ctrl+Shift+[ / ] step through the header views, including extra tabs', asy
     // From inside the tab's page too.
     await page.frameLocator('iframe.tab-frame').locator('#q').click();
     await go('Control+Shift+BracketRight', '#/');
+    await go('Control+Shift+BracketRight', '#/agent/stoat');
+    await go('Control+Shift+BracketLeft', '#/');
     await go('Control+Shift+BracketLeft', '#/tab/usage');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('agent tab returns to the conversation with its draft and scroll, and survives reload', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  state.messages.push(...Array.from({length: 45}, (_, i) => ({
+    id: i + 3, sender: 'stoat', recipient: 'owner', ts: now + i + 1,
+    status: 'delivered', content: `Sample reply ${i + 1}`,
+  })));
+  const tab = page.locator('nav.views .agent-view-tab');
+  const draft = page.locator('.thread .composer textarea').first();
+  const messages = page.locator('.thread .msgs').first();
+  const tasks = page.locator('nav.views a[href="#/tasks"]');
+  try {
+    await page.goto(base + '#/agent/stoat?m=15');
+    await draft.fill('unsent draft');
+    await messages.evaluate(el => { el.scrollTop = 500; });
+    await page.waitForFunction(() => document.querySelector('.thread .msgs')?.scrollTop === 500);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await tab.getAttribute('href'), '#/agent/stoat');
+    assert.equal(await tab.getAttribute('aria-current'), 'page');
+    await tasks.click();
+    await tab.click();
+    assert.equal(await draft.inputValue(), 'unsent draft');
+    assert.ok(Math.abs(await messages.evaluate(el => el.scrollTop) - 500) <= 2);
+    await tasks.click();
+    state.history = [...state.messages, { id: 48, sender: 'stoat', recipient: 'owner', ts: now + 60,
+      status: 'delivered', content: 'A reply arrived while you were away.' }];
+    await tab.click();
+    await page.getByText('A reply arrived while you were away.').waitFor();
+    await page.waitForFunction(() => {
+      const el = document.querySelector('.thread .msgs');
+      return el && el.scrollHeight - el.clientHeight - el.scrollTop < 8;
+    });
+    assert.equal(await draft.inputValue(), 'unsent draft');
+    await tasks.click();
+    await page.reload();
+    await tab.click();
+    assert.equal(await draft.inputValue(), 'unsent draft');
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('390px agent tab fits and hides after retirement or when its saved handle is unknown', async () => {
+  const { page, state, errors } = await setup(390, 844);
+  const user = names[1];
+  const tab = page.locator('nav.views .agent-view-tab');
+  try {
+    await page.goto(base + '#/agent/' + user);
+    await tab.waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
+    assert.ok(await tab.locator('.agent-view-label').evaluate(el => el.scrollWidth > el.clientWidth));
+    await page.locator('nav.views a[href="#/tasks"]').click();
+    state.retired_agents = [{ original_id: user, archive_id: 'archive-id', retired_at: now }];
+    // Even if the same handle was reclaimed before the next poll, it is a new conversation.
+    await page.reload();
+    await page.locator('.history').waitFor();
+    assert.equal(await tab.count(), 0);
+    await page.evaluate(() => localStorage.setItem('swarm-last-agent',
+      JSON.stringify({ user: 'unknown-agent', retirement: '' })));
+    await page.reload();
+    await page.locator('.history').waitFor();
+    assert.equal(await tab.count(), 0);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });

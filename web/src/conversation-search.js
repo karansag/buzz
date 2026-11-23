@@ -4,9 +4,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { showAgentMessage } from './agent-route.js';
 
 const PAGE_SIZE = 100;
-export function useConversationSearch(user) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
+export function useConversationSearch(user, returnState = null) {
+  const [open, setOpen] = useState(() => returnState?.searchOpen ?? false);
+  const [query, setQuery] = useState(() => returnState?.searchQuery ?? '');
+  const restoredQuery = useRef(returnState?.searchOpen ? returnState.searchQuery?.trim() : null);
+  if (returnState) Object.assign(returnState, { searchOpen: open, searchQuery: query });
   const [result, setResult] = useState({total: 0, index: 0, busy: false, error: '', current: null});
   const [terms, setTerms] = useState(null);
   const input = useRef(null), previousFocus = useRef(null), session = useRef(null);
@@ -50,6 +52,7 @@ export function useConversationSearch(user) {
   useEffect(() => {
     const s = {query: query.trim(), pages: new Map(), abort: new AbortController(), index: 0, total: 0, sequence: 0};
     session.current = s;
+    if (!open || restoredQuery.current !== s.query) restoredQuery.current = null;
     setTerms(null);
     setResult({total: 0, index: 0, busy: open && !!s.query, error: '', current: null});
     if (!open || !s.query) return () => { s.abort.abort(); };
@@ -58,7 +61,8 @@ export function useConversationSearch(user) {
         const current = await read(s, 0);
         if (session.current !== s || s.abort.signal.aborted) return;
         setResult({total: s.total, index: 0, busy: false, error: '', current});
-        if (current) showAgentMessage(user, current.id);
+        if (current && restoredQuery.current !== s.query) showAgentMessage(user, current.id);
+        restoredQuery.current = null;
       } catch (error) {
         if (!s.abort.signal.aborted) setResult({total: 0, index: 0, busy: false, error: error.message, current: null});
       }

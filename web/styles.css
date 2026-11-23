@@ -77,6 +77,9 @@
     color: var(--cream-dim); text-decoration: none; font-size: 11px; letter-spacing: .12em;
     text-transform: uppercase; padding: 3px 10px; border: 1px solid transparent; border-radius: 20px;
   }
+  nav.views .agent-view-tab { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+  nav.views .agent-view-label { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 600px) { nav.views .agent-view-label { max-width: 8ch; } }
   nav.views a:hover { color: var(--cream); }
   nav.views a.on { color: var(--honey); border-color: var(--honey-dim); background: rgba(242,169,59,.07); }
 

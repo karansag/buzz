@@ -1452,7 +1452,7 @@ const OLDER_PX = 300;
 const gapLabel = ({ count, after, before }) =>
   `${count} message${count === 1 ? "" : "s"} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
 
-function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null, pins = [], readOnly = false }) {
+function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null, pins = [], readOnly = false, returnState = null, caughtUp = true }) {
   useLayoutEffect(() => { if (search?.open) setExpanded(true); }, [search?.open]);
   const boxRef = useRef(null);
   const follower = useRef(null);
@@ -1497,7 +1497,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   const other = recipient || a === b ? null : page === a ? b : page === b ? a : null;
   // Only a registered agent has a page; the hub (supervisor nudges) has none.
   const peer = other && agents?.has(other) ? other : null;
-  const [expanded, setExpanded] = useState(!!recipient);
+  const [expanded, setExpanded] = useState(() => returnState?.expanded ?? !!recipient);
   // Focus mode: the thread fills the window for reading. The owner's thread
   // also answers to Cmd/Ctrl+Shift+L, including from the reply box; Esc leaves.
   // It opens the way the owner last left this agent's chat; an agent with
@@ -1540,6 +1540,8 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     });
   };
   const savedScroll = useRef(0);
+  const returning = useRef(returnState?.scroll);
+  const checkNewOnReturn = useRef(returnState?.scroll ?? null);
   const bodyId = `thread-${encodeURIComponent(pairKey(a, b))}`;
   useLayoutEffect(() => {
     if (expanded && boxRef.current) boxRef.current.scrollTop = savedScroll.current;
@@ -1576,6 +1578,16 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el || !expanded) return;
+    const saved = returning.current;
+    returning.current = null;
+    if (saved && !jumpTo && saved.lastId === lastId && !saved.pinned) {
+      follower.current.unpin();
+      el.scrollTop = el.scrollHeight - el.clientHeight - saved.distance;
+    }
+    if (caughtUp && checkNewOnReturn.current) {
+      if (!jumpTo && lastId !== checkNewOnReturn.current.lastId) follower.current.pin();
+      checkNewOnReturn.current = null;
+    }
     const previous = previousHistory.current;
     if (previous && previous.first !== msgs[0]?.id && msgs.some(m => m.id === previous.first)) {
       el.scrollTop = previous.top + el.scrollHeight - previous.height;
@@ -1585,6 +1597,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       follower.current.follow(el);
       previousHistory.current = { first: msgs[0]?.id, height: el.scrollHeight, top: el.scrollTop };
       noteAway(el);
+      saveReturnScroll(el);
     };
     const ro = new ResizeObserver(stick);
     ro.observe(el);
@@ -1595,7 +1608,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       ro.disconnect();
       for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) el.removeEventListener(type, releaseScroll);
     };
-  }, [msgs.length, lastId, historyHeight, expanded]);
+  }, [msgs.length, lastId, historyHeight, expanded, caughtUp]);
   // Open at one message: a link like #/agent/<handle>?m=<id>, from the chats
   // search or another search UI. Scroll it to the middle and flash it with the
   // same highlight a reply quote uses, once per request, after the follow
@@ -1701,6 +1714,15 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   useEffect(() => {
     if (nearTop.current && boxRef.current && expanded) wantOlder(boxRef.current);
   }, [older?.busy, older?.more]);
+  const saveReturnScroll = el => {
+    if (returnState) returnState.scroll = {
+      lastId, pinned: follower.current.pinned(),
+      distance: el.scrollHeight - el.clientHeight - el.scrollTop,
+    };
+  };
+  useLayoutEffect(() => {
+    if (returnState) returnState.expanded = expanded;
+  }, [expanded, returnState]);
   const onScroll = (e) => {
     if (!expanded) return;
     wantOlder(e.currentTarget);
@@ -1708,6 +1730,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     savedScroll.current = e.currentTarget.scrollTop;
     if (previousHistory.current) previousHistory.current.top = e.currentTarget.scrollTop;
     follower.current.onScroll(e.currentTarget);
+    saveReturnScroll(e.currentTarget);
   };
   const resizeBounds = () => ({ min: 120, max: Math.max(120, Math.floor(innerHeight * .85)) });
   const resizeTo = (height) => {
@@ -2099,9 +2122,9 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
         })}</div>`}`;
 }
 
-function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor }) {
-  const history = useAgentHistory(user);
-  const conversationSearch = useConversationSearch(user);
+function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor, returnState }) {
+  const history = useAgentHistory(user, returnState);
+  const conversationSearch = useConversationSearch(user, returnState);
   const [showAgentChats, setShowAgentChats] = useState(false);
   const messages = [...new Map([...history.messages, ...state.messages]
     .filter(m => m.sender === user || m.recipient === user).map(m => [m.id, m])).values()]
@@ -2188,7 +2211,8 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       jumpTo=${msgs === jumpThread ? jumpId : null}
       gaps=${history.gaps} loadGap=${history.loadGap}
       older=${{ more: history.more, busy: history.busy, load: history.loadOlder }}
-      pins=${pinsOf(state.pins, a, b)} readOnly=${!!archived} />`;
+      pins=${pinsOf(state.pins, a, b)} readOnly=${!!archived}
+      returnState=${pairKey(a, b) === ownerThread ? returnState : null} caughtUp=${history.caughtUp} />`;
   };
   return html`<div>
     <div class="focus-top">
@@ -2286,8 +2310,7 @@ function App() {
   const [state, setState] = useState(null);
   const [machine, setMachine] = useState(null);
   const [harness, setHarness] = useState(null);
-  const tabsRef = useRef([]);
-  tabsRef.current = state?.tabs || [];
+  const viewsRef = useRef([]);
   const [rosterOpen, setRosterOpen] = useState(() => {
     try { const saved = localStorage.getItem("swarm-roster-open"); return saved === null ? true : saved === "true"; }
     catch { return true; }
@@ -2355,6 +2378,37 @@ function App() {
   const onChats = route.startsWith(CHATS_ROUTE);
   const onTab = route.startsWith(TAB_ROUTE) ? decodeURIComponent(route.slice(TAB_ROUTE.length)) : null;
   const onOverview = !focusUser && !onHistory && !onChats && !onTab;
+  const [lastAgent, setLastAgent] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("swarm-last-agent")); } catch { return null; }
+  });
+  // A reused handle is a different conversation. Include the most recent
+  // retirement of that handle in the remembered address.
+  const retirement = user => (state?.retired_agents || [])
+    .filter(r => r.original_id === user).map(r => r.archive_id).sort().join(",");
+  const currentAgent = state?.recipients.find(r => r.user_id === focusUser);
+  const currentRetirement = retirement(focusUser);
+  const savedAgent = lastAgent?.user && lastAgent.retirement === retirement(lastAgent.user)
+    ? state?.recipients.find(r => r.user_id === lastAgent.user) : null;
+  const agentTab = currentAgent || savedAgent;
+  const agentTabHash = agentTab ? focusHash(agentTab.user_id) : null;
+  viewsRef.current = ["#/", ...(agentTabHash ? [agentTabHash] : []), CHATS_ROUTE, HISTORY_ROUTE,
+    ...(state?.tabs || []).map(tabHash)];
+  useLayoutEffect(() => {
+    if (!currentAgent) return;
+    const next = { user: focusUser, retirement: currentRetirement };
+    setLastAgent(next);
+    try { localStorage.setItem("swarm-last-agent", JSON.stringify(next)); } catch { /* use App state */ }
+  }, [currentAgent?.user_id, currentRetirement]);
+
+  // Keep one conversation's loaded pages and reading position while visiting
+  // another view. Discard them when changing agent or when its handle retires.
+  const conversation = useRef(null);
+  if (currentAgent && (conversation.current?.user !== focusUser
+      || conversation.current.retirement !== currentRetirement)) {
+    conversation.current = { user: focusUser, retirement: currentRetirement };
+  }
+  if (!agentTab) conversation.current = null;
+
   // Remember when each agent was opened; the agent switcher lists recent ones first.
   useEffect(() => { if (focusUser) noteOpened(focusUser); }, [focusUser]);
   // A roster link may be several screens down on a phone. Bring the new
@@ -2465,7 +2519,7 @@ function App() {
       if (by && modifier && e.shiftKey && !e.altKey && !e.isComposing
           && !document.querySelector(".quick-switch[open]")) {
         e.preventDefault();
-        location.hash = stepView(location.hash, ["#/", CHATS_ROUTE, HISTORY_ROUTE, ...tabsRef.current.map(tabHash)], by);
+        location.hash = stepView(location.hash, viewsRef.current, by);
       }
     };
     addEventListener("hashchange", onHash);
@@ -2494,6 +2548,11 @@ function App() {
     <h1 style="cursor:pointer" onClick=${() => { location.hash = "#/"; }}>Buzz</h1>
     <nav class="views" aria-label="views" title=${`Switch views: ${mac ? "⌘⇧[ / ⌘⇧]" : "Ctrl+Shift+[ / ]"}`}>
       <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${mac ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
+      ${agentTab && html`<a class=${`agent-view-tab ${focusUser ? "on" : ""}`} href=${agentTabHash}
+        aria-current=${focusUser ? "page" : null} title=${`Return to ${agentTab.user_id}`}>
+        <span aria-hidden="true">${FLAVOR_ICON[agentTab.flavor] || FLAVOR_ICON.generic}</span>
+        <span class="agent-view-label">${agentTab.user_id}</span>
+      </a>`}
       <a href=${CHATS_ROUTE} class=${onChats ? "on" : ""}>chats</a>
       <a href=${HISTORY_ROUTE} class=${onHistory ? "on" : ""}>task history</a>
       ${(state?.tabs || []).map(t => html`<a key=${t} href=${tabHash(t)} class=${onTab === t ? "on" : ""}>${t}</a>`)}
@@ -2529,8 +2588,9 @@ function App() {
     ${onOverview && html`<${MachineBar} state=${state} machine=${machine} selectMachine=${setMachine} />`}
     <div class="stage">
       ${focusUser
-        ? html`<${FocusView} key=${focusUser} user=${focusUser} messageId=${agentRoute?.messageId ?? null}
-            state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor} />`
+        ? html`<${FocusView} key=${`${focusUser}:${currentRetirement}`} user=${focusUser} messageId=${agentRoute?.messageId ?? null}
+            state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor}
+            returnState=${currentAgent ? conversation.current : null} />`
         : onHistory
           ? html`<${HistoryView} state=${state} refresh=${poll} />`
           : onChats

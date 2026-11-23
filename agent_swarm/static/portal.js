@@ -9682,8 +9682,8 @@ function gapsOf(spans) {
 //#region web/src/agent-history.js
 var PAGE = 300;
 var FILL_PAGES = 10;
-function useAgentHistory(user) {
-	const [history, setHistory] = d({
+function useAgentHistory(user, returnState = null) {
+	const [history, setHistory] = d(() => returnState?.history ?? {
 		messages: [],
 		loaded: false,
 		more: false,
@@ -9691,6 +9691,7 @@ function useAgentHistory(user) {
 		error: "",
 		gaps: []
 	});
+	const [caughtUp, setCaughtUp] = d(false);
 	const [lookup, setLookup] = d({
 		id: null,
 		status: "idle"
@@ -9702,21 +9703,9 @@ function useAgentHistory(user) {
 	});
 	h(() => {
 		let active = true, polling = false, busy = false;
-		let spans = [];
-		let newest = null;
+		let spans = returnState?.spans ?? [];
+		let newest = returnState?.newest ?? null;
 		const abort = new AbortController();
-		setHistory({
-			messages: [],
-			loaded: false,
-			more: false,
-			busy: false,
-			error: "",
-			gaps: []
-		});
-		setLookup({
-			id: null,
-			status: "idle"
-		});
 		const read = async (query) => {
 			const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages?${query}`, { signal: abort.signal });
 			if (!response.ok) throw Error("History unavailable");
@@ -9795,6 +9784,7 @@ function useAgentHistory(user) {
 					page = await read(`after=${newest}&limit=${PAGE}`);
 					merge(page);
 				}
+				if (active) setCaughtUp(true);
 			} catch {
 				fail("Could not load conversation history. Retrying…");
 			} finally {
@@ -9889,10 +9879,19 @@ function useAgentHistory(user) {
 			active = false;
 			abort.abort();
 			clearInterval(timer);
+			if (returnState) Object.assign(returnState, {
+				spans,
+				newest
+			});
 		};
 	}, [user]);
+	if (returnState) returnState.history = {
+		...history,
+		busy: false
+	};
 	return {
 		...history,
+		caughtUp,
 		lookup,
 		loadOlder: () => commands.current.older(),
 		loadAround: (mid) => commands.current.around(mid),
@@ -9902,9 +9901,14 @@ function useAgentHistory(user) {
 //#endregion
 //#region web/src/conversation-search.js
 var PAGE_SIZE = 100;
-function useConversationSearch(user) {
-	const [open, setOpen] = d(false);
-	const [query, setQuery] = d("");
+function useConversationSearch(user, returnState = null) {
+	const [open, setOpen] = d(() => returnState?.searchOpen ?? false);
+	const [query, setQuery] = d(() => returnState?.searchQuery ?? "");
+	const restoredQuery = A(returnState?.searchOpen ? returnState.searchQuery?.trim() : null);
+	if (returnState) Object.assign(returnState, {
+		searchOpen: open,
+		searchQuery: query
+	});
 	const [result, setResult] = d({
 		total: 0,
 		index: 0,
@@ -9970,6 +9974,7 @@ function useConversationSearch(user) {
 			sequence: 0
 		};
 		session.current = s;
+		if (!open || restoredQuery.current !== s.query) restoredQuery.current = null;
 		setTerms(null);
 		setResult({
 			total: 0,
@@ -9992,7 +9997,8 @@ function useConversationSearch(user) {
 					error: "",
 					current
 				});
-				if (current) showAgentMessage(user, current.id);
+				if (current && restoredQuery.current !== s.query) showAgentMessage(user, current.id);
+				restoredQuery.current = null;
 			} catch (error) {
 				if (!s.abort.signal.aborted) setResult({
 					total: 0,
@@ -13980,7 +13986,7 @@ function sentByViewer(sender, a, b, page) {
 var JUMP_SHOW_PX = 160;
 var OLDER_PX = 300;
 var gapLabel = ({ count, after, before }) => `${count} message${count === 1 ? "" : "s"} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
-function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null, pins = [], readOnly = false }) {
+function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null, pins = [], readOnly = false, returnState = null, caughtUp = true }) {
 	_(() => {
 		if (search?.open) setExpanded(true);
 	}, [search?.open]);
@@ -14026,7 +14032,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	}, [menu]);
 	const other = recipient || a === b ? null : page === a ? b : page === b ? a : null;
 	const peer = other && agents?.has(other) ? other : null;
-	const [expanded, setExpanded] = d(!!recipient);
+	const [expanded, setExpanded] = d(() => returnState?.expanded ?? !!recipient);
 	const [focused, setFocused] = d(() => !!recipient && (savedFocus(recipient) ?? !!switchCarry?.focus));
 	const threadRef = A(null);
 	const focusMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -14063,6 +14069,8 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		});
 	};
 	const savedScroll = A(0);
+	const returning = A(returnState?.scroll);
+	const checkNewOnReturn = A(returnState?.scroll ?? null);
 	const bodyId = `thread-${encodeURIComponent(pairKey(a, b))}`;
 	_(() => {
 		if (expanded && boxRef.current) boxRef.current.scrollTop = savedScroll.current;
@@ -14091,6 +14099,16 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	_(() => {
 		const el = boxRef.current;
 		if (!el || !expanded) return;
+		const saved = returning.current;
+		returning.current = null;
+		if (saved && !jumpTo && saved.lastId === lastId && !saved.pinned) {
+			follower.current.unpin();
+			el.scrollTop = el.scrollHeight - el.clientHeight - saved.distance;
+		}
+		if (caughtUp && checkNewOnReturn.current) {
+			if (!jumpTo && lastId !== checkNewOnReturn.current.lastId) follower.current.pin();
+			checkNewOnReturn.current = null;
+		}
 		const previous = previousHistory.current;
 		if (previous && previous.first !== msgs[0]?.id && msgs.some((m) => m.id === previous.first)) el.scrollTop = previous.top + el.scrollHeight - previous.height;
 		const stick = () => {
@@ -14102,6 +14120,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 				top: el.scrollTop
 			};
 			noteAway(el);
+			saveReturnScroll(el);
 		};
 		const ro = new ResizeObserver(stick);
 		ro.observe(el);
@@ -14126,7 +14145,8 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		msgs.length,
 		lastId,
 		historyHeight,
-		expanded
+		expanded,
+		caughtUp
 	]);
 	const jumpedTo = A(null);
 	_(() => {
@@ -14231,6 +14251,16 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	h(() => {
 		if (nearTop.current && boxRef.current && expanded) wantOlder(boxRef.current);
 	}, [older?.busy, older?.more]);
+	const saveReturnScroll = (el) => {
+		if (returnState) returnState.scroll = {
+			lastId,
+			pinned: follower.current.pinned(),
+			distance: el.scrollHeight - el.clientHeight - el.scrollTop
+		};
+	};
+	_(() => {
+		if (returnState) returnState.expanded = expanded;
+	}, [expanded, returnState]);
 	const onScroll = (e) => {
 		if (!expanded) return;
 		wantOlder(e.currentTarget);
@@ -14238,6 +14268,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		savedScroll.current = e.currentTarget.scrollTop;
 		if (previousHistory.current) previousHistory.current.top = e.currentTarget.scrollTop;
 		follower.current.onScroll(e.currentTarget);
+		saveReturnScroll(e.currentTarget);
 	};
 	const resizeBounds = () => ({
 		min: 120,
@@ -14626,9 +14657,9 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
           </a>`;
 	})}</div>`}`;
 }
-function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor }) {
-	const history = useAgentHistory(user);
-	const conversationSearch = useConversationSearch(user);
+function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor, returnState }) {
+	const history = useAgentHistory(user, returnState);
+	const conversationSearch = useConversationSearch(user, returnState);
 	const [showAgentChats, setShowAgentChats] = d(false);
 	const messages = [...new Map([...history.messages, ...state.messages].filter((m) => m.sender === user || m.recipient === user).map((m) => [m.id, m])).values()].sort((a, b) => a.ts - b.ts || a.id - b.id);
 	const jumpId = messageId && messages.some((m) => m.id === messageId) ? messageId : null;
@@ -14709,7 +14740,8 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
 			busy: history.busy,
 			load: history.loadOlder
 		}}
-      pins=${pinsOf(state.pins, a, b)} readOnly=${!!archived} />`;
+      pins=${pinsOf(state.pins, a, b)} readOnly=${!!archived}
+      returnState=${pairKey(a, b) === ownerThread ? returnState : null} caughtUp=${history.caughtUp} />`;
 	};
 	return m$1`<div>
     <div class="focus-top">
@@ -14802,8 +14834,7 @@ function App() {
 	const [state, setState] = d(null);
 	const [machine, setMachine] = d(null);
 	const [harness, setHarness] = d(null);
-	const tabsRef = A([]);
-	tabsRef.current = state?.tabs || [];
+	const viewsRef = A([]);
 	const [rosterOpen, setRosterOpen] = d(() => {
 		try {
 			const saved = localStorage.getItem("swarm-roster-open");
@@ -14881,6 +14912,43 @@ function App() {
 	const onChats = route.startsWith(CHATS_ROUTE);
 	const onTab = route.startsWith("#/tab/") ? decodeURIComponent(route.slice(TAB_ROUTE.length)) : null;
 	const onOverview = !focusUser && !onHistory && !onChats && !onTab;
+	const [lastAgent, setLastAgent] = d(() => {
+		try {
+			return JSON.parse(localStorage.getItem("swarm-last-agent"));
+		} catch {
+			return null;
+		}
+	});
+	const retirement = (user) => (state?.retired_agents || []).filter((r) => r.original_id === user).map((r) => r.archive_id).sort().join(",");
+	const currentAgent = state?.recipients.find((r) => r.user_id === focusUser);
+	const currentRetirement = retirement(focusUser);
+	const savedAgent = lastAgent?.user && lastAgent.retirement === retirement(lastAgent.user) ? state?.recipients.find((r) => r.user_id === lastAgent.user) : null;
+	const agentTab = currentAgent || savedAgent;
+	const agentTabHash = agentTab ? focusHash(agentTab.user_id) : null;
+	viewsRef.current = [
+		"#/",
+		...agentTabHash ? [agentTabHash] : [],
+		CHATS_ROUTE,
+		HISTORY_ROUTE,
+		...(state?.tabs || []).map(tabHash)
+	];
+	_(() => {
+		if (!currentAgent) return;
+		const next = {
+			user: focusUser,
+			retirement: currentRetirement
+		};
+		setLastAgent(next);
+		try {
+			localStorage.setItem("swarm-last-agent", JSON.stringify(next));
+		} catch {}
+	}, [currentAgent?.user_id, currentRetirement]);
+	const conversation = A(null);
+	if (currentAgent && (conversation.current?.user !== focusUser || conversation.current.retirement !== currentRetirement)) conversation.current = {
+		user: focusUser,
+		retirement: currentRetirement
+	};
+	if (!agentTab) conversation.current = null;
 	h(() => {
 		if (focusUser) noteOpened(focusUser);
 	}, [focusUser]);
@@ -14974,12 +15042,7 @@ function App() {
 			const by = e.code === "BracketRight" ? 1 : e.code === "BracketLeft" ? -1 : 0;
 			if (by && modifier && e.shiftKey && !e.altKey && !e.isComposing && !document.querySelector(".quick-switch[open]")) {
 				e.preventDefault();
-				location.hash = stepView(location.hash, [
-					"#/",
-					CHATS_ROUTE,
-					HISTORY_ROUTE,
-					...tabsRef.current.map(tabHash)
-				], by);
+				location.hash = stepView(location.hash, viewsRef.current, by);
 			}
 		};
 		addEventListener("hashchange", onHash);
@@ -15005,6 +15068,11 @@ function App() {
 	}}>Buzz</h1>
     <nav class="views" aria-label="views" title=${`Switch views: ${mac ? "⌘⇧[ / ⌘⇧]" : "Ctrl+Shift+[ / ]"}`}>
       <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${mac ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
+      ${agentTab && m$1`<a class=${`agent-view-tab ${focusUser ? "on" : ""}`} href=${agentTabHash}
+        aria-current=${focusUser ? "page" : null} title=${`Return to ${agentTab.user_id}`}>
+        <span aria-hidden="true">${FLAVOR_ICON[agentTab.flavor] || FLAVOR_ICON.generic}</span>
+        <span class="agent-view-label">${agentTab.user_id}</span>
+      </a>`}
       <a href=${CHATS_ROUTE} class=${onChats ? "on" : ""}>chats</a>
       <a href=${HISTORY_ROUTE} class=${onHistory ? "on" : ""}>task history</a>
       ${(state?.tabs || []).map((t) => m$1`<a key=${t} href=${tabHash(t)} class=${onTab === t ? "on" : ""}>${t}</a>`)}
@@ -15041,8 +15109,9 @@ function App() {
     ${header}
     ${onOverview && m$1`<${MachineBar} state=${state} machine=${machine} selectMachine=${setMachine} />`}
     <div class="stage">
-      ${focusUser ? m$1`<${FocusView} key=${focusUser} user=${focusUser} messageId=${agentRoute?.messageId ?? null}
-            state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor} />` : onHistory ? m$1`<${HistoryView} state=${state} refresh=${poll} />` : onChats ? m$1`<${ChatsView} state=${state} unreadFor=${unreadFor} refresh=${poll} />` : onTab !== null ? m$1`<${TabView} name=${onTab} tabs=${state.tabs || []} />` : m$1`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
+      ${focusUser ? m$1`<${FocusView} key=${`${focusUser}:${currentRetirement}`} user=${focusUser} messageId=${agentRoute?.messageId ?? null}
+            state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor}
+            returnState=${currentAgent ? conversation.current : null} />` : onHistory ? m$1`<${HistoryView} state=${state} refresh=${poll} />` : onChats ? m$1`<${ChatsView} state=${state} unreadFor=${unreadFor} refresh=${poll} />` : onTab !== null ? m$1`<${TabView} name=${onTab} tabs=${state.tabs || []} />` : m$1`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
     </div>
     </div>
     ${!compact && m$1`<div id="agent-sidebar" class=${`roster-drawer ${rosterOpen ? "is-open" : ""}`} inert=${!rosterOpen} aria-hidden=${!rosterOpen}>
