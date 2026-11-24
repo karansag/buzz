@@ -3,7 +3,7 @@
 Each agent's pane is respawned (`tmux respawn-pane -k`): its processes are
 killed and a fresh login shell starts in the same pane, same pane id, in the
 directory the harness ran in. The harness's resume command for the agent's
-session id (restore.resume_command) is then typed into it, so the agent comes
+session id (restore.resume_command) runs in that shell, so the agent comes
 back with its conversation and re-registers under the same handle with the
 newly installed harness.
 
@@ -17,7 +17,6 @@ identity and resumability checks still apply.
 from __future__ import annotations
 
 import shlex
-import subprocess
 from dataclasses import dataclass
 
 from . import restore, tmux
@@ -75,31 +74,9 @@ def plan(
         elif status not in RESTARTABLE_ACTIVITY and not force:
             activity = status.replace("_", " ") if status else "unknown (no activity report)"
             item.skip = f"activity is {activity}; only observed-idle agents restart by default (--force overrides)"
+        elif not (cwd := pane.get("cwd") or r.get("cwd")):
+            item.skip = "the hub does not know which folder the harness runs in"
         else:
-            item.cwd, item.command = pane["cwd"], command
+            item.cwd, item.command = cwd, command
         out.append(item)
     return out
-
-
-def apply(item: Restart, own_pane: str | None) -> str | None:
-    """Restart one agent; returns an error, or None.
-
-    The caller's own pane is handed to the tmux server (run-shell -b), since
-    respawning it kills this process before it could type the resume command.
-    """
-    respawn = ["respawn-pane", "-k", "-t", item.pane, "-c", item.cwd]
-    type_it = ["send-keys", "-t", item.pane, "-l", item.launch]
-    if item.pane == own_pane:
-        script = "; ".join(shlex.join(["tmux", *a]) for a in (
-            respawn, type_it, ["send-keys", "-t", item.pane, "C-m"]))
-        argvs = [["run-shell", "-b", f"sleep 1; {script}"]]
-    else:
-        argvs = [respawn, type_it, ["send-keys", "-t", item.pane, "C-m"]]
-    for argv in argvs:
-        try:
-            subprocess.run(["tmux", *argv], capture_output=True, text=True, check=True, timeout=10)
-        except subprocess.CalledProcessError as e:
-            return e.stderr.strip() or str(e)
-        except (subprocess.SubprocessError, FileNotFoundError) as e:
-            return str(e)
-    return None

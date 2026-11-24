@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -158,6 +159,7 @@ class Node(Protocol):
         retry_submit: bool = True,
     ) -> Result: ...
     def spawn(self, op_id: str, command: str | None, cwd: str | None = None, resume: bool = False) -> Spawned: ...
+    def respawn(self, op_id: str, pane: str, tmux_server: str, cwd: str, command: str) -> Result: ...
     def kill(self, op_id: str, pane: str, tmux_server: str | None) -> Result: ...
     def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str, literal: bool = False) -> Result: ...
     def tag_pane(self, op_id: str, pane: str, tmux_server: str | None, handle: str) -> Result: ...
@@ -299,6 +301,23 @@ class LocalNode:
         if created is None:
             return Spawned(status, None, err)
         return Spawned(status, created.pane, err, label=created.label, tmux_server=created.tmux_server)
+
+    def respawn(self, op_id: str, pane: str, tmux_server: str, cwd: str, command: str) -> Result:
+        if not tmux_server:
+            return Result("failed", "restart requires a verified tmux server")
+        try:
+            snapshot = self.snapshot()
+            if snapshot.server != tmux_server or pane not in snapshot.live:
+                return Result("failed", "the pane is no longer running on the expected tmux server")
+            # Check the observed directory again before replacing the process.
+            if snapshot.cwd(pane) not in (None, cwd):
+                return Result("failed", "the pane changed directory; plan the restart again")
+            ok, err = tmux.respawn_pane(pane, cwd, launch=f"cd {shlex.quote(cwd)} && {command}")
+        except Unavailable as e:
+            return Result("failed", str(e))
+        except tmux.Uncertain as e:
+            return Result("unknown", str(e))
+        return Result("ok" if ok else "failed", err)
 
     def kill(self, op_id: str, pane: str, tmux_server: str | None) -> Result:
         if stale := _stale_server(tmux_server):
@@ -599,6 +618,11 @@ class RemoteNode:
             r.get("status", "unknown"), data.get("pane"), r.get("error"),
             label=data.get("label"), tmux_server=data.get("tmux_server"),
         )
+
+    def respawn(self, op_id: str, pane: str, tmux_server: str, cwd: str, command: str) -> Result:
+        r = self._call("respawn", COMMAND_TTL, op_id=op_id, pane=pane,
+                       tmux_server=tmux_server, cwd=cwd, command=command)
+        return Result(r.get("status", "unknown"), r.get("error"))
 
     def kill(self, op_id: str, pane: str, tmux_server: str | None) -> Result:
         r = self._call("kill", COMMAND_TTL, op_id=op_id, pane=pane, tmux_server=tmux_server)

@@ -385,11 +385,10 @@ The environment variables `AGENT_SWARM_CLAUDE_COMMAND`,
 values fall back to the file, then to the built-in defaults. File edits
 apply on the next launch; restart the hub to change its environment.
 
-Dashboard and `buzz spawn` commands are built by the **hub**, including
+Dashboard, `buzz spawn`, and `buzz restart` commands are built by the **hub**, including
 when the destination is a remote node: configure these on the hub and use
-paths or wrapper names that exist on the destination. `buzz restore` and
-`buzz restart` read the configuration on the machine running those commands
-and append the harness's resume arguments and saved model to the custom
+paths or wrapper names that exist on the destination. `buzz restore` reads
+the configuration on the machine running the command and appends the harness's resume arguments and saved model to the custom
 command. Existing agents are unaffected until restarted.
 
 **From another device.** Publish the dashboard on your tailnet with
@@ -781,9 +780,12 @@ messages into the prompt. See [docs/reboot-restore.md](docs/reboot-restore.md).
 **After a harness upgrade.** Running agents keep the old harness until
 they restart. `buzz restart --all` (or `--all --flavor codex`, or
 named handles) shows which agents it would restart and the command for
-each; add `--apply` to do it. Each agent's pane is respawned in place (same
+each; add `--apply` to do it. The owner can restart agents across nodes, and
+a node can restart agents on its own machine. With `--all`, the owner can
+select running agents across all connected nodes and a node selects its own. Each agent's pane is respawned in place (same
 pane, same directory) and the harness resumes the agent's session, so it
-keeps its conversation and handle. Only agents observed idle are eligible by default. Working, waiting,
+keeps its conversation and handle. The command reports success after the same
+session re-registers (using the harness startup hook). Only agents observed idle are eligible by default. Working, waiting,
 unknown or missing activity is skipped unless you pass `--force`; anything
 else running in the pane, such as background shells, is lost.
 
@@ -859,6 +861,7 @@ token may call it; "owner" means a node token is refused (see
 | GET | `/api/spawn-options` | owner | harnesses and known models per machine |
 | POST | `/agents/spawn` | owner | `{flavor, model?, node?, cwd?}` |
 | POST | `/agents/{handle}/stop` | owner | kill its pane |
+| POST | `/agents/{handle}/restart` | owner or agent’s node | `{force?, dry_run?}` plans or restarts a running session in place |
 | POST | `/agents/{handle}/terminal` | owner | type text or a key into its pane |
 | POST | `/agents/{handle}/model` | owner | set the model label the dashboard shows (it does not switch models) |
 | GET | `/supervisor` | agent | who holds the role |

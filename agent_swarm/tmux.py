@@ -861,16 +861,21 @@ def send_key(pane: str, key: str, literal: bool = False) -> tuple[bool, str | No
     return True, None
 
 
-def respawn_pane(pane: str, cwd: str | None = None) -> tuple[bool, str | None]:
+def respawn_pane(pane: str, cwd: str | None = None, *, launch: str | None = None) -> tuple[bool, str | None]:
     """Replace what runs in a pane with a fresh login shell, in `cwd`.
 
-    The pane keeps its id and its place in the window, so the agent's
-    registration, its tile and anything holding the pane id stay valid. This
-    ends whatever was running there, like `buzz restart` does.
+    The pane keeps its id and its place in the window. An explicit launch
+    replaces the pane's original command and runs after login and interactive
+    shell setup. If the harness exits, leave a shell available in the pane.
     """
     command = ["tmux", "respawn-pane", "-k", "-t", pane]
     if cwd:
         command += ["-c", cwd]
+    if launch is not None:
+        shell = (_tmux_out("display-message", "-p", "-t", pane, "#{default-shell}") or "").strip()
+        if not shell:
+            return False, "could not determine the pane's default shell"
+        command.extend([shell, "-l", "-i", "-c", f"{launch}\nexec {shlex.quote(shell)} -l"])
     try:
         subprocess.run(command, capture_output=True, text=True, check=True, timeout=5)
     except subprocess.CalledProcessError as e:

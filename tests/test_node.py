@@ -46,6 +46,10 @@ class FakeLocal(nodes.LocalNode):
         self.calls.append(("spawn", op_id, command))
         return self.results.get("spawn", nodes.Spawned("ok", "%7"))
 
+    def respawn(self, op_id, pane, tmux_server, cwd, command):
+        self.calls.append(("respawn", op_id, pane, tmux_server, cwd, command))
+        return nodes.Result("ok")
+
     def kill(self, op_id, pane, tmux_server):
         self.calls.append(("kill", op_id, pane, tmux_server))
         return nodes.Result("ok")
@@ -96,6 +100,15 @@ def test_executor_runs_each_kind_and_reports_a_result(executor):
     local.results["resolve"] = None
     assert ex.run(protocol.command("r2", "resolve", 30, target="nope"), now)["data"] == {"pane": None, "label": None, "tmux_server": None}
     assert ex.run({"op_id": "x", "kind": "reboot", "ttl": 1}, now)["status"] == "failed"
+
+
+def test_respawn_is_idempotent_by_operation_id(executor):
+    ex, local, _ = executor
+    cmd = protocol.command("restart", "respawn", 15, pane="%1", tmux_server="srv-1",
+                           cwd="/repo", command="pi --session fake")
+    assert ex.run(cmd, time.monotonic()) == protocol.result("restart", "ok")
+    assert ex.run(cmd, time.monotonic()) == protocol.result("restart", "ok")
+    assert local.calls == [("respawn", "restart", "%1", "srv-1", "/repo", "pi --session fake")]
 
 
 def test_a_resent_mutating_command_returns_the_earlier_result_without_acting(executor):

@@ -331,6 +331,9 @@ class Executor:
             return protocol.result(
                 op_id, s.status, s.error, pane=s.pane, label=s.label, tmux_server=s.tmux_server
             )
+        if kind == "respawn":
+            r = self.local.respawn(op_id, a["pane"], a["tmux_server"], a["cwd"], a["command"])
+            return protocol.result(op_id, r.status, r.error)
         if kind == "kill":
             r = self.local.kill(op_id, a["pane"], a.get("tmux_server"))
             return protocol.result(op_id, r.status, r.error)

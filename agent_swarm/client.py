@@ -44,7 +44,7 @@ import httpx
 
 from pathlib import Path
 
-from . import bundle, config, handoff, restart, restore, tmux
+from . import bundle, config, handoff, restore, tmux
 from .tmux import current_pane, local_node
 
 
@@ -570,70 +570,81 @@ def cmd_restart(args: argparse.Namespace) -> int:
     if not args.handles and not args.all:
         print("name the agents to restart, or pass --all (optionally with --flavor)", file=sys.stderr)
         return 2
-    server = tmux.server_id()
-    if server is None:
-        print("no tmux server is running here", file=sys.stderr)
+
+    hub, headers = base_url(), _headers()
+    try:
+        response = httpx.get(f"{hub}/recipients", headers=headers, timeout=10)
+        response.raise_for_status()
+        recipients = response.json()["recipients"]
+        if args.all and not args.handles:
+            response = httpx.get(f"{hub}/nodes/me", headers=headers, timeout=10)
+            response.raise_for_status()
+            principal = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        print(f"could not list restart candidates: {exc}", file=sys.stderr)
         return 1
-    r = httpx.get(f"{base_url()}/api/state", headers=_headers(), timeout=10)
-    if r.status_code in (401, 403):
-        # Activity, which says whether an agent is busy, is owner-only.
-        print("the hub shares agent activity only with the owner; run restart on the hub's machine",
-              file=sys.stderr)
-        return 1
-    r.raise_for_status()
-    recipients = r.json()["recipients"]
-    handles = []
-    for name in args.handles:
-        row, why = restore.find_agent(recipients, name)
-        if row is None:
-            print(why, file=sys.stderr)
-            return 2
-        handles.append(row["user_id"])
-    items = restart.plan(
-        recipients, restore.read_layout(), local_node(), server,
-        handles=handles or None, flavor=args.flavor, force=args.force,
-    )
-    if not items:
+
+    rows = []
+    if args.handles:
+        for handle in dict.fromkeys(args.handles):
+            row, why = restore.find_agent(recipients, handle)
+            if row is None:
+                print(why, file=sys.stderr)
+                return 2
+            if row not in rows:
+                rows.append(row)
+    else:
+        rows = [row for row in recipients if row["alive"]
+                and (principal["kind"] == "owner" or row["node"] == principal["node"])
+                and (not args.flavor or row["flavor"] == args.flavor)]
+    if not rows:
         print("no agents to restart")
         return 0
-    own = os.environ.get("TMUX_PANE")
-    # The caller's own pane goes last: restarting it ends this command.
-    items.sort(key=lambda i: i.pane == own)
-    failed = 0
-    started = 0
-    watch = []
-    for item in items:
-        if item.skip:
-            print(f"  skip {item.handle}: {item.skip}")
-            continue
-        if not args.apply:
-            print(f"  restart {item.handle} in {item.pane}\n      $ {item.launch}")
-            continue
-        if started and args.stagger > 0:
+
+    own_pane = os.environ.get("TMUX_PANE")
+    own_server = tmux.server_id() if own_pane else None
+    own_node = local_node()
+
+    def is_own(row):
+        return bool(own_pane and own_server and row["node"] == own_node
+                    and row["tmux_server"] == own_server and row["tmux_pane"] == own_pane)
+
+    # The hub can complete the launch after the calling process is gone.
+    rows.sort(key=is_own)
+    failed = False
+    started = False
+    for row in rows:
+        handle = row["user_id"]
+        if args.apply and started and args.stagger > 0:
             time.sleep(args.stagger)
-        if item.pane == own:
-            print(f"  restart {item.handle} (this pane): handed to tmux; this command ends here", flush=True)
-        err = restart.apply(item, own)
-        started += 1
-        if err:
-            failed += 1
-            print(f"  FAILED {item.handle}: {err}")
-        elif item.pane != own:
-            watch.append((item, time.monotonic()))
-    blocked = 0
-    for item, at in watch:
-        state, why = restore.startup(item.pane, at, wait=30.0)
-        if state == "ok":
-            print(f"  restarted {item.handle}", flush=True)
-        elif state == "blocked":
-            blocked += 1
-            print(f"  BLOCKED {item.handle}: {why}", flush=True)
+        if args.apply and is_own(row):
+            print(f"  requesting restart of {handle} (this pane); a restart ends this command", flush=True)
+        try:
+            response = httpx.post(
+                f"{hub}/agents/{quote(handle, safe='')}/restart", headers=headers,
+                json={"force": args.force, "dry_run": not args.apply}, timeout=60,
+            )
+            result = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            print(f"  UNKNOWN {handle}: restart was not confirmed: {exc}", flush=True)
+            failed = True
+            continue
+        status = result.get("status")
+        if status == "skipped":
+            print(f"  skip {handle}: {result['reason']}")
+        elif status == "planned":
+            print(f"  restart {handle} on {result['node']} in {result['pane']}\n      $ {result['launch']}")
+        elif status == "restarted":
+            started = True
+            print(f"  restarted {handle} on {result['node']}", flush=True)
         else:
-            failed += 1
-            print(f"  FAILED {item.handle}: {why}", flush=True)
+            failed = True
+            detail = result.get("detail")
+            reason = result.get("reason") or (detail.get("error") if isinstance(detail, dict) else detail)
+            print(f"  {(status or 'failed').upper()} {handle}: {reason or response.status_code}", flush=True)
     if not args.apply:
         print("dry run: nothing changed. Run again with --apply to do this.")
-    return 1 if failed or blocked else 0
+    return int(failed)
 
 
 def _restore_register(recipients: list[dict]):
@@ -1264,7 +1275,7 @@ def main(argv: list[str] | None = None) -> int:
         "restart", help="restart agents in place with their harness's resume command, e.g. after an upgrade"
     )
     rsa.add_argument("handles", nargs="*", help="agents to restart")
-    rsa.add_argument("--all", action="store_true", help="every agent on this machine")
+    rsa.add_argument("--all", action="store_true", help="running agents on nodes you can manage")
     rsa.add_argument("--flavor", help="with --all: only this harness (claude, codex, pi, agy, hermes)")
     rsa.add_argument("--force", action="store_true", help="also restart agents without observed idle activity")
     rsa.add_argument("--apply", action="store_true", help="do it; without this, only print the plan")

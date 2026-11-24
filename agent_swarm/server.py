@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import activity, attachments, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restore, team_view, tmux
+from . import activity, attachments, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restart, restore, team_view, tmux
 
 log = logging.getLogger("agent_swarm.monitor")
 
@@ -396,6 +396,16 @@ class TaskUpdateReq(ActorFields):
     )
 
 
+class RestartReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    force: bool = False
+    dry_run: bool = True
+
+
+RESTART_WAIT = 30.0
+
+
 class SwitchReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -691,6 +701,8 @@ def create_app(
     # /api/state. Keyed by user_id; see agent_swarm.activity.step for the shape.
     registry: dict[str, dict] = {}
     retirement_lock = threading.Lock()
+    restart_lock = threading.Lock()
+    restarting: set[str] = set()
     interval = float(
         os.environ.get(
             "AGENT_SWARM_MONITOR_INTERVAL",
@@ -2131,6 +2143,70 @@ def create_app(
             "launch_error": spawned.error,
             "flavor": req.flavor, "model": model, "command": command, "cwd": cwd,
         }
+
+    @app.post("/agents/{user_id}/restart")
+    def agents_restart(user_id: str, req: RestartReq, request: Request):
+        row = _own_row_or_403(request, user_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        node = _node_of(row)
+        snap = _try_snapshot(node)
+
+        def skipped(reason: str):
+            return {"ok": True, "status": "skipped", "user_id": user_id, "reason": reason}
+
+        if node is None or snap is None:
+            return skipped(f"cannot observe tmux on node {row['node']}")
+        if row.get("reserved") or not snap.server or _stale(row, snap.server):
+            return skipped("its pane is not verified on the current tmux server")
+        pane = row["tmux_pane"]
+        observed = snap.table.get(pane)
+        layout = [{**observed, "pane_id": pane}] if observed and observed.get("command") else []
+        item = restart.plan(
+            [{**row, "activity": registry.get(user_id)}], layout, node.name, snap.server,
+            handles=[user_id], force=req.force,
+        )[0]
+        if item.skip:
+            return skipped(item.skip)
+        if req.dry_run:
+            return {"ok": True, "status": "planned", "user_id": user_id,
+                    "node": node.name, "pane": pane, "launch": item.launch}
+
+        identity = ("node", "tmux_pane", "tmux_server", "agent_id")
+
+        def same_agent(current):
+            return current is not None and all(current[key] == row[key] for key in identity)
+
+        with restart_lock:
+            current = db.get_recipient(conn, user_id)
+            if user_id in restarting:
+                return skipped("a restart is already in progress")
+            if not same_agent(current) or current["registered_at"] != row["registered_at"]:
+                return skipped("its registration changed while planning; try again")
+            restarting.add(user_id)
+        try:
+            result = node.respawn(nodes.new_op_id(), pane, snap.server, item.cwd, item.command)
+            if not result.ok:
+                return {"ok": False, "status": result.status, "user_id": user_id, "reason": result.error}
+            registry.pop(user_id, None)
+            deadline = time.monotonic() + RESTART_WAIT
+            while True:
+                current = db.get_recipient(conn, user_id)
+                if not same_agent(current):
+                    return {"ok": False, "status": "unknown", "user_id": user_id,
+                            "reason": "the agent's registration changed identity after respawn"}
+                if current["registered_at"] > row["registered_at"]:
+                    return {"ok": True, "status": "restarted", "user_id": user_id,
+                            "node": node.name, "pane": pane}
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.25)
+            prompt = _blocking_prompt_error(node, row)
+            return {"ok": False, "status": "blocked" if prompt else "unknown", "user_id": user_id,
+                    "reason": prompt or f"pane respawned but the session did not re-register within {RESTART_WAIT:g}s"}
+        finally:
+            with restart_lock:
+                restarting.remove(user_id)
 
     @app.post("/agents/{user_id}/resume")
     def agents_resume(user_id: str, _: None = Depends(_require_owner)):

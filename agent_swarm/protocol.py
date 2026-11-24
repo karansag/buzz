@@ -11,7 +11,7 @@ hub never needs to reach a node's address, and the node never listens.
                   watch     the watched panes changed
                   command   do something; carries an op id and a ttl
 
-Commands with side effects (deliver, spawn, kill, send_key, tag_pane,
+Commands with side effects (deliver, spawn, respawn, kill, send_key, tag_pane,
 rename_window) are idempotent by op id on the node: a command the hub
 resends after a reconnect gets the earlier result back rather than running
 twice. The ttl is in seconds from when the node receives the command, not
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 PROTOCOL = 1
 
-MUTATING = frozenset({"deliver", "spawn", "kill", "send_key", "tag_pane", "rename_window"})
+MUTATING = frozenset({"deliver", "spawn", "respawn", "kill", "send_key", "tag_pane", "rename_window"})
 READ_ONLY = frozenset({"capture", "resolve"})
 KINDS = MUTATING | READ_ONLY
 

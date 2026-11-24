@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from agent_swarm import nodes, protocol, server, tmux
+from agent_swarm import db, nodes, protocol, server, tmux
 
 
 @pytest.fixture()
@@ -384,3 +384,52 @@ def test_a_node_reports_its_start_folders_and_a_spawn_names_one(hub):
         t.join(5)
         # The window is tagged and renamed afterwards; answer those too if asked.
         assert out.get("error") is None
+
+
+
+def test_restart_remote_agent_from_its_node_and_wait_for_registration(hub, tmp_path):
+    app, owner, token = hub
+    remote = TestClient(app, client=("100.64.0.9", 1), headers={"Authorization": f"Bearer {token}"})
+    conn = db.connect(tmp_path / "db.sqlite")
+    db.register(conn, "puffin", "%1", "fake-pi-session", flavor="pi",
+                tmux_server="mac-srv", node="macbook")
+    db.register(conn, "local-bird", "%1", "fake-local-session", flavor="pi",
+                tmux_server="hub-srv", node=app.state.nodes.local.name)
+
+    with connect(owner, token) as ws:
+        ws.receive_json()
+        ws.send_json(protocol.observe(1, "mac-srv",
+                                       {"%1": {**TABLE["%1"], "cwd": "/remote folder"}}, {}))
+        node = app.state.nodes.get("macbook")
+        for _ in range(100):
+            try:
+                node.snapshot()
+            except nodes.Unavailable:
+                time.sleep(.01)
+            else:
+                break
+        route = "/agents/puffin/restart"
+        assert remote.post("/agents/local-bird/restart", json={"force": True}).status_code == 403
+        assert remote.post("/agents/unknown/restart", json={}).status_code == 404
+        app.state.activity_registry["puffin"] = {"status": "working"}
+        skipped = owner.post(route, json={"dry_run": False}).json()
+        assert skipped["status"] == "skipped" and "working" in skipped["reason"]
+
+        planned = remote.post(route, json={"force": True}).json()
+        assert planned["status"] == "planned"
+        assert planned["launch"] == "cd '/remote folder' && pi --session fake-pi-session"
+        assert "puffin" in app.state.activity_registry
+
+        thread, out = in_thread(lambda: remote.post(route, json={"force": True, "dry_run": False}))
+        command = answer(ws, "respawn", status="ok")
+        assert command["args"] == {"pane": "%1", "tmux_server": "mac-srv",
+                                   "cwd": "/remote folder", "command": "pi --session fake-pi-session"}
+        assert thread.is_alive()
+        blocked = owner.post(route, json={"force": True, "dry_run": False}).json()
+        assert blocked["status"] == "skipped" and "already in progress" in blocked["reason"]
+        db.register(conn, "puffin", "%1", "fake-pi-session", flavor="pi",
+                    tmux_server="mac-srv", node="macbook")
+        thread.join(5)
+        assert out["value"].json() == {"ok": True, "status": "restarted", "user_id": "puffin",
+                                      "node": "macbook", "pane": "%1"}
+    conn.close()

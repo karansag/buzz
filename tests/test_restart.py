@@ -56,19 +56,6 @@ def test_flavor_force_and_named_handles():
     assert named == {"far": "its pane is not in this machine's tmux (node n2)", "nobody": "not registered"}
 
 
-def test_own_pane_is_handed_to_the_tmux_server(monkeypatch):
-    calls = []
-    monkeypatch.setattr(restart.subprocess, "run", lambda argv, **kw: calls.append(argv))
-    item = restart.Restart("otter", "%1", "/repo", "claude --resume s")
-    assert restart.apply(item, own_pane="%7") is None
-    assert [c[1] for c in calls] == ["respawn-pane", "send-keys", "send-keys"]
-    assert calls[0] == ["tmux", "respawn-pane", "-k", "-t", "%1", "-c", "/repo"]
-    calls.clear()
-    assert restart.apply(item, own_pane="%1") is None
-    assert len(calls) == 1 and calls[0][1:3] == ["run-shell", "-b"]
-    assert "respawn-pane -k -t %1" in calls[0][3] and "claude --resume s" in calls[0][3]
-
-
 @pytest.mark.parametrize("status", ["working", "needs_attention", "unknown", "stopped", "future_state", None, ""])
 def test_default_restart_rejects_every_unobserved_or_nonidle_activity(status):
     row = agent("probe", "%1", status=status)
@@ -97,3 +84,63 @@ def test_force_keeps_pane_and_session_safety_checks():
     assert "no harness" in planned["gone"].skip
     assert "no session id" in planned["anon"].skip
     assert "not in this machine" in planned["far"].skip
+
+
+def test_restart_cli_all_uses_the_hub_and_limits_a_node_to_its_own_agents(monkeypatch, capsys):
+    import httpx
+
+    from agent_swarm import client
+
+    rows = [
+        {**agent("puffin", "%1", flavor="pi"), "alive": True},
+        {**agent("far", "%1", flavor="pi", node="n2"), "alive": True},
+        {**agent("other", "%2", flavor="claude"), "alive": True},
+        {**agent("stopped", "%3", flavor="pi"), "alive": False},
+    ]
+    gets = []
+    posts = []
+    monkeypatch.setattr(client, "base_url", lambda: "http://hub")
+    monkeypatch.setattr(client, "_headers", lambda: {"Authorization": "Bearer fake-node"})
+    monkeypatch.delenv("TMUX_PANE", raising=False)
+
+    def get(url, **kw):
+        gets.append((url, kw["headers"]))
+        data = {"recipients": rows} if url.endswith("/recipients") else {"kind": "node", "node": "n1"}
+        return httpx.Response(200, json=data, request=httpx.Request("GET", url))
+
+    def post(url, **kw):
+        posts.append((url, kw["json"]))
+        return httpx.Response(200, json={"status": "restarted", "node": "n1"})
+
+    monkeypatch.setattr(client.httpx, "get", get)
+    monkeypatch.setattr(client.httpx, "post", post)
+    assert client.main(["restart", "--all", "--flavor", "pi", "--force", "--apply"]) == 0
+    assert gets == [(f"http://hub/{path}", {"Authorization": "Bearer fake-node"})
+                    for path in ("recipients", "nodes/me")]
+    assert posts == [("http://hub/agents/puffin/restart", {"force": True, "dry_run": False})]
+    assert "restarted puffin on n1" in capsys.readouterr().out
+
+
+def test_local_respawn_checks_the_server_and_running_pane_before_launching(monkeypatch):
+    from agent_swarm import nodes
+
+    row = {"command": "pi", "cwd": "/a folder"}
+    monkeypatch.setattr(tmux, "server_id", lambda: SERVER)
+    monkeypatch.setattr(tmux, "pane_table", lambda: {"%1": row})
+    calls = []
+
+    def record(kind):
+        def operation(*args, **kwargs):
+            calls.append((kind, args, kwargs))
+            return True, None
+        return operation
+
+    monkeypatch.setattr(tmux, "respawn_pane", record("respawn"))
+    monkeypatch.setattr(tmux, "type_line", record("type"))
+    local = nodes.LocalNode("n1")
+    assert not local.respawn("old", "%1", "old-server", "/a folder", "pi --session id").ok
+    assert not local.respawn("changed", "%1", SERVER, "/old", "pi --session id").ok
+    assert not calls
+    assert local.respawn("valid", "%1", SERVER, "/a folder", "pi --session id").ok
+    assert calls == [("respawn", ("%1", "/a folder"),
+                      {"launch": "cd '/a folder' && pi --session id"})]
