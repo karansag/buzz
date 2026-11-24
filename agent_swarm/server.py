@@ -19,6 +19,7 @@ import secrets
 import threading
 from dataclasses import dataclass
 
+import anyio
 import httpx
 import orjson
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -2923,25 +2924,35 @@ def create_app(
             headers["location"] = f"/tabs/{name}/" + headers["location"][len(base):]
         return Response(r.content, status_code=r.status_code, headers=headers)
 
-    @app.get("/api/peek/{user_id}")
-    def peek(user_id: str, _: None = Depends(_require_owner)):
+    # Peeking should still work when slow sends or switches occupy the
+    # default worker pool. Bound captures separately so repeated polls
+    # cannot create an unbounded number of workers.
+    peek_workers = anyio.CapacityLimiter(8)
+
+    def _capture_peek(user_id: str) -> dict:
         recipient = db.get_recipient(conn, user_id)
         if recipient is None:
             raise HTTPException(status_code=404, detail={"error": "unknown agent"})
         node = _node_of(recipient)
+        pane = recipient["tmux_pane"]
         if node is None:
-            text, err, label = None, f"node {recipient['node']} is not connected", None
+            text, err = None, f"node {recipient['node']} is not connected"
         else:
-            text, err = node.capture(recipient["tmux_pane"], recipient.get("tmux_server"), colors=True)
-            snap = _try_snapshot(node)
-            label = snap.label(recipient["tmux_pane"]) if snap else None
+            text, err = node.capture(pane, recipient.get("tmux_server"), colors=True)
         return {
             "user_id": user_id,
-            "tmux_pane": recipient["tmux_pane"],
-            "pane_label": label or recipient.get("pane_label") or recipient["tmux_pane"],
+            "tmux_pane": pane,
+            "pane_label": recipient.get("pane_label") or pane,
             "text": text,
             "error": err,
         }
+
+    @app.get("/api/peek/{user_id}")
+    async def peek(user_id: str, request: Request):
+        # The owner check is in-memory. A sync dependency would still queue
+        # behind the same default workers before reaching the capture pool.
+        _require_owner(request)
+        return await anyio.to_thread.run_sync(_capture_peek, user_id, limiter=peek_workers)
 
     return app
 

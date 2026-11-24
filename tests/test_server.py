@@ -4,9 +4,12 @@ Delivery is monkeypatched to avoid touching real tmux.
 """
 
 import asyncio
+import threading
 import time
 from pathlib import Path
 
+import anyio
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -585,13 +588,59 @@ def test_peek_returns_pane_capture(client, monkeypatch):
         tmux, "capture_pane", lambda pane, colors=False: asked.append(colors) or (f"screen of {pane}\n$ ", None)
     )
     user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
+    def unexpected_snapshot():
+        pytest.fail("peek should use the registered label without listing panes")
+
+    monkeypatch.setattr(client.app.state.nodes.local, "snapshot", unexpected_snapshot)
     r = client.get(f"/api/peek/{user}")
     assert asked == [True]  # the terminal view shows the pane's colors
     assert r.status_code == 200
     body = r.json()
     assert body["tmux_pane"] == "0:1.0"
+    assert body["pane_label"] == "0:1.0"
     assert body["text"].startswith("screen of 0:1.0")
     assert body["error"] is None
+
+
+def test_peek_does_not_wait_for_default_workers(client):
+    user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
+    entered = threading.Event()
+    release = threading.Event()
+
+    @client.app.get("/test/hold-worker")
+    def hold_worker():
+        entered.set()
+        release.wait()
+        return {}
+
+    async def exercise():
+        limiter = anyio.to_thread.current_default_thread_limiter()
+        original = limiter.total_tokens
+        limiter.total_tokens = 1
+        transport = httpx.ASGITransport(app=client.app, client=("127.0.0.1", 50000))
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+            held = asyncio.create_task(http.get("/test/hold-worker"))
+            try:
+                with anyio.fail_after(3):
+                    while not entered.is_set():
+                        await asyncio.sleep(0.001)
+                # Release the holder even if the regression blocks peek. With
+                # the old endpoint bail out after the worker is freed, rather
+                # than rely on canceling a synchronous AnyIO worker await.
+                watchdog = threading.Timer(3, release.set)
+                watchdog.start()
+                try:
+                    response = await http.get(f"/api/peek/{user}")
+                    assert not release.is_set(), "peek queued behind the default worker"
+                    assert response.json()["text"].startswith("screen of 0:1.0")
+                finally:
+                    watchdog.cancel()
+            finally:
+                release.set()
+                await held
+                limiter.total_tokens = original
+
+    asyncio.run(exercise())
 
 
 def test_peek_unknown_agent_404(client):
