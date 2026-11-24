@@ -2389,7 +2389,24 @@ function App() {
   const currentRetirement = retirement(focusUser);
   const savedAgent = lastAgent?.user && lastAgent.retirement === retirement(lastAgent.user)
     ? state?.recipients.find(r => r.user_id === lastAgent.user) : null;
-  const agentTab = currentAgent || savedAgent;
+  // Before any agent page has been opened in this browser, the tab offers the
+  // agent the owner last talked with, so it is there from the first visit.
+  const recentChat = !currentAgent && !savedAgent && state ? (() => {
+    const known = new Map(state.recipients.map(r => [r.user_id, r]));
+    // A reclaimed handle's messages from before its retirement belong to the old agent.
+    const retiredAt = new Map();
+    for (const r of state.retired_agents || []) {
+      retiredAt.set(r.original_id, Math.max(retiredAt.get(r.original_id) ?? 0, r.retired_at ?? 0));
+    }
+    let best = null;
+    for (const m of state.messages) {
+      const other = m.sender === "owner" ? m.recipient : m.recipient === "owner" ? m.sender : null;
+      if (!other || !known.has(other) || m.ts <= (retiredAt.get(other) ?? -Infinity)) continue;
+      if (!best || m.id > best.id) best = { id: m.id, agent: known.get(other) };
+    }
+    return best?.agent ?? null;
+  })() : null;
+  const agentTab = currentAgent || savedAgent || recentChat;
   const agentTabHash = agentTab ? focusHash(agentTab.user_id) : null;
   viewsRef.current = ["#/", ...(agentTabHash ? [agentTabHash] : []), CHATS_ROUTE, HISTORY_ROUTE,
     ...(state?.tabs || []).map(tabHash)];

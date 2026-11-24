@@ -874,7 +874,9 @@ for (const width of [390, 1500]) {
       // The first assertion reads the nav as soon as it exists; without this
       // wait a loaded machine can read it a beat before the tabs render.
       await page.waitForSelector('nav.views a[href="#/tab/usage"]');
-      assert.deepEqual(await page.locator('nav.views a').allTextContents(), ['overview', 'chats', 'task history', 'usage', 'prs']);
+      // The agent tab (latest owner conversation) sits between overview and chats.
+      assert.deepEqual(await page.locator('nav.views a:not(.agent-view-tab)').allTextContents(), ['overview', 'chats', 'task history', 'usage', 'prs']);
+      assert.equal(await page.locator('nav.views a').nth(1).getAttribute('class'), 'agent-view-tab ');
       for (const name of ['usage', 'prs']) {
         await page.locator(`nav.views a[href="#/tab/${name}"]`).click();
         const frame = page.frameLocator('iframe.tab-frame');
@@ -959,7 +961,24 @@ test('agent tab returns to the conversation with its draft and scroll, and survi
   } finally { await page.close(); }
 });
 
-test('390px agent tab fits and hides after retirement or when its saved handle is unknown', async () => {
+test('before any agent page is opened, the agent tab offers the latest owner conversation', async () => {
+  const { page, state, errors } = await setup(1500, 900, false);
+  const tab = page.locator('nav.views .agent-view-tab');
+  const top = Math.max(...state.messages.map(m => m.id)) + 1;
+  state.messages.push({ id: top, sender: 'owner', recipient: 'stoat', ts: now + 500,
+    status: 'delivered', content: 'latest owner message' });
+  try {
+    await page.goto(base + '#/');
+    await page.evaluate(() => localStorage.removeItem('swarm-last-agent'));
+    await page.reload();
+    await tab.waitFor();
+    assert.equal(await tab.getAttribute('href'), '#/agent/stoat');
+    assert.equal(await tab.getAttribute('aria-current'), null);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('390px agent tab fits and never points at a retired or unknown saved handle', async () => {
   const { page, state, errors } = await setup(390, 844);
   const user = names[1];
   const tab = page.locator('nav.views .agent-view-tab');
@@ -973,12 +992,14 @@ test('390px agent tab fits and hides after retirement or when its saved handle i
     // Even if the same handle was reclaimed before the next poll, it is a new conversation.
     await page.reload();
     await page.locator('.history').waitFor();
-    assert.equal(await tab.count(), 0);
+    // It may fall back to the latest conversation, but never to the retired agent.
+    const href = async () => (await tab.count()) ? tab.getAttribute('href') : null;
+    assert.notEqual(await href(), '#/agent/' + user);
     await page.evaluate(() => localStorage.setItem('swarm-last-agent',
       JSON.stringify({ user: 'unknown-agent', retirement: '' })));
     await page.reload();
     await page.locator('.history').waitFor();
-    assert.equal(await tab.count(), 0);
+    assert.notEqual(await href(), '#/agent/unknown-agent');
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 });

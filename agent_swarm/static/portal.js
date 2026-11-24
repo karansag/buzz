@@ -14923,7 +14923,22 @@ function App() {
 	const currentAgent = state?.recipients.find((r) => r.user_id === focusUser);
 	const currentRetirement = retirement(focusUser);
 	const savedAgent = lastAgent?.user && lastAgent.retirement === retirement(lastAgent.user) ? state?.recipients.find((r) => r.user_id === lastAgent.user) : null;
-	const agentTab = currentAgent || savedAgent;
+	const recentChat = !currentAgent && !savedAgent && state ? (() => {
+		const known = new Map(state.recipients.map((r) => [r.user_id, r]));
+		const retiredAt = /* @__PURE__ */ new Map();
+		for (const r of state.retired_agents || []) retiredAt.set(r.original_id, Math.max(retiredAt.get(r.original_id) ?? 0, r.retired_at ?? 0));
+		let best = null;
+		for (const m of state.messages) {
+			const other = m.sender === "owner" ? m.recipient : m.recipient === "owner" ? m.sender : null;
+			if (!other || !known.has(other) || m.ts <= (retiredAt.get(other) ?? -Infinity)) continue;
+			if (!best || m.id > best.id) best = {
+				id: m.id,
+				agent: known.get(other)
+			};
+		}
+		return best?.agent ?? null;
+	})() : null;
+	const agentTab = currentAgent || savedAgent || recentChat;
 	const agentTabHash = agentTab ? focusHash(agentTab.user_id) : null;
 	viewsRef.current = [
 		"#/",
