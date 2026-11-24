@@ -5,7 +5,8 @@ import { contextChip } from "./context.js";
 import { OwnerNote } from "./owner-note.js";
 import { QuickSwitcher, noteOpened } from "./quick-switch.js";
 import { useAgentHistory } from "./agent-history.js";
-import { useConversationSearch, ConversationSearchBar, highlightSearch } from "./conversation-search.js";
+import { useConversationSearch, ConversationSearchBar } from "./conversation-search.js";
+import { ChatMessage } from "./chat-message.js";
 import { TaskTrash } from "./task-trash.js";
 import { confirmDialog, showNotice } from "./dialogs.js";
 import { TaskStatusActions } from "./task-status.js";
@@ -42,7 +43,7 @@ import { CompactBees, HiveView } from "./hive.js";
 import { TabView } from "./tabs.js";
 import { TAB_ROUTE, stepView, tabHash } from "./views.js";
 import { HistoryView, HISTORY_ROUTE, historyHash } from "./history.js";
-import { AttachmentLink, AttachmentList, AttachmentPicker, useAttachments } from "./attachments.js";
+import { AttachmentList, AttachmentPicker, useAttachments } from "./attachments.js";
 import { createBottomFollower } from "./scroll-follow.js";
 import { attentionReporter } from "./native.js";
 import { notificationReporter } from "./notifications.js";
@@ -1795,21 +1796,13 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       ${msgs.map(m => html`${gapAt.has(m.id) && html`<div key=${`gap-${m.id}`} class="msg-gap" role="note">
         <span>${gapLabel(gapAt.get(m.id))}</span>
         ${loadGap && html`<button type="button" class="mini" onClick=${() => loadGap(gapAt.get(m.id))}>load them</button>`}</div>`}
-        <div key=${m.id} data-message-id=${m.id} tabindex="-1" onAnimationEnd=${e => e.currentTarget.classList.remove("reply-highlight")} onContextMenu=${e => openMenu(e, m)} class=${[
-            "msg",
-            sentByViewer(m.sender, a, b, page) ? "right" : "",
-            freshIds.has(m.id) ? "fresh" : "",
-            m.status === "failed" ? "failed" : m.status === "unknown" ? "unknown" : "",
-            m.sender === "owner" ? "from-owner" : "",
-            m.pending ? "pending" : "",
-          ].join(" ")}>
-          <div class="bubble"><${ReplyPreview} message=${m} messages=${msgs} />${m.content && html`<div class="md"
-            dangerouslySetInnerHTML=${{ __html: highlightSearch(renderMarkdown(shellNewlines(m.content)), search?.words || []) }} />`}${m.attachments?.length > 0 && html`<div class=${`msg-images ${m.content ? "" : "only"}`}>
-            ${m.attachments.map(name => html`<${AttachmentLink} key=${name} name=${name} />`)}
-          </div>`}</div>
-          <div class="tag">${pinned.has(m.id) && html`<span class="pin-mark" role="img" aria-label="pinned" title="Pinned">📌</span> `}${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}${disp(m.sender)}${m.context && html` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && html` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && html` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && html` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && html` <button type="button" class="msg-reply"
-            title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}</div>
-        </div>`)}
+        <${ChatMessage} key=${m.id} historyId=${m.id} m=${m} now=${now} messages=${msgs}
+            right=${sentByViewer(m.sender, a, b, page)} pinned=${pinned.has(m.id)} fresh=${freshIds.has(m.id)}
+            words=${search?.words} onContextMenu=${e => openMenu(e, m)}>
+          ${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && html` <${Resend} m=${m} refresh=${refresh} />`}
+          ${canReply(m) && html` <button type="button" class="msg-reply"
+            title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}
+        </${ChatMessage}>`)}
       ${recipient && html`<div class="jump-dock">${awayFrom !== null && html`<button type="button" class="jump-bottom" onClick=${jumpToBottom}
         title="Scroll to the newest message">↓ Jump to bottom${newSinceAway > 0 ? html` <span class="jump-new">· ${newSinceAway} new</span>` : ""}</button>`}</div>`}
     </div>
@@ -1821,6 +1814,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
         ${pinned.has(menu.m.id) ? "Unpin" : "📌 Pin"}</button>
     </div>`}
     ${openPin && html`<${PinDialog} m=${pins.find(p => p.id === openPin.id) || openPin} now=${now} refresh=${refresh}
+      messages=${msgs} right=${sentByViewer(openPin.sender, a, b, page)}
       close=${() => setOpenPin(null)} inChat=${m => { location.hash = pinHref(m); }} />`}
     <button type="button" class="history-resizer" role="separator" aria-orientation="horizontal"
       aria-label="Resize conversation history"

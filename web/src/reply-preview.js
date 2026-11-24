@@ -13,10 +13,11 @@ export function ReplyPreview({ message, messages }) {
   const [show, setShow] = useState(false);
   if (!id) return null;
   const preview = messages.find(m => m.id === id) || original || message.reply_preview;
-  const open = async () => {
-    // Stay in this thread, including when another conversation is focused.
-    const reply = document.querySelector(`[data-message-id="${message.id}"]`);
-    const target = reply?.closest('.thread, .agent-talk-thread')?.querySelector(`[data-message-id="${id}"]`);
+  const open = async (event) => {
+    const quote = event.currentTarget;
+    // A pinned reply opens its quote in the dialog, keeping the chat in place.
+    const thread = quote.closest("dialog") ? null : quote.closest(".thread, .agent-talk-thread");
+    const target = thread?.querySelector(`[data-message-id="${id}"]`);
     if (target) {
       target.scrollIntoView({ block: "center", behavior: "instant" });
       target.focus({ preventScroll: true });
@@ -26,6 +27,8 @@ export function ReplyPreview({ message, messages }) {
       return;
     }
     if (original) { setShow(value => !value); return; }
+    const loaded = messages.find(m => m.id === id);
+    if (loaded) { setOriginal(loaded); setShow(true); return; }
     setBusy(true); setError("");
     try {
       const response = await fetch(`/messages?id=${id}`);

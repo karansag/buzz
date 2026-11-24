@@ -5,9 +5,7 @@
 import { html } from "htm/preact";
 import { useEffect, useRef } from "preact/hooks";
 import { JSONH, disp, pairKey, rel } from "./shared.js";
-import { renderMarkdown } from "./markdown.js";
-import { shellNewlines } from "./newlines.js";
-import { AttachmentLink } from "./attachments.js";
+import { ChatMessage } from "./chat-message.js";
 import { showNotice } from "./dialogs.js";
 
 export async function setPinned(id, pinned, refresh) {
@@ -44,7 +42,7 @@ export function PinStrip({ pins, open }) {
   </div>`;
 }
 
-export function PinDialog({ m, now, close, refresh, inChat = null }) {
+export function PinDialog({ m, now, close, refresh, messages, right, inChat = null }) {
   const ref = useRef(null);
   useEffect(() => {
     const dialog = ref.current;
@@ -56,12 +54,10 @@ export function PinDialog({ m, now, close, refresh, inChat = null }) {
   const onKey = (e) => { if (e.key === "Escape") e.stopPropagation(); };
   return html`<dialog ref=${ref} class="page-dialog pin-dialog" aria-label="Pinned message"
       onClose=${close} onKeyDown=${onKey} onClick=${e => { if (e.target === ref.current) ref.current.close(); }}>
-    <div class="pin-dialog-head"><span aria-hidden="true">📌</span> ${disp(m.sender)} <span class="swap">→</span> ${disp(m.recipient)} <span class="age">· ${rel(m.ts, now)}</span></div>
-    <div class="pin-dialog-body">
-      ${m.content && html`<div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}
-      ${m.attachments?.length > 0 && html`<div class="msg-images">${m.attachments.map(name => html`<${AttachmentLink} key=${name} name=${name} />`)}</div>`}
+    <div class="pin-dialog-body" tabindex="0">
+      <${ChatMessage} m=${m} now=${now} messages=${messages} right=${right} pinned=${true} />
     </div>
-    <div class="page-dialog-actions">
+    <div class="page-dialog-actions pin-dialog-actions">
       <button type="button" class="mini" onClick=${() => { setPinned(m.id, false, refresh); ref.current.close(); }}>unpin</button>
       ${inChat && html`<button type="button" class="mini" onClick=${() => { ref.current.close(); inChat(m); }}>show in chat</button>`}
       <button type="button" class="act" autofocus onClick=${() => ref.current.close()}>close</button>

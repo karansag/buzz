@@ -422,6 +422,65 @@ test('a conversation expands to fill the window and back (button, shortcut, Esc)
   } finally { await page.close(); }
 });
 
+for (const width of [390, 1280]) {
+  test(`expanded pins render as full-width chat messages at ${width}px`, async () => {
+    const { page, state, errors } = await setup(width, 800, width < 600);
+    const content = [
+      '## Deployment plan', '', '- First step', '- Second step', '',
+      '| Check | State |', '| --- | --- |', '| Build | Ready |', '',
+      'More detail for the change.'.repeat(650),
+    ].join('\n');
+    const original = {
+      id: 499, sender: 'stoat', recipient: 'owner', content: 'The original question.',
+      ts: state.now - 31, status: 'delivered', attachments: [],
+    };
+    const pin = {
+      ...original, id: 500, sender: 'owner', recipient: 'stoat', content,
+      ts: state.now - 30, reply_to: original.id, context: 'Deployment', attachments: [file],
+    };
+    state.messages.push(original, pin);
+    state.pins = [{ ...pin, pinned_at: state.now }];
+    try {
+      await page.goto(base + '#/agent/stoat');
+      const chat = page.locator('.thread .msg[data-message-id="500"]');
+      await chat.waitFor();
+      const bubble = chat.locator('.bubble');
+      const body = await bubble.locator('.md').innerHTML();
+      const color = await bubble.evaluate(el => getComputedStyle(el).backgroundColor);
+      const font = await bubble.evaluate(el => getComputedStyle(el).fontSize);
+      const chatScroll = page.locator('.thread .msgs').first();
+      const top = await chatScroll.evaluate(el => el.scrollTop);
+
+      await page.locator('.thread .pin-chip').click();
+      const dialog = page.getByRole('dialog', { name: 'Pinned message' });
+      const expanded = dialog.locator('.msg.right.from-owner');
+      await expanded.waitFor();
+      const expandedBubble = expanded.locator('.bubble');
+      assert.equal(await expandedBubble.locator('.md').innerHTML(), body);
+      assert.equal(await expandedBubble.evaluate(el => getComputedStyle(el).backgroundColor), color);
+      assert.equal(await expandedBubble.evaluate(el => getComputedStyle(el).fontSize), font);
+      assert.equal(await expandedBubble.locator('h2').textContent(), 'Deployment plan');
+      assert.equal(await expandedBubble.locator('ul li').count(), 2);
+      assert.equal(await expandedBubble.locator('table th').count(), 2);
+      assert.equal(await expandedBubble.locator('.msg-images a').count(), 1);
+      assert.match(await expanded.locator('.tag').textContent(), /owner.*Deployment/);
+      assert.equal(await expanded.locator('.pin-mark').count(), 1);
+      const bounds = await dialog.boundingBox();
+      assert.ok(bounds.width >= width - 32 && bounds.width <= width);
+      const scrollable = dialog.locator('.pin-dialog-body');
+      assert.ok((await expandedBubble.boundingBox()).width >= bounds.width - 40);
+      assert.ok(await scrollable.evaluate(el => el.scrollHeight > el.clientHeight));
+      await expanded.getByRole('button', { name: 'Show original message 499' }).click();
+      assert.match(await expanded.locator('.reply-original').textContent(), /The original question/);
+      assert.equal(await chatScroll.evaluate(el => el.scrollTop), top);
+
+      await dialog.getByRole('button', { name: 'close', exact: true }).click();
+      await dialog.waitFor({ state: 'detached' });
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
 test('pinned messages: pin from the menu, open from the strip, list on the chats page', async () => {
   const { page, state, errors } = await setup(1280, 800, false);
   state.pins = [];
@@ -459,6 +518,9 @@ test('pinned messages: pin from the menu, open from the strip, list on the chats
     const dialog = page.locator('dialog.pin-dialog[open]');
     await dialog.waitFor();
     assert.equal(await dialog.locator('.md li').count(), 2);
+    const dialogBounds = await dialog.boundingBox();
+    const shortBubble = await dialog.locator('.msg .bubble').boundingBox();
+    assert.ok(shortBubble.width >= dialogBounds.width - 40);
     assert.equal(await box.evaluate(el => el.scrollTop), top);
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'detached' });

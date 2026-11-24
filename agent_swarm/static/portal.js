@@ -9062,8 +9062,9 @@ function ReplyPreview({ message, messages }) {
 	const [show, setShow] = d(false);
 	if (!id) return null;
 	const preview = messages.find((m) => m.id === id) || original || message.reply_preview;
-	const open = async () => {
-		const target = document.querySelector(`[data-message-id="${message.id}"]`)?.closest(".thread, .agent-talk-thread")?.querySelector(`[data-message-id="${id}"]`);
+	const open = async (event) => {
+		const quote = event.currentTarget;
+		const target = (quote.closest("dialog") ? null : quote.closest(".thread, .agent-talk-thread"))?.querySelector(`[data-message-id="${id}"]`);
 		if (target) {
 			target.scrollIntoView({
 				block: "center",
@@ -9077,6 +9078,12 @@ function ReplyPreview({ message, messages }) {
 		}
 		if (original) {
 			setShow((value) => !value);
+			return;
+		}
+		const loaded = messages.find((m) => m.id === id);
+		if (loaded) {
+			setOriginal(loaded);
+			setShow(true);
 			return;
 		}
 		setBusy(true);
@@ -10116,6 +10123,35 @@ function highlightSearch(html, words) {
 	if (highlights.size >= 500) highlights.delete(highlights.keys().next().value);
 	highlights.set(key, out);
 	return out;
+}
+//#endregion
+//#region web/src/chat-message.js
+function ChatMessage({ m, now, messages, right, pinned, fresh, words = [], historyId, onContextMenu, children }) {
+	return m$1`<div data-message-id=${historyId} tabindex=${historyId === void 0 ? null : "-1"}
+      onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")}
+      onContextMenu=${onContextMenu} class=${[
+		"msg",
+		right ? "right" : "",
+		fresh ? "fresh" : "",
+		m.status === "failed" ? "failed" : m.status === "unknown" ? "unknown" : "",
+		m.sender === "owner" ? "from-owner" : "",
+		m.pending ? "pending" : ""
+	].join(" ")}>
+    <div class="bubble">
+      <${ReplyPreview} message=${m} messages=${messages} />
+      ${m.content && m$1`<div class="md" dangerouslySetInnerHTML=${{ __html: highlightSearch(renderMarkdown(shellNewlines(m.content)), words) }} />`}
+      ${m.attachments?.length > 0 && m$1`<div class=${`msg-images ${m.content ? "" : "only"}`}>
+        ${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}
+      </div>`}
+    </div>
+    <div class="tag">${pinned && m$1`<span class="pin-mark" role="img" aria-label="pinned" title="Pinned">📌</span> `}
+      ${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}
+      ${disp(m.sender)}${m.context && m$1` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}
+      ${m.status === "failed" && m$1` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}
+      ${m.status === "unknown" && m$1` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}
+      ${children}
+    </div>
+  </div>`;
 }
 //#endregion
 //#region web/src/dialogs.js
@@ -12423,7 +12459,7 @@ function PinStrip({ pins, open }) {
     </button>`)}
   </div>`;
 }
-function PinDialog({ m, now, close, refresh, inChat = null }) {
+function PinDialog({ m, now, close, refresh, messages, right, inChat = null }) {
 	const ref = A(null);
 	h(() => {
 		const dialog = ref.current;
@@ -12440,12 +12476,10 @@ function PinDialog({ m, now, close, refresh, inChat = null }) {
       onClose=${close} onKeyDown=${onKey} onClick=${(e) => {
 		if (e.target === ref.current) ref.current.close();
 	}}>
-    <div class="pin-dialog-head"><span aria-hidden="true">📌</span> ${disp(m.sender)} <span class="swap">→</span> ${disp(m.recipient)} <span class="age">· ${rel(m.ts, now)}</span></div>
-    <div class="pin-dialog-body">
-      ${m.content && m$1`<div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(m.content)) }} />`}
-      ${m.attachments?.length > 0 && m$1`<div class="msg-images">${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}</div>`}
+    <div class="pin-dialog-body" tabindex="0">
+      <${ChatMessage} m=${m} now=${now} messages=${messages} right=${right} pinned=${true} />
     </div>
-    <div class="page-dialog-actions">
+    <div class="page-dialog-actions pin-dialog-actions">
       <button type="button" class="mini" onClick=${() => {
 		setPinned(m.id, false, refresh);
 		ref.current.close();
@@ -14336,21 +14370,13 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       ${msgs.map((m) => m$1`${gapAt.has(m.id) && m$1`<div key=${`gap-${m.id}`} class="msg-gap" role="note">
         <span>${gapLabel(gapAt.get(m.id))}</span>
         ${loadGap && m$1`<button type="button" class="mini" onClick=${() => loadGap(gapAt.get(m.id))}>load them</button>`}</div>`}
-        <div key=${m.id} data-message-id=${m.id} tabindex="-1" onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")} onContextMenu=${(e) => openMenu(e, m)} class=${[
-		"msg",
-		sentByViewer(m.sender, a, b, page) ? "right" : "",
-		freshIds.has(m.id) ? "fresh" : "",
-		m.status === "failed" ? "failed" : m.status === "unknown" ? "unknown" : "",
-		m.sender === "owner" ? "from-owner" : "",
-		m.pending ? "pending" : ""
-	].join(" ")}>
-          <div class="bubble"><${ReplyPreview} message=${m} messages=${msgs} />${m.content && m$1`<div class="md"
-            dangerouslySetInnerHTML=${{ __html: highlightSearch(renderMarkdown(shellNewlines(m.content)), search?.words || []) }} />`}${m.attachments?.length > 0 && m$1`<div class=${`msg-images ${m.content ? "" : "only"}`}>
-            ${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}
-          </div>`}</div>
-          <div class="tag">${pinned.has(m.id) && m$1`<span class="pin-mark" role="img" aria-label="pinned" title="Pinned">📌</span> `}${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}${disp(m.sender)}${m.context && m$1` · <span class="ctx">${m.context}</span>`} · ${m.pending ? "sending…" : rel(m.ts, now)}${m.status === "failed" && m$1` · <span class="ctx">undelivered${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.status === "unknown" && m$1` · <span class="ctx">outcome unknown${m.delivery_error ? `: ${m.delivery_error}` : ""}</span>`}${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && m$1` <${Resend} m=${m} refresh=${refresh} />`}${canReply(m) && m$1` <button type="button" class="msg-reply"
-            title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}</div>
-        </div>`)}
+        <${ChatMessage} key=${m.id} historyId=${m.id} m=${m} now=${now} messages=${msgs}
+            right=${sentByViewer(m.sender, a, b, page)} pinned=${pinned.has(m.id)} fresh=${freshIds.has(m.id)}
+            words=${search?.words} onContextMenu=${(e) => openMenu(e, m)}>
+          ${m.sender === "owner" && ["failed", "unknown"].includes(m.status) && m$1` <${Resend} m=${m} refresh=${refresh} />`}
+          ${canReply(m) && m$1` <button type="button" class="msg-reply"
+            title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}
+        </${ChatMessage}>`)}
       ${recipient && m$1`<div class="jump-dock">${awayFrom !== null && m$1`<button type="button" class="jump-bottom" onClick=${jumpToBottom}
         title="Scroll to the newest message">↓ Jump to bottom${newSinceAway > 0 ? m$1` <span class="jump-new">· ${newSinceAway} new</span>` : ""}</button>`}</div>`}
     </div>
@@ -14374,6 +14400,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
         ${pinned.has(menu.m.id) ? "Unpin" : "📌 Pin"}</button>
     </div>`}
     ${openPin && m$1`<${PinDialog} m=${pins.find((p) => p.id === openPin.id) || openPin} now=${now} refresh=${refresh}
+      messages=${msgs} right=${sentByViewer(openPin.sender, a, b, page)}
       close=${() => setOpenPin(null)} inChat=${(m) => {
 		location.hash = pinHref(m);
 	}} />`}
