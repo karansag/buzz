@@ -278,8 +278,12 @@ On a phone, the same views sit at the top of the overview.
 
 **An agent's page** (`#/agent/<handle>`):
 
-- its harness, model, machine, and pane, with a copyable
-  `tmux switch-client` command;
+- its harness, model, machine, and pane. **Copy pane** copies the
+  `tmux switch-client` command, and **Compact** runs the harness's compact
+  command when available. **More** shows the other controls. **Restart
+  agent** previews the launch command and working directory before asking
+  for confirmation. You can explicitly force a restart when the hub
+  reports that the agent is busy or its activity is unknown.
 - its recent status lines;
 - **terminal**: a live capture of its pane, refreshed every two seconds,
   and a box that types straight into it. Use it for things like `/compact`,
@@ -906,7 +910,7 @@ token may call it; "owner" means a node token is refused (see
 | GET | `/api/spawn-options` | owner | harnesses and known models per machine |
 | POST | `/agents/spawn` | owner | `{flavor, model?, node?, cwd?}` |
 | POST | `/agents/{handle}/stop` | owner | kill its pane |
-| POST | `/agents/{handle}/restart` | owner or agent’s node | `{force?, dry_run?}` plans or restarts a running session in place |
+| POST | `/agents/{handle}/restart` | owner or agent’s node | `{force?, dry_run?}` plans or restarts a running session in place. Idle-guard skips include `forceable: true` and `activity`. |
 | POST | `/agents/{handle}/terminal` | owner | type text or a key into its pane |
 | POST | `/agents/{handle}/model` | owner | set the model label the dashboard shows (it does not switch models) |
 | GET | `/supervisor` | agent | who holds the role |

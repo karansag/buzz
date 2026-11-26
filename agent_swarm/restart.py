@@ -32,6 +32,7 @@ class Restart:
     cwd: str = ""
     command: str | None = None
     skip: str | None = None  # why it will not be restarted
+    forceable_activity: str | None = None
 
     @property
     def launch(self) -> str:
@@ -72,6 +73,7 @@ def plan(
         elif (command := restore.resume_command(r)) is None:
             item.skip = f"no resume command for {r.get('flavor')}"
         elif status not in RESTARTABLE_ACTIVITY and not force:
+            item.forceable_activity = status or "unknown"
             activity = status.replace("_", " ") if status else "unknown (no activity report)"
             item.skip = f"activity is {activity}; only observed-idle agents restart by default (--force overrides)"
         elif not (cwd := pane.get("cwd") or r.get("cwd")):

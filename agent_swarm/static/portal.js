@@ -10341,6 +10341,123 @@ function TaskStatusActions({ task, refresh }) {
   </div>`;
 }
 //#endregion
+//#region web/src/restart-agent.js
+async function restartRequest(user, force, dryRun) {
+	const response = await fetch(`/agents/${encodeURIComponent(user)}/restart`, {
+		method: "POST",
+		headers: JSONH,
+		body: JSON.stringify({
+			force,
+			dry_run: dryRun
+		})
+	});
+	const body = await response.json().catch(() => null);
+	if (response.ok && body) return body;
+	return { reason: [body?.detail?.error, body?.detail?.detail].filter(Boolean).join(" — ") };
+}
+var hasPlan = (result) => result.ok === true && result.status === "planned" && typeof result.launch === "string" && result.launch.length > 0;
+var canForce = (result) => result.ok === true && result.status === "skipped" && result.forceable === true;
+function RestartDialog({ user, initial, onClose }) {
+	const dialog = A(null);
+	const [plan, setPlan] = d(initial);
+	const [force, setForce] = d(false);
+	const [checking, setChecking] = d(false);
+	const [error, setError] = d("");
+	const forceable = canForce(initial);
+	const activity = initial.activity ?? "unknown";
+	h(() => {
+		dialog.current.showModal();
+	}, []);
+	const changeForce = async (event) => {
+		const checked = event.currentTarget.checked;
+		setForce(checked);
+		setError("");
+		if (!checked || hasPlan(plan)) return;
+		setChecking(true);
+		try {
+			const result = await restartRequest(user, true, true);
+			if (hasPlan(result)) setPlan(result);
+			else setError(result.reason || "Could not get a restart plan.");
+		} catch {
+			setError("Could not get a restart plan.");
+		} finally {
+			setChecking(false);
+		}
+	};
+	return m$1`<dialog ref=${dialog} class="page-dialog restart-dialog" aria-label=${`Restart ${user}`}
+      onClose=${() => onClose(dialog.current.returnValue === "restart", force)}
+      onKeyDown=${(event) => {
+		if (event.key === "Escape" || event.key === "Enter") event.stopPropagation();
+	}}>
+    <form method="dialog">
+      <h2>Restart ${user}?</h2>
+      <p>Restarts the harness in the same pane and resumes its saved session. Work running in the pane will stop.</p>
+      ${forceable && m$1`
+        <p>${activity === "unknown" ? "The hub could not verify that the agent is idle." : `Agent is currently ${activity.replaceAll("_", " ")}.`} Restarting may interrupt an active turn.</p>
+        <label class="restart-force"><input type="checkbox" checked=${force}
+          disabled=${checking} onChange=${changeForce} /> Force restart</label>
+        ${!force && !hasPlan(plan) && m$1`<p class="restart-hint">Check Force restart to preview the launch.</p>`}`}
+      ${checking && m$1`<p role="status">Checking restart plan…</p>`}
+      ${error && m$1`<p class="restart-error" role="alert">${error}</p>`}
+      ${hasPlan(plan) && m$1`<div>
+        <p>${plan.node} · pane ${plan.pane}</p>
+        <pre aria-label="Launch command and working directory">${plan.launch}</pre>
+      </div>`}
+      <div class="page-dialog-actions">
+        <button type="submit" value="cancel" class="mini" autofocus>Cancel</button>
+        <button type="submit" value="restart" class="act" disabled=${checking || !hasPlan(plan) || forceable && !force}>Restart</button>
+      </div>
+    </form>
+  </dialog>`;
+}
+function RestartAgentButton({ r, refresh }) {
+	const inFlight = A(false);
+	const [busy, setBusy] = d("");
+	const [review, setReview] = d(null);
+	const [message, setMessage] = d("");
+	const user = r.user_id;
+	const preview = async (event) => {
+		if (!r.pane_alive || inFlight.current || review) return;
+		event.currentTarget.focus();
+		inFlight.current = true;
+		setBusy("Checking…");
+		setMessage("");
+		try {
+			const result = await restartRequest(user, false, true);
+			if (hasPlan(result) || canForce(result)) setReview(result);
+			else setMessage(`Could not plan restart: ${result.reason || "the hub did not return a plan"}.`);
+		} catch {
+			setMessage("Could not get a restart plan. Try again.");
+		} finally {
+			inFlight.current = false;
+			setBusy("");
+		}
+	};
+	const confirm = async (approved, force) => {
+		setReview(null);
+		if (!approved || inFlight.current) return;
+		inFlight.current = true;
+		setBusy("Restarting…");
+		try {
+			const result = await restartRequest(user, force, false);
+			if (result.ok === true && result.status === "restarted") setMessage(`Restarted on ${result.node} in pane ${result.pane}.`);
+			else if (result.status === "skipped") setMessage(`Restart skipped: ${result.reason || "the agent is no longer eligible"}.`);
+			else if (result.status === "unknown" || !result.reason) setMessage(`Restart not confirmed. ${result.reason || "Check the agent's status before retrying."}`);
+			else setMessage(`Could not restart agent: ${result.reason}`);
+		} catch {
+			setMessage("Restart not confirmed. Check the agent's status before retrying.");
+		} finally {
+			inFlight.current = false;
+			setBusy("");
+			refresh();
+		}
+	};
+	return m$1`<button type="button" class="mini restart-agent" disabled=${!r.pane_alive}
+      aria-disabled=${busy || review ? "true" : null} onClick=${preview}>${busy || "restart agent"}</button>
+    ${message && m$1`<span class="agent-action-result" role="status">${message}</span>`}
+    ${review && m$1`<${RestartDialog} user=${user} initial=${review} onClose=${confirm} />`}`;
+}
+//#endregion
 //#region web/src/outcome.js
 function structured(body) {
 	return body !== null && typeof body === "object" && !Array.isArray(body);
@@ -12887,10 +13004,8 @@ function agentThreads(messages, { query = "", members = null, gap = 900, fanout 
 }
 //#endregion
 //#region web/src/main.js
-function JumpToPane({ r }) {
+function CopyPaneCommand({ command, paneLabel }) {
 	const [copied, setCopied] = d(false);
-	if (!(r.pane_alive || (r.offline_reason || "").includes("bare shell")) || !String(r.tmux_pane).startsWith("%")) return null;
-	const command = `switch-client -t ${r.tmux_pane}`;
 	const copy = async (e) => {
 		e.stopPropagation();
 		try {
@@ -12901,10 +13016,38 @@ function JumpToPane({ r }) {
 			prompt("Copy this, then paste it at tmux's command prompt (prefix, then :)", command);
 		}
 	};
-	return m$1`<span class="jump-cmd" title=${`Copy "${command}" — paste it at tmux's command prompt (prefix, then :) to jump to ${r.pane_label}`}>
-    <span class="sep">· </span><code>${command}</code>
-    <button type="button" class="mini" onClick=${copy}>${copied ? "copied" : "copy"}</button>
-  </span>`;
+	return m$1`<button type="button" class="mini" title=${`Copy "${command}" — paste it at tmux's command prompt (prefix, then :) to jump to ${paneLabel}`} onClick=${copy}>${copied ? "copied" : "copy pane"}</button>`;
+}
+var AGENT_MORE_KEY = "agent-swarm:agent-controls-open";
+function AgentControls({ r, refresh }) {
+	const [more, setMore] = d(() => readJSON(AGENT_MORE_KEY, false) === true);
+	const command = (r.pane_alive || (r.offline_reason || "").includes("bare shell")) && String(r.tmux_pane).startsWith("%") ? `switch-client -t ${r.tmux_pane}` : null;
+	const toggle = () => {
+		setMore(!more);
+		try {
+			localStorage.setItem(AGENT_MORE_KEY, JSON.stringify(!more));
+		} catch {}
+	};
+	return m$1`<div class="agent-controls">
+    <div class="agent-primary-controls">
+      ${command && m$1`<${CopyPaneCommand} command=${command} paneLabel=${r.pane_label} />`}
+      <${CompactButton} r=${r} />
+      <button type="button" class="mini" aria-expanded=${more} aria-controls="agent-more-controls"
+        onClick=${toggle}>${more ? "less" : "more"}</button>
+    </div>
+    <div id="agent-more-controls" class="agent-more-controls" hidden=${!more}>
+      <div class="agent-control-group" role="group" aria-label="Agent lifecycle">
+        <span class="agent-control-label" aria-hidden="true">Agent</span>
+        <${RestartAgentButton} r=${r} refresh=${refresh} />
+        <${StopAgentButton} r=${r} refresh=${refresh} />
+      </div>
+      <${InterruptAgent} r=${r} />
+      ${command && m$1`<div class="agent-control-group">
+        <span class="agent-control-label">Pane</span>
+        <code class="agent-pane-command">${command}</code>
+      </div>`}
+    </div>
+  </div>`;
 }
 function CompactButton({ r }) {
 	const [busy, setBusy] = d(false);
@@ -13983,7 +14126,7 @@ function InterruptAgent({ r }) {
 		}
 	};
 	return m$1`<span class="agent-interrupt" role="group" aria-label=${`Interrupt ${r.user_id}`}>
-    <span>interrupt</span>
+    <span class="agent-control-label" aria-hidden="true">Keys</span>
     <button type="button" class="mini" disabled=${busy || !r.pane_alive || cooling}
       aria-label=${`Send Ctrl+C to ${r.user_id}`} title=${cooling ? "Wait two seconds between Ctrl+C presses" : "Send Ctrl+C to interrupt current work"}
       onClick=${() => press("C-c", "Ctrl+C")}>Ctrl+C</button>
@@ -15084,14 +15227,11 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
         <div class="meta">
           <span class="chip">${FLAVOR_ICON[flavor] || FLAVOR_ICON.generic} ${flavor}</span>
           <${ModelLabel} r=${r} refresh=${refresh} /> · <${MachineBadge} node=${r.node} /> · pane <b>${r.pane_label}</b>${r.pane_alive ? "" : " (stopped)"}
-          <${JumpToPane} r=${r} />
-          <${CompactButton} r=${r} />
-          <${StopAgentButton} key=${user} r=${r} refresh=${refresh} />
-          <${InterruptAgent} key=${`interrupt-${user}`} r=${r} />
           · joined ${rel(r.registered_at, state.now)}
           ${ctx && m$1`· <span class=${`ctx-use ${ctx.level}`} title=${ctx.title}>${ctx.text}</span>`}
           · <span style=${`color:${st.color}`}>${st.word}</span>${status === "needs_attention" && detail ? m$1` <span class="attn">${detail}</span>` : ""}${r.activity?.error ? m$1` <span class="agent-error">! ${r.activity.error}</span>` : ""}
         </div>
+        <${AgentControls} key=${user} r=${r} refresh=${refresh} />
         ${r.instructions && m$1`<div class="inst">"${r.instructions}"</div>`}
       </div>
     </div>

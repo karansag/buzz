@@ -6,6 +6,7 @@ Delivery is monkeypatched to avoid touching real tmux.
 import asyncio
 import threading
 import time
+from contextlib import closing
 from pathlib import Path
 
 import anyio
@@ -555,6 +556,28 @@ def test_state_reports_agents_liveness_and_ordered_messages(client, monkeypatch)
     assert alive[b] is False  # pane 0:9.0 is not in the fake live-pane set
     assert [m["content"] for m in state["messages"]] == ["m0", "m1"]
     assert state["now"] >= state["messages"][-1]["ts"]
+
+
+def test_restart_only_advertises_force_for_activity_skips(client, tmp_path):
+    local = client.app.state.nodes.local.name
+    with closing(db.connect(tmp_path / "db.sqlite")) as conn:
+        db.register(conn, "busy", "0:0.0", "busy-session", flavor="pi", tmux_server="srv-1", node=local)
+        db.set_cwd(conn, "busy", "/work")
+        db.register(conn, "stale", "0:1.0", "stale-session", flavor="pi", tmux_server="previous-server", node=local)
+    for user in ("busy", "stale"):
+        client.app.state.activity_registry[user] = {"status": "working"}
+
+    busy = client.post("/agents/busy/restart", json={"force": False, "dry_run": True})
+    assert busy.status_code == 200
+    assert busy.json()["status"] == "skipped"
+    assert busy.json()["forceable"] is True
+    assert busy.json()["activity"] == "working"
+
+    stale = client.post("/agents/stale/restart", json={"force": False, "dry_run": True})
+    assert stale.status_code == 200
+    assert stale.json()["status"] == "skipped"
+    assert "forceable" not in stale.json()
+    assert "activity" not in stale.json()
 
 
 def test_state_defaults_activity_to_unknown_without_monitor_data(client):

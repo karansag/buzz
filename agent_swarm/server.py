@@ -2258,8 +2258,11 @@ def create_app(
         node = _node_of(row)
         snap = _try_snapshot(node)
 
-        def skipped(reason: str):
-            return {"ok": True, "status": "skipped", "user_id": user_id, "reason": reason}
+        def skipped(reason: str, forceable_activity: str | None = None):
+            result = {"ok": True, "status": "skipped", "user_id": user_id, "reason": reason}
+            if forceable_activity is not None:
+                result.update(forceable=True, activity=forceable_activity)
+            return result
 
         if node is None or snap is None:
             return skipped(f"cannot observe tmux on node {row['node']}")
@@ -2273,7 +2276,7 @@ def create_app(
             handles=[user_id], force=req.force,
         )[0]
         if item.skip:
-            return skipped(item.skip)
+            return skipped(item.skip, item.forceable_activity)
         if req.dry_run:
             return {"ok": True, "status": "planned", "user_id": user_id,
                     "node": node.name, "pane": pane, "launch": item.launch}

@@ -1096,6 +1096,7 @@ test('offline agents show per team and can be retired, there or from their page'
     assert.match(question, /Retire old-ghost\? It leaves the dashboard and its team\. History is archived, unfinished tasks are reopened, and the names can be used again\./);
     // A stopped agent's own page offers retire instead of stop.
     await page.goto(base + '#/agent/stopped-agent');
+    await page.locator('.agent-primary-controls').getByRole('button', { name: 'more', exact: true }).click();
     await page.locator('.fhead button.retire', { hasText: 'retire agent' }).click();
     await answer(page);
     await page.getByRole('heading', { name: 'stopped-agent (retired Nov 22)' }).waitFor();
@@ -1118,6 +1119,7 @@ test('a stopped agent can be resumed from its page', async () => {
   });
   try {
     await page.goto(base + '#/agent/stopped-agent');
+    await page.locator('.agent-primary-controls').getByRole('button', { name: 'more', exact: true }).click();
     const resume = page.locator('.fhead').getByRole('button', { name: 'resume agent', exact: true });
     await resume.click();
     await page.getByText('Could not resume: the hub does not know which folder stopped-agent ran in', { exact: true }).waitFor();
@@ -2242,6 +2244,7 @@ test('detail stop confirms, handles failure, retries, and keeps history on the p
   });
   try {
     await page.goto(base + '#/agent/stoat');
+    await page.locator('.agent-primary-controls').getByRole('button', { name: 'more', exact: true }).click();
     const stop = page.locator('.fhead').getByRole('button', { name: 'stop agent', exact: true });
     await stop.click();
     await answer(page, 'Cancel');
@@ -2310,6 +2313,7 @@ test('compact and stop ask in the page: Esc cancels, Enter confirms, errors show
     assert.equal(typed.length, 2);
     assert.equal(await dialog.count(), 0);
 
+    await page.locator('.agent-primary-controls').getByRole('button', { name: 'more', exact: true }).click();
     const stop = page.locator('.fhead').getByRole('button', { name: 'stop agent', exact: true });
     await stop.click();
     await dialog.waitFor();
@@ -2902,6 +2906,7 @@ for (const width of [390, 1500]) {
     });
     try {
       await page.goto(base+'#/agent/stoat');
+      await page.locator('.agent-primary-controls').getByRole('button', { name: 'more', exact: true }).click();
       const group=page.getByRole('group',{name:'Interrupt stoat',exact:true});
       const ctrlC=group.getByRole('button',{name:'Send Ctrl+C to stoat',exact:true});
       const ctrlB=group.getByRole('button',{name:'Send Ctrl+B to stoat',exact:true});
@@ -3723,3 +3728,109 @@ test('agent switcher lists recently opened agents first and works without storag
     assert.deepEqual(errors,[]);
   } finally {await page.close();}
 });
+
+for (const width of [390, 1280]) {
+  test(`agent page disclosure and restart at ${width}px`, async () => {
+    const { page, state, errors } = await setup(width, 800, width === 390);
+    const agent = state.recipients.find(r => r.user_id === 'stoat');
+    agent.compact_command = '/compact';
+    // Exercise a remote agent through the same hub endpoint.
+    agent.node = 'karans-mbp';
+    const requests = [];
+    let activity = 'idle';
+    let forcedError = false;
+    const launch = "cd '/Users/fake/project with spaces' && codex resume fake-session";
+    await page.route('**/agents/stoat/restart', async route => {
+      assert.equal(route.request().method(), 'POST');
+      const payload = route.request().postDataJSON();
+      requests.push(payload);
+      if (activity === 'offline') {
+        return route.fulfill({ json: { ok: true, status: 'skipped', reason: 'cannot observe tmux on node karans-mbp' } });
+      }
+      if (activity === 'working' && !payload.force) {
+        return route.fulfill({ json: { ok: true, status: 'skipped',
+          reason: 'Wait for a quieter moment', forceable: true, activity: 'working' } });
+      }
+      if (payload.dry_run && payload.force && forcedError) {
+        return route.fulfill({ json: { ok: true, status: 'skipped', reason: 'its pane is not verified' } });
+      }
+      if (payload.dry_run) return route.fulfill({ json: { ok: true, status: 'planned', node: agent.node, pane: '%100', launch } });
+      if (payload.force) return route.fulfill({ json: { ok: false, status: 'blocked', reason: 'a confirmation prompt blocked the harness' } });
+      return route.fulfill({ json: { ok: true, status: 'restarted', node: agent.node, pane: '%100' } });
+    });
+
+    try {
+      await page.goto(base + '#/agent/stoat');
+      const controls = page.locator('.agent-controls');
+      const more = controls.getByRole('button', { name: 'more', exact: true });
+      const less = controls.getByRole('button', { name: 'less', exact: true });
+      const restart = controls.getByRole('button', { name: 'restart agent', exact: true });
+      const stop = controls.getByRole('button', { name: 'stop agent', exact: true });
+      await more.waitFor();
+      assert.deepEqual(await controls.getByRole('button').allTextContents(), ['copy pane', 'compact', 'more']);
+      assert.equal(await more.getAttribute('aria-expanded'), 'false');
+      assert.equal(await restart.count(), 0);
+      await more.focus();
+      await page.keyboard.press('Enter');
+      assert.equal(await less.getAttribute('aria-expanded'), 'true');
+      assert.equal(await restart.isVisible(), true);
+      assert.equal(await stop.isVisible(), true);
+      assert.equal(await controls.locator('code').textContent(), 'switch-client -t %100');
+      await page.reload();
+      await less.waitFor();
+      assert.equal(await restart.isVisible(), true);
+      await less.click();
+      await page.reload();
+      await more.waitFor();
+      assert.equal(await restart.count(), 0);
+      await more.click();
+
+      const dialog = page.getByRole('dialog', { name: 'Restart stoat' });
+      const apply = dialog.getByRole('button', { name: 'Restart', exact: true });
+      const force = dialog.getByRole('checkbox', { name: 'Force restart' });
+      await restart.click();
+      assert.equal(await dialog.locator('pre').textContent(), launch);
+      assert.deepEqual(requests, [{ force: false, dry_run: true }]);
+      await page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'detached' });
+      assert.equal(requests.length, 1);
+      assert.equal(await restart.evaluate(el => el === document.activeElement), true);
+
+      await restart.click();
+      await apply.click();
+      await controls.getByRole('status').getByText('Restarted on karans-mbp in pane %100.').waitFor();
+      assert.deepEqual(requests.slice(1), [{ force: false, dry_run: true }, { force: false, dry_run: false }]);
+
+      activity = 'working';
+      forcedError = true;
+      await restart.click();
+      await dialog.getByText('Agent is currently working. Restarting may interrupt an active turn.', { exact: true }).waitFor();
+      assert.equal(await force.isChecked(), false);
+      assert.equal(await apply.isDisabled(), true);
+      await force.check();
+      await dialog.getByRole('alert').getByText('its pane is not verified').waitFor();
+      assert.equal(await apply.isDisabled(), true);
+      await force.uncheck();
+      forcedError = false;
+      await force.check();
+      assert.equal(await dialog.locator('pre').textContent(), launch);
+      assert.deepEqual(requests.slice(3), [
+        { force: false, dry_run: true }, { force: true, dry_run: true }, { force: true, dry_run: true },
+      ]);
+      await force.uncheck();
+      assert.equal(await dialog.locator('pre').textContent(), launch);
+      assert.equal(await apply.isDisabled(), true);
+      await force.check();
+      await apply.click();
+      await controls.getByRole('status').getByText(/Could not restart agent: a confirmation prompt blocked/).waitFor();
+      assert.deepEqual(requests.at(-1), { force: true, dry_run: false });
+
+      activity = 'offline';
+      await restart.click();
+      await controls.getByRole('status').getByText(/Could not plan restart: cannot observe tmux/).waitFor();
+      assert.equal(await dialog.count(), 0);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}

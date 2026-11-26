@@ -10,6 +10,7 @@ import { ChatMessage } from "./chat-message.js";
 import { TaskTrash } from "./task-trash.js";
 import { confirmDialog, showNotice } from "./dialogs.js";
 import { TaskStatusActions } from "./task-status.js";
+import { RestartAgentButton } from "./restart-agent.js";
 import { html, render } from "htm/preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 
@@ -63,11 +64,8 @@ import { agentHash, parseAgentRoute } from "./agent-route.js";
 // The tmux command that takes you to an agent's pane, typed at tmux's command
 // prompt (prefix, then ":"). It uses the pane id, which stays valid however
 // windows and panes are renumbered.
-function JumpToPane({ r }) {
+function CopyPaneCommand({ command, paneLabel }) {
   const [copied, setCopied] = useState(false);
-  const paneExists = r.pane_alive || (r.offline_reason || "").includes("bare shell");
-  if (!paneExists || !String(r.tmux_pane).startsWith("%")) return null;
-  const command = `switch-client -t ${r.tmux_pane}`;
   const copy = async (e) => {
     e.stopPropagation();
     try {
@@ -78,11 +76,40 @@ function JumpToPane({ r }) {
       prompt("Copy this, then paste it at tmux's command prompt (prefix, then :)", command);
     }
   };
-  const title = `Copy "${command}" — paste it at tmux's command prompt (prefix, then :) to jump to ${r.pane_label}`;
-  return html`<span class="jump-cmd" title=${title}>
-    <span class="sep">· </span><code>${command}</code>
-    <button type="button" class="mini" onClick=${copy}>${copied ? "copied" : "copy"}</button>
-  </span>`;
+  const title = `Copy "${command}" — paste it at tmux's command prompt (prefix, then :) to jump to ${paneLabel}`;
+  return html`<button type="button" class="mini" title=${title} onClick=${copy}>${copied ? "copied" : "copy pane"}</button>`;
+}
+
+const AGENT_MORE_KEY = "agent-swarm:agent-controls-open";
+
+function AgentControls({ r, refresh }) {
+  const [more, setMore] = useState(() => readJSON(AGENT_MORE_KEY, false) === true);
+  const paneExists = r.pane_alive || (r.offline_reason || "").includes("bare shell");
+  const command = paneExists && String(r.tmux_pane).startsWith("%") ? `switch-client -t ${r.tmux_pane}` : null;
+  const toggle = () => {
+    setMore(!more);
+    try { localStorage.setItem(AGENT_MORE_KEY, JSON.stringify(!more)); } catch { /* not kept */ }
+  };
+  return html`<div class="agent-controls">
+    <div class="agent-primary-controls">
+      ${command && html`<${CopyPaneCommand} command=${command} paneLabel=${r.pane_label} />`}
+      <${CompactButton} r=${r} />
+      <button type="button" class="mini" aria-expanded=${more} aria-controls="agent-more-controls"
+        onClick=${toggle}>${more ? "less" : "more"}</button>
+    </div>
+    <div id="agent-more-controls" class="agent-more-controls" hidden=${!more}>
+      <div class="agent-control-group" role="group" aria-label="Agent lifecycle">
+        <span class="agent-control-label" aria-hidden="true">Agent</span>
+        <${RestartAgentButton} r=${r} refresh=${refresh} />
+        <${StopAgentButton} r=${r} refresh=${refresh} />
+      </div>
+      <${InterruptAgent} r=${r} />
+      ${command && html`<div class="agent-control-group">
+        <span class="agent-control-label">Pane</span>
+        <code class="agent-pane-command">${command}</code>
+      </div>`}
+    </div>
+  </div>`;
 }
 
 // Types the harness's own compact command (e.g. /compact) into the agent's
@@ -1148,7 +1175,7 @@ function InterruptAgent({ r }) {
     }
   };
   return html`<span class="agent-interrupt" role="group" aria-label=${`Interrupt ${r.user_id}`}>
-    <span>interrupt</span>
+    <span class="agent-control-label" aria-hidden="true">Keys</span>
     <button type="button" class="mini" disabled=${busy || !r.pane_alive || cooling}
       aria-label=${`Send Ctrl+C to ${r.user_id}`} title=${cooling ? "Wait two seconds between Ctrl+C presses" : "Send Ctrl+C to interrupt current work"}
       onClick=${() => press("C-c", "Ctrl+C")}>Ctrl+C</button>
@@ -2218,14 +2245,11 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
         <div class="meta">
           <span class="chip">${FLAVOR_ICON[flavor] || FLAVOR_ICON.generic} ${flavor}</span>
           <${ModelLabel} r=${r} refresh=${refresh} /> · <${MachineBadge} node=${r.node} /> · pane <b>${r.pane_label}</b>${r.pane_alive ? "" : " (stopped)"}
-          <${JumpToPane} r=${r} />
-          <${CompactButton} r=${r} />
-          <${StopAgentButton} key=${user} r=${r} refresh=${refresh} />
-          <${InterruptAgent} key=${`interrupt-${user}`} r=${r} />
           · joined ${rel(r.registered_at, state.now)}
           ${ctx && html`· <span class=${`ctx-use ${ctx.level}`} title=${ctx.title}>${ctx.text}</span>`}
           · <span style=${`color:${st.color}`}>${st.word}</span>${status === "needs_attention" && detail ? html` <span class="attn">${detail}</span>` : ""}${r.activity?.error ? html` <span class="agent-error">! ${r.activity.error}</span>` : ""}
         </div>
+        <${AgentControls} key=${user} r=${r} refresh=${refresh} />
         ${r.instructions && html`<div class="inst">"${r.instructions}"</div>`}
       </div>
     </div>
