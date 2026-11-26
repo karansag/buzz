@@ -902,12 +902,23 @@ def _parse_since(raw: str, now: float) -> float:
     return float(raw)
 
 
+def _board_scope_params() -> dict:
+    who = caller()
+    if not (who["agent_id"] or who["pane_verified"]):
+        return {}
+    return {key: value for key, value in {
+        "node": local_node(), "tmux_pane": who["pane"], "agent_id": who["agent_id"],
+        "pane_verified": who["pane_verified"], "pane_in_tree": who["pane_in_tree"],
+        "harness": who["harness"],
+    }.items() if value is not None}
+
+
 def cmd_team(args: argparse.Namespace) -> int:
     ref = args.name or _own_team()
     if ref is None:
         print("error: you are on no team; name one (`buzz team NAME`)", file=sys.stderr)
         return 2
-    params: dict = {"stale_hours": args.stale_hours}
+    params: dict = {"stale_hours": args.stale_hours, **_board_scope_params()}
     if args.since is not None:
         try:
             params["since"] = _parse_since(args.since, time.time())
@@ -932,6 +943,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
             print("error: you are on no team; pass --team NAME", file=sys.stderr)
             return 2
         params["team"] = team
+        params.update(_board_scope_params())
     r = httpx.get(f"{base_url()}/digest", params=params, headers=_headers(), timeout=10)
     if not r.is_success:
         print(r.text, file=sys.stderr)

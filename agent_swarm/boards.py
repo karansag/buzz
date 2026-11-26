@@ -78,10 +78,17 @@ def _root(conn, team_id, reply_to):
 
 @db._writes
 def post(conn, team_id, actor, *, body, subject, reply_to, client_id):
+    conn.execute("BEGIN IMMEDIATE")
     _, archived = _access(conn, team_id, actor)
     if archived:
         raise BoardError(409, "board_archived")
-    if not body.strip() or len(body.encode("utf-8")) > 16384 or "\0" in body:
+    try:
+        body_bytes = len(body.encode("utf-8"))
+        if subject is not None:
+            subject.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise BoardError(422, "board posts must be valid UTF-8") from exc
+    if not body.strip() or body_bytes > 16384 or "\0" in body:
         raise BoardError(422, "body must be nonblank and at most 16384 UTF-8 bytes")
     if subject is not None and (reply_to is not None or "\0" in subject):
         raise BoardError(422, "subject is allowed only on roots")
@@ -129,11 +136,11 @@ def page(conn, team_id, actor, *, after, before, unread, thread, limit, mark):
         _root(conn, team_id, thread)
         terms.append("(p.id=? OR p.reply_to=?)")
         args.extend((thread, thread))
-    membership = " AND ".join(terms)
     if unread:
         terms.append("p.author<>?")
         args.append(actor)
         after = read_id
+    membership, scoped_args = " AND ".join(terms), args.copy()
     if after is not None:
         terms.append("p.id>?")
         args.append(min(after, newest))
@@ -148,7 +155,6 @@ def page(conn, team_id, actor, *, after, before, unread, thread, limit, mark):
     ).fetchall()
 
     def exists(op, bound):
-        scoped_args = [team_id, thread, thread] if thread is not None else [team_id]
         return conn.execute(
             f"SELECT 1 FROM board_posts p WHERE {membership} AND p.id{op}? LIMIT 1",
             (*scoped_args, bound),
@@ -200,3 +206,74 @@ def detail(conn, team_id, actor, post_id):
         (team_id, post_id),
     )]
     return {"post": dict(row), "replies": replies}
+
+
+def unread_count(conn, team_id, actor):
+    newest = _newest(conn, team_id)
+    read_id, _ = _cursors(conn, team_id, actor, newest)
+    return _unread(conn, team_id, actor, read_id)
+
+
+def summary(conn, team_id, actor):
+    _access(conn, team_id, actor)
+    count, newest = conn.execute(
+        "SELECT COUNT(*), COALESCE(MAX(id),0) FROM board_posts WHERE team_id=?", (team_id,)
+    ).fetchone()
+    read_id, _ = _cursors(conn, team_id, actor, newest)
+    return {"posts": count, "newest_id": newest or None,
+            "unread": _unread(conn, team_id, actor, read_id)}
+
+
+def summary_line(stats):
+    newest = f"#{stats['newest_id']}" if stats["newest_id"] else "none"
+    return f"board: {stats['posts']} posts, newest {newest}, {stats['unread']} unread for you"
+
+
+def hint(conn, team_id, actor):
+    try:
+        name, archived = _access(conn, team_id, actor)
+    except BoardError:
+        return None
+    if archived:
+        return None
+    newest = _newest(conn, team_id)
+    read_id, hinted_id = _cursors(conn, team_id, actor, newest)
+    if newest <= max(read_id, hinted_id):
+        return None
+    count = mentions = 0
+    for row in conn.execute(
+        "SELECT subject,body FROM board_posts WHERE team_id=? AND id>? AND id<=? AND author<>?",
+        (team_id, max(read_id, hinted_id), newest, actor),
+    ):
+        count += 1
+        mentions += _mentions(row, actor)
+    if not count:
+        return None
+    label = " ".join("".join(c if c.isprintable() else " " for c in name).split())[:80]
+    return newest, f"[board {label}: {count} new, {mentions} mentions you · buzz board read]"
+
+
+@db._writes
+def mark_hint(conn, team_id, actor, delivered_id):
+    try:
+        _access(conn, team_id, actor)
+    except BoardError:
+        return
+    newest = _newest(conn, team_id)
+    read_id, hinted_id = _cursors(conn, team_id, actor, newest)
+    _set_cursors(conn, team_id, actor, read_id, max(hinted_id, min(delivered_id, newest)))
+
+
+
+@db._writes
+def clamp_cursors(conn):
+    """Normalize restored cursors before new posts can reuse rolled-back IDs."""
+    conn.execute(
+        "WITH newest AS (SELECT team_id,MAX(id) AS id FROM board_posts GROUP BY team_id) "
+        "UPDATE board_reads SET last_read_id=MIN(last_read_id,COALESCE(newest.id,0)), "
+        "last_hinted_id=MIN(last_hinted_id,COALESCE(newest.id,0)) "
+        "FROM (SELECT r.user_id,r.team_id,n.id FROM board_reads r "
+        "LEFT JOIN newest n ON n.team_id=r.team_id) newest "
+        "WHERE newest.user_id=board_reads.user_id AND newest.team_id=board_reads.team_id "
+        "AND MAX(last_read_id,last_hinted_id)>COALESCE(newest.id,0)"
+    )

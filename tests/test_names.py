@@ -13,6 +13,8 @@ def _conn():
     conn.execute("CREATE TABLE tasks (assignee TEXT)")
     conn.execute("CREATE TABLE summaries (user_id TEXT)")
     conn.execute("CREATE TABLE retired_agents (archive_id TEXT PRIMARY KEY)")
+    conn.execute("CREATE TABLE board_posts (author TEXT)")
+    conn.execute("CREATE TABLE board_reads (user_id TEXT)")
     return conn
 
 

@@ -410,6 +410,8 @@ def rename_recipient(conn: sqlite3.Connection, old_id: str, new_id: str) -> None
     The handle is a bare string in several tables rather than a foreign key, so
     every reference is rewritten in one transaction.
     """
+    if old_id == new_id:
+        return
     _ensure_columns(conn)
     conn.execute(
         "UPDATE recipients SET user_id=? WHERE user_id=?", (new_id, old_id)
@@ -421,6 +423,22 @@ def rename_recipient(conn: sqlite3.Connection, old_id: str, new_id: str) -> None
     conn.execute("UPDATE tasks SET assignee=? WHERE assignee=?", (new_id, old_id))
     conn.execute("UPDATE teams SET queen=? WHERE queen=?", (new_id, old_id))
     conn.execute("UPDATE summaries SET user_id=? WHERE user_id=?", (new_id, old_id))
+
+    # Two historical handles can have used the same sender-scoped retry key.
+    # Keep both posts when renaming into that history.
+    conn.execute(
+        "UPDATE board_posts SET client_id=NULL WHERE author=? AND client_id IN "
+        "(SELECT client_id FROM board_posts WHERE author=?)", (old_id, new_id),
+    )
+    conn.execute("UPDATE board_posts SET author=? WHERE author=?", (new_id, old_id))
+    conn.execute(
+        "INSERT INTO board_reads SELECT ?,team_id,last_read_id,last_hinted_id FROM board_reads "
+        "WHERE user_id=? ON CONFLICT(user_id,team_id) DO UPDATE SET "
+        "last_read_id=MAX(board_reads.last_read_id,excluded.last_read_id), "
+        "last_hinted_id=MAX(board_reads.last_hinted_id,excluded.last_hinted_id)",
+        (new_id, old_id),
+    )
+    conn.execute("DELETE FROM board_reads WHERE user_id=?", (old_id,))
 
 
 @_writes
@@ -1140,6 +1158,16 @@ def set_recipient_model(
     return get_recipient(conn, user_id) if cur.rowcount else None
 
 
+def _init_board_read(conn, user_id, team_id):
+    if team_id is not None:
+        conn.execute(
+            "INSERT OR IGNORE INTO board_reads(user_id,team_id,last_read_id,last_hinted_id) "
+            "SELECT ?,?,baseline,baseline FROM (SELECT COALESCE(("
+            "SELECT id FROM board_posts WHERE team_id=? ORDER BY id DESC LIMIT 1 OFFSET 20"
+            "),0) AS baseline)", (user_id, team_id, team_id),
+        )
+
+
 @_writes
 def set_agent_team(
     conn: sqlite3.Connection, user_id: str, team_id: int | None
@@ -1159,6 +1187,7 @@ def set_agent_team(
     conn.execute(
         "UPDATE recipients SET team_id=? WHERE user_id=?", (team_id, user_id)
     )
+    _init_board_read(conn, user_id, team_id)
     conn.commit()
     return get_recipient(conn, user_id)
 
@@ -1848,6 +1877,7 @@ def apply_import(
                     "UPDATE recipients SET team_id=? WHERE user_id=?",
                     (team_ids[team["name"]], member),
                 )
+                _init_board_read(conn, member, team_ids[team["name"]])
             if team["queen"]:
                 conn.execute(
                     "UPDATE teams SET queen=? WHERE id=?", (team["queen"], team_ids[team["name"]])

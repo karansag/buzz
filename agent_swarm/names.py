@@ -160,6 +160,8 @@ _HISTORY = (
     " UNION SELECT assignee FROM tasks WHERE assignee IS NOT NULL"
     " UNION SELECT user_id FROM summaries"
     " UNION SELECT archive_id FROM retired_agents"
+    " UNION SELECT author FROM board_posts"
+    " UNION SELECT user_id FROM board_reads"
 )
 
 

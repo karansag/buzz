@@ -10,6 +10,8 @@ import logging
 import math
 import os
 import re
+import sqlite3
+import weakref
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -673,7 +675,8 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         f"they reach the queen, who parcels them out; `buzz tasks --team "
         f"<name or id>` lists a team's work, and `buzz team [name]` shows "
         f"each member's state and open tasks and which tasks are ready, "
-        f"blocked or stale. The owner may also "
+        f"blocked or stale. Each team has a board: `buzz board` reads unread posts "
+        f"and `buzz board post` writes one without interrupting anyone. The owner may also "
         f"appoint one agent as swarm supervisor, the agent they ask about the "
         f"whole swarm; `buzz supervisor` says who, if anyone, holds it."
     )
@@ -683,6 +686,7 @@ def create_app(
     db_path: Path = DB_PATH, monitor: bool = True, trust_loopback: bool | None = None
 ) -> FastAPI:
     conn = db.connect(db_path)
+    boards.clamp_cursors(conn)
     if trust_loopback is None:
         trust_loopback = os.environ.get("AGENT_SWARM_TRUST_LOOPBACK", "1") != "0"
     # Every machine whose tmux this server can drive. The local one is always
@@ -1663,6 +1667,17 @@ def create_app(
         return m["id"], m["status"], m.get("delivery_error")
     OWNER_REPLY_IDLE_SECONDS = 25 * 60
 
+    board_delivery_locks = weakref.WeakValueDictionary()
+    board_delivery_lock = threading.Lock()
+
+    def _board_lock(user_id):
+        with board_delivery_lock:
+            lock = board_delivery_locks.get(user_id)
+            if lock is None:
+                lock = threading.Lock()
+                board_delivery_locks[user_id] = lock
+            return lock
+
     def _dispatch(
         node: nodes.Node,
         sender: str,
@@ -1704,23 +1719,41 @@ def create_app(
         if err := _blocking_prompt_error(node, recipient):
             db.set_message_status(conn, mid, "failed", err)
             return mid, "failed", err
-        body = tmux.format_message(sender, context, reply_note + content, owner_reply_reminder=reminder)
-        try:
-            result = node.deliver(
-                str(mid),
-                recipient["tmux_pane"],
-                recipient.get("tmux_server"),
-                body,
-                attachments=files,
-                message_prefix=recipient.get("message_prefix"),
-                submit_key=recipient.get("submit_key") or tmux.DEFAULT_SUBMIT_KEY,
-                flavor=recipient.get("flavor"),
-            )
-        except Exception as e:  # noqa: BLE001 - anything at all after dispatch is unknown
-            log.exception("delivery of message %d to %s raised", mid, recipient["user_id"])
-            result = nodes.Result("unknown", f"{type(e).__name__}: {e}")
-        status = MESSAGE_STATUS[result.status]
-        db.set_message_status(conn, mid, status, result.error)
+        user_id, team_id = recipient["user_id"], recipient.get("team_id")
+        lock = _board_lock(user_id) if team_id is not None else contextlib.nullcontext()
+        with lock:
+            hint = None
+            if team_id is not None:
+                try:
+                    hint = boards.hint(conn, team_id, user_id)
+                except sqlite3.Error:
+                    log.exception("could not read board hint for %s", user_id)
+            suffix = "\n\n" + hint[1] if hint else ""
+            body = tmux.format_message(sender, context, reply_note + content + suffix,
+                                       owner_reply_reminder=reminder)
+            try:
+                result = node.deliver(
+                    str(mid),
+                    recipient["tmux_pane"],
+                    recipient.get("tmux_server"),
+                    body,
+                    attachments=files,
+                    message_prefix=recipient.get("message_prefix"),
+                    submit_key=recipient.get("submit_key") or tmux.DEFAULT_SUBMIT_KEY,
+                    flavor=recipient.get("flavor"),
+                )
+            except Exception as e:  # noqa: BLE001 - anything at all after dispatch is unknown
+                log.exception("delivery of message %d to %s raised", mid, recipient["user_id"])
+                result = nodes.Result("unknown", f"{type(e).__name__}: {e}")
+            status = MESSAGE_STATUS[result.status]
+            db.set_message_status(conn, mid, status, result.error)
+            # An unknown paste may already be visible. Avoid a duplicate
+            # footer on the next message; a definite failure can try again.
+            if hint and result.status in {"ok", "unknown"}:
+                try:
+                    boards.mark_hint(conn, team_id, user_id, hint[0])
+                except sqlite3.Error:
+                    log.exception("could not record board hint for %s", user_id)
         return mid, status, result.error
 
     def _blocking_prompt_error(node: nodes.Node, recipient: dict) -> str | None:
@@ -2002,19 +2035,32 @@ def create_app(
         tasks = team_view.team_tasks(team, db.list_tasks(conn))
         return {"team": {"id": team["id"], "name": team["name"], "queen": team["queen"]}, "tasks": tasks}
 
+    def _board_summary_for(request, caller, team_id):
+        try:
+            actor = _actor(request, caller)
+            return boards.summary(conn, team_id, actor)
+        except (HTTPException, boards.BoardError):
+            return None
+
     @app.get("/teams/{team_ref}/view")
-    def team_view_get(team_ref: str, stale_hours: float = team_view.STALE_HOURS, since: float | None = None):
+    def team_view_get(team_ref: str, request: Request, caller: ActorFields = Depends(),
+                      stale_hours: float = team_view.STALE_HOURS, since: float | None = None):
         """The team for its queen: each member's state, status line and open
         tasks; each open task's dependencies and whether it can move; and flags
         (free members, tasks on offline or sleep-prone machines, stale work).
         `since` (epoch seconds) keeps only members and tasks that changed after it."""
         team = _find_team(team_ref)
         members = team["members"]
-        return team_view.build(
+        view = team_view.build(
             time.time(), team, _recipients_with_activity(), db.list_tasks(conn),
             db.last_sent(conn, members, team["queen"]) if team["queen"] else {},
             db.last_sent(conn, members), fleet.local.name, stale_hours, since,
         )
+        if (stats := _board_summary_for(request, caller, team["id"])) is not None:
+            view["board"] = stats
+            view["text"] += "\n" + boards.summary_line(stats)
+        return view
+
 
     def _board_team_id(ref: str, actor: str) -> int:
         try:
@@ -2649,7 +2695,8 @@ def create_app(
         return {"ok": True, "was": row, "delivery": delivery}
 
     @app.get("/digest")
-    def digest_get(after_message: int = 0, minutes: float = 60, team: str | None = None):
+    def digest_get(request: Request, caller: ActorFields = Depends(),
+                   after_message: int = 0, minutes: float = 60, team: str | None = None):
         """What changed, as text an agent can read in one go.
 
         `after_message` is an exact cursor (message ids only go up); the last
@@ -2672,10 +2719,16 @@ def create_app(
             recipients = [r for r in recipients if r["user_id"] in members]
             tasks = team_view.team_tasks(found, tasks)
             msgs = [m for m in msgs if m["sender"] in members or m["recipient"] in members]
-        return digest.render(
+        rendered = digest.render(
             now, recipients, tasks, msgs,
             after_message, since_ts, sup["user_id"] if sup else None, db.list_teams(conn),
         )
+        if team is not None and (stats := _board_summary_for(request, caller, found["id"])) is not None:
+            rendered["board"] = stats
+            # Keep the existing next-cursor marker as the last line.
+            text, sep, cursor = rendered["text"].rpartition("\n")
+            rendered["text"] = text + sep + boards.summary_line(stats) + "\n" + cursor
+        return rendered
 
     switching: set[str] = set()
     switching_lock = threading.Lock()
@@ -3011,6 +3064,9 @@ def create_app(
             n["spawn_dirs"] = live.spawn_dirs if live is not None else []
         local = {"name": fleet.local.name, "local": True, "connected": True,
                  "spawn_dirs": fleet.local.spawn_dirs}
+        teams = db.list_teams(conn)
+        for team in teams:
+            team["board_unread"] = boards.unread_count(conn, team["id"], OWNER)
         return _read_json({
             "now": time.time(),
             "recipients": recipients,
@@ -3023,7 +3079,7 @@ def create_app(
             "messages": msgs,
             "pins": db.list_pins(conn),
             "tasks": db.list_tasks(conn),
-            "teams": db.list_teams(conn),
+            "teams": teams,
             "supervisor": db.get_supervisor(conn),
             "tabs": [t["name"] for t in extra_tabs()],
         })
