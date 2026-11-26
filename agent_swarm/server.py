@@ -273,13 +273,6 @@ class StatusReq(BaseModel):
     text: str = Field(min_length=1, max_length=200)
 
 
-class BoardPostReq(ActorFields):
-    body: str
-    subject: str | None = Field(default=None, max_length=120)
-    reply_to: int | None = Field(default=None, gt=0, le=2**63 - 1)
-    client_id: str | None = Field(default=None, min_length=1, max_length=200)
-
-
 class SendReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -360,6 +353,13 @@ class ActorFields(BaseModel):
     pane_verified: bool | None = None
     pane_in_tree: bool | None = Field(default=None, description="See SendReq.pane_in_tree.")
     harness: str | None = Field(default=None, description="See SendReq.harness.")
+
+
+class BoardPostReq(ActorFields):
+    body: str
+    subject: str | None = Field(default=None, max_length=120)
+    reply_to: int | None = Field(default=None, gt=0, le=2**63 - 1)
+    client_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class NotifyReq(ActorFields):
