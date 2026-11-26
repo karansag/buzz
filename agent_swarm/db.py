@@ -82,6 +82,29 @@ CREATE TABLE IF NOT EXISTS teams (
     position    REAL NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS board_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_id INTEGER NOT NULL,
+    author TEXT NOT NULL,
+    subject TEXT,
+    body TEXT NOT NULL,
+    reply_to INTEGER REFERENCES board_posts(id),
+    client_id TEXT,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS board_posts_team_id ON board_posts(team_id, id);
+CREATE INDEX IF NOT EXISTS board_posts_thread ON board_posts(team_id, reply_to, id);
+CREATE UNIQUE INDEX IF NOT EXISTS board_posts_client
+    ON board_posts(author, client_id) WHERE client_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS board_reads (
+    user_id TEXT NOT NULL,
+    team_id INTEGER NOT NULL,
+    last_read_id INTEGER NOT NULL DEFAULT 0,
+    last_hinted_id INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, team_id)
+);
+
 CREATE TABLE IF NOT EXISTS meta (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL

@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import activity, attachments, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restart, restore, team_view, tmux
+from . import activity, attachments, boards, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restart, restore, team_view, tmux
 
 log = logging.getLogger("agent_swarm.monitor")
 
@@ -271,6 +271,13 @@ class StatusReq(BaseModel):
         "$AGENT_SWARM_NODE or its short hostname. Omitted means the server's own.",
     )
     text: str = Field(min_length=1, max_length=200)
+
+
+class BoardPostReq(ActorFields):
+    body: str
+    subject: str | None = Field(default=None, max_length=120)
+    reply_to: int | None = Field(default=None, gt=0, le=2**63 - 1)
+    client_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class SendReq(BaseModel):
@@ -2008,6 +2015,55 @@ def create_app(
             db.last_sent(conn, members, team["queen"]) if team["queen"] else {},
             db.last_sent(conn, members), fleet.local.name, stale_hours, since,
         )
+
+    def _board_team_id(ref: str, actor: str) -> int:
+        try:
+            return _find_team(ref)["id"]
+        except HTTPException as exc:
+            if exc.status_code != 404 and actor == OWNER:
+                raise
+            if actor == OWNER and re.fullmatch(r"[0-9]{1,19}", ref) and int(ref) < 2**63:
+                return int(ref)
+            raise HTTPException(status_code=404, detail={"error": "no such board"}) from exc
+
+    def _board_call(fn, *args, **kwargs):
+        try:
+            return fn(conn, *args, **kwargs)
+        except boards.BoardError as exc:
+            raise HTTPException(status_code=exc.status, detail={"error": exc.error}) from exc
+
+    @app.post("/teams/{team}/board", status_code=201)
+    def board_post(team: str, req: BoardPostReq, request: Request):
+        actor = _actor(request, req)
+        result, created = _board_call(
+            boards.post, _board_team_id(team, actor), actor,
+            body=req.body, subject=req.subject, reply_to=req.reply_to, client_id=req.client_id,
+        )
+        return JSONResponse(result, status_code=201 if created else 200)
+
+    @app.get("/teams/{team}/board")
+    def board_page(
+        team: str, request: Request, caller: ActorFields = Depends(),
+        after: int | None = Query(None, ge=0, le=2**63 - 1),
+        before: int | None = Query(None, ge=0, le=2**63 - 1),
+        unread: bool = False, mark: bool = False,
+        thread: int | None = Query(None, gt=0, le=2**63 - 1),
+        limit: int = Query(20, ge=1, le=50),
+    ):
+        actor = _actor(request, caller)
+        if sum((after is not None, before is not None, unread)) > 1:
+            raise HTTPException(status_code=422, detail={"error": "use one of after, before, or unread"})
+        return _read_json(_board_call(
+            boards.page, _board_team_id(team, actor), actor,
+            after=after, before=before, unread=unread, thread=thread, limit=limit, mark=mark,
+        ))
+
+    @app.get("/teams/{team}/board/{post_id}")
+    def board_detail(team: str, post_id: int, request: Request, caller: ActorFields = Depends()):
+        actor = _actor(request, caller)
+        if not 0 < post_id < 2**63:
+            raise HTTPException(status_code=404, detail={"error": "no such board post"})
+        return _read_json(_board_call(boards.detail, _board_team_id(team, actor), actor, post_id))
 
     @app.post("/tasks")
     def tasks_create(req: TaskCreateReq, request: Request):
