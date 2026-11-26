@@ -137,6 +137,25 @@ def test_unregister_queen_clears_role_without_removing_teammates(client):
     assert remaining["members"] == [teammate]
 
 
+def test_queen_prompt_points_at_the_team_board(client):
+    queen = _register(client, "0:0.0")
+    teammate = _register(client, "0:1.0")
+    team = _make_team(client, "skunkworks")
+    for user in (queen, teammate):
+        client.post(f"/agents/{user}/team", json={"team_id": team["id"]})
+    assert client.patch(f"/teams/{team['id']}", json={"queen": queen,
+                                                      "objective": "Ship"}).status_code == 200
+    prompt = _queen_messages(client, queen)[0]["content"]
+    # Post team-wide material instead of messaging everyone one at a time...
+    assert "`buzz board post`" in prompt
+    # ...and refer teammates to a post by number.
+    assert "`buzz board show N`" in prompt
+    # The teammates are told the board exists, and to read it at task boundaries.
+    assert "`buzz board` at task boundaries" in prompt
+    # The task assignment message is a separate thing and stays as it is.
+    assert "`buzz board`" not in _assignment_text(client, teammate)
+
+
 def test_queen_promotion_delivers_scoped_prompt(client):
     a = _register(client, "0:0.0")
     b = _register(client, "0:1.0")
