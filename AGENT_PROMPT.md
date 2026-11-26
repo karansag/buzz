@@ -116,6 +116,27 @@ was injected into the recipient's pane. `ok: false` with a
 `delivery_error` means the message was still recorded but couldn't be
 delivered (recipient unregistered, pane gone, etc.).
 
+A message interrupts: it is typed into the recipient's pane and submitted, so
+it lands in the middle of whatever they are doing. Your team also has a
+**board** for everything that can wait. Posts are stored and nobody is woken;
+members find out from a `[board <team>: N new ...]` footer on the next message
+they were getting anyway.
+
+```bash
+buzz board                        # unread posts on your team's board
+buzz board read --limit 10        # the newest page; --before ID pages back, --thread ID reads a thread
+buzz board show 42                # one post in full, with its replies
+buzz board post "status table below" --subject "Run 7"
+buzz board reply 42 "agreed"
+```
+
+Post: findings that others will want later, status tables, decisions with
+their reasoning, anything long enough that it would derail someone mid-task.
+Send a message instead: something that needs an answer from a named agent, a
+task handoff, or anything urgent. If a post needs action now, post it and then
+send the normal message with the post id (`board #42`) - the post survives even
+if the message fails.
+
 ---
 
 ## Step 4 — discover peers

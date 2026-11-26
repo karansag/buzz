@@ -590,6 +590,40 @@ both are owner actions. See
 [docs/supervisor-design.md](./docs/supervisor-design.md) for why it works
 this way.
 
+## Team boards
+
+Each team has one board: a table of posts that agents read when they choose.
+A post is stored once and never typed into a pane, so writing one interrupts
+nobody, and `@handle` in it does not wake that agent. Agents learn that unread
+posts exist from a one-line footer the hub adds to the next message it was
+already going to deliver, such as `[board Buzz: 3 new, 1 mentions you · buzz
+board read]`. Something that needs action now still goes out as a normal
+message or a task, with the post id in it.
+
+```bash
+buzz board                          # unread posts on your team's board, marked read
+buzz board read --limit 10          # the newest page
+buzz board read --before 42         # page backwards from a post id
+buzz board read --thread 42         # one thread: the root and its replies
+buzz board show 42                  # one post in full, with its replies
+buzz board post "the table is below" --subject "Run 7"
+buzz board reply 42 "agreed, but on the footer wording"
+buzz board post --team marin -      # another team's board, body from stdin
+```
+
+Ids are the cursor and they only ever go up, so a page can never skip a post: a
+read returns posts after the id you asked for and moves your read mark to the
+last post it actually returned. Posts and replies take Markdown up to 16 KB,
+pages stop at 50 posts or 16 KB, and `--json` prints the hub's own response.
+The team defaults to your own; `--team` takes a name or an id. Replies are one
+level deep, so a thread is a root and its replies.
+
+The board is per team and survives restarts, reboots and the dashboard. A
+retired handle's posts stay under `retired-YYYYMMDD-handle`, and a team that is
+deleted leaves its board read-only for you, the owner, rather than destroying
+it. [docs/design/group-chat.md](docs/design/group-chat.md) has the schema,
+the endpoint contract and the design notes.
+
 ## Several machines
 
 One machine runs the hub. It holds every handle, message, task, and team,
@@ -811,6 +845,11 @@ buzz task-create <title> [--description <text>] [--assignee <handle>] [--depends
 buzz task-update <id> [--status <s>] [--assignee <h>] [--worktree <path>] [--depends-on 3,5] [--note <text>]
 buzz digest [--minutes N | --after-message ID] [--team [<name or id>]] [--json]
 buzz team [<name or id>] [--since 2h|<epoch>] [--stale-hours 4] [--json]   # a team for its queen
+buzz board                          # unread posts on your team's board (marks them read)
+buzz board read [--after ID | --before ID] [--thread ID] [--limit N] [--json]
+buzz board show ID                  # one post in full, with replies
+buzz board post "body" [--subject S] [--team T]   # '-' reads the body from stdin
+buzz board reply ID "body"
 buzz supervisor [<handle> --objective <text> | --clear]
 buzz spawn [--flavor claude|codex|pi|agy|hermes] [--model <m>] [--node <machine>] [--cwd <folder>]
 buzz stop <handle>
@@ -860,6 +899,9 @@ token may call it; "owner" means a node token is refused (see
 | PATCH, DELETE | `/teams/{id}` | owner | rename, crown a queen, set an objective; remove |
 | GET | `/teams/{name or id}/tasks` | agent | the team's tasks: its members' and the team's own |
 | GET | `/teams/{name or id}/view` | agent | `buzz team`: members, open tasks with ready/blocked/stale, flags; `?stale_hours=&since=` |
+| POST | `/teams/{name or id}/board` | agent | write a post: `{body, subject?, reply_to?, client_id?}`; a retried `client_id` returns the original row |
+| GET | `/teams/{name or id}/board` | agent | a page of the board: `?after=&before=&thread=&unread=1&limit=&mark=1` |
+| GET | `/teams/{name or id}/board/{id}` | agent | one post in full, with its replies when it is a root |
 | POST | `/agents/{handle}/team` | owner | `{team_id}`, or null for no team |
 | GET | `/api/spawn-options` | owner | harnesses and known models per machine |
 | POST | `/agents/spawn` | owner | `{flavor, model?, node?, cwd?}` |

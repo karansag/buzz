@@ -13,6 +13,7 @@
     buzz task-create TITLE [--description TEXT] [--assignee HANDLE] [--depends-on 3,5]
     buzz task-update ID --status open|picked_up|done [--assignee X] [--worktree PATH]
                             [--depends-on 3,5] [--note TEXT]   # --note required to close
+    buzz board [read|show ID|post TEXT|reply ID TEXT] [--team T] [--json]   # the team's board
     buzz digest [--minutes N | --after-message ID] [--team [TEAM]]   # what changed, as text
     buzz team [TEAM] [--since 2h] [--stale-hours N] [--json]   # a team for its queen
     buzz supervisor [HANDLE [--objective TEXT] | --clear]   # the swarm supervisor role
@@ -37,6 +38,7 @@ import os
 import shlex
 import sys
 import time
+import uuid
 import tomllib
 from urllib.parse import quote, urlparse
 
@@ -933,6 +935,188 @@ def cmd_team(args: argparse.Namespace) -> int:
     return 0
 
 
+def _ago(when: float, now: float) -> str:
+    """A board post's age, short enough for one line per post."""
+    seconds = max(0.0, now - when)
+    for size, unit in ((86400, "d"), (3600, "h"), (60, "m")):
+        if seconds >= size:
+            return f"{int(seconds // size)}{unit} ago"
+    return "just now"
+
+
+def _board_team_or_fail(args: argparse.Namespace) -> str | None:
+    """The board to talk to: --team NAME|ID, else the caller's own team."""
+    team = getattr(args, "team", None) or _own_team()
+    if team is None:
+        print("error: you are on no team; pass --team NAME or ID", file=sys.stderr)
+    return team
+
+
+def _board_error(r) -> str:
+    """The hub's own words for a refusal, or its status and body."""
+    try:
+        detail = r.json().get("detail")
+    except ValueError:
+        return f"{r.status_code} {r.text[:200]}"
+    if isinstance(detail, dict):
+        message = detail.get("error") or r.text
+        hint = detail.get("detail")
+        return f"{message} ({hint})" if hint else str(message)
+    return str(detail or r.text)
+
+
+def cmd_board_read(args: argparse.Namespace) -> int:
+    """Read a page of the team's board, marking it read.
+
+    `buzz board` on its own shows the unread posts; `buzz board read` pages
+    through the board by id and also marks what it shows as read.
+    """
+    team = _board_team_or_fail(args)
+    if team is None:
+        return 2
+    # The board is per team and the caller must be a member, so the request
+    # carries who is asking; a loopback request without it looks like the owner.
+    params: dict = {**_acting_fields(), "mark": 1}
+    if args.after is not None:
+        params["after"] = args.after
+    elif args.before is not None:
+        params["before"] = args.before
+    if args.thread is not None:
+        params["thread"] = args.thread
+    if getattr(args, "unread", False):
+        params["unread"] = 1
+    if args.limit is not None:
+        params["limit"] = args.limit
+    r = httpx.get(f"{base_url()}/teams/{quote(team, safe='')}/board",
+                  params=params, headers=_headers(), timeout=15)
+    if not r.is_success:
+        print(f"error: {_board_error(r)}", file=sys.stderr)
+        return 1
+    body = r.json()
+    if getattr(args, "json", False):
+        print(json.dumps(body, indent=2))
+        return 0
+    posts = body.get("posts") or []
+    head = f"board {body.get('name') or team} (team {body.get('team_id') or team})"
+    if body.get("archived"):
+        head += ", archived: read-only"
+    # The hub marks this page read before it answers, so its unread count is
+    # what is left afterwards. What this page held is the useful number.
+    if getattr(args, "unread", False):
+        print(f"{head}: {len(posts)} new" if posts else f"{head}: nothing new")
+    else:
+        left = body.get("unread")
+        print(f"{head}: {left} unread" if isinstance(left, int) and left else head)
+    now = time.time()
+    for post in posts:
+        line = f"#{post['id']} {post['author']} {_ago(post.get('created_at') or now, now)}"
+        if post.get("replies"):
+            count = post["replies"]
+            line += f", {count} reply" if count == 1 else f", {count} replies"
+        if post.get("mentions_me"):
+            line += ", mentions you"
+        preview = post.get("subject") or post.get("preview") or ""
+        print(f"  {line}\n    {preview}" if preview else f"  {line}")
+    if not posts:
+        print("  no posts here")
+    # Cursors are ids, so the way onward is the oldest and newest id on the page.
+    if body.get("has_older") and posts:
+        print(f"older: buzz board read --team {team} --before #{posts[0]['id']}")
+    if body.get("has_newer") and posts:
+        print(f"newer: buzz board read --team {team} --after #{posts[-1]['id']}")
+    return 0
+
+
+def cmd_board_show(args: argparse.Namespace) -> int:
+    """One post in full, with its replies."""
+    team = _board_team_or_fail(args)
+    if team is None:
+        return 2
+    r = httpx.get(f"{base_url()}/teams/{quote(team, safe='')}/board/{args.id}",
+                  params=_acting_fields(), headers=_headers(), timeout=15)
+    if not r.is_success:
+        print(f"error: {_board_error(r)}", file=sys.stderr)
+        return 1
+    body = r.json()
+    if getattr(args, "json", False):
+        print(json.dumps(body, indent=2))
+        return 0
+    post = body.get("post") or body
+    replies = body.get("replies") or post.get("replies") or []
+    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(post.get("created_at") or 0))
+    print(f"#{post['id']} {post['author']} {when}")
+    if post.get("subject"):
+        print(f"subject: {post['subject']}")
+    print()
+    print(post.get("body") or "")
+    if replies:
+        now = time.time()
+        print(f"\n{len(replies)} reply:" if len(replies) == 1 else f"\n{len(replies)} replies:")
+        for reply in replies:
+            print(f"\n#{reply['id']} {reply['author']} {_ago(reply.get('created_at') or now, now)}")
+            print((reply.get("body") or "").rstrip())
+    return 0
+
+
+def _board_write(team: str, payload: dict, timeout: float = 20) -> "httpx.Response":
+    """POST one post or reply; retry once on a timeout with the same client_id,
+    so a lost acknowledgement cannot become a second copy on the board."""
+    url = f"{base_url()}/teams/{quote(team, safe='')}/board"
+    payload = {**payload, **_acting_fields()}
+    for attempt in (1, 2):
+        try:
+            return httpx.post(url, json=payload, headers=_headers(), timeout=timeout)
+        except httpx.TimeoutException:
+            if attempt == 2:
+                raise
+            print("the hub did not answer; retrying once with the same client id", file=sys.stderr)
+    raise AssertionError("unreachable")
+
+
+def _board_confirm(r, args: argparse.Namespace, team: str, verb: str) -> int:
+    if not r.is_success:
+        print(f"error: {_board_error(r)}", file=sys.stderr)
+        return 1
+    body = r.json()
+    if getattr(args, "json", False):
+        print(json.dumps(body, indent=2))
+    else:
+        print(f"{verb} #{body.get('id')} on board {team}")
+    return 0
+
+
+def cmd_board_post(args: argparse.Namespace) -> int:
+    """Write a post to the team's board. Nobody is interrupted by it."""
+    team = _board_team_or_fail(args)
+    if team is None:
+        return 2
+    body = sys.stdin.read() if args.body == "-" else args.body
+    payload: dict = {"body": body, "client_id": uuid.uuid4().hex}
+    if args.subject:
+        payload["subject"] = args.subject
+    try:
+        r = _board_write(team, payload)
+    except httpx.HTTPError as e:
+        print(f"error: the hub did not answer, so the post is not on the board: {e}", file=sys.stderr)
+        return 1
+    return _board_confirm(r, args, team, "posted")
+
+
+def cmd_board_reply(args: argparse.Namespace) -> int:
+    """Reply to a root post."""
+    team = _board_team_or_fail(args)
+    if team is None:
+        return 2
+    body = sys.stdin.read() if args.body == "-" else args.body
+    payload: dict = {"body": body, "reply_to": args.id, "client_id": uuid.uuid4().hex}
+    try:
+        r = _board_write(team, payload)
+    except httpx.HTTPError as e:
+        print(f"error: the hub did not answer, so the reply is not on the board: {e}", file=sys.stderr)
+        return 1
+    return _board_confirm(r, args, team, f"replied to #{args.id}:")
+
+
 def cmd_digest(args: argparse.Namespace) -> int:
     params: dict = {"minutes": args.minutes}
     if args.after_message is not None:
@@ -1449,6 +1633,50 @@ def main(argv: list[str] | None = None) -> int:
         help="only members and tasks that changed since then: 30m, 2h, 1d, or epoch seconds (flags always show)",
     )
     tm.set_defaults(func=cmd_team)
+
+    # The board's flags live on a shared parent so `buzz board --team X` and
+    # `buzz board read --team X` both work. SUPPRESS keeps a subparser's copy
+    # from overwriting a flag given before the subcommand.
+    board_flags = argparse.ArgumentParser(add_help=False)
+    board_flags.add_argument("--team", default=argparse.SUPPRESS,
+                             help="team name or id (default: your own team)")
+    board_flags.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                             help="print the hub's JSON instead of a readable page")
+
+    brd = sub.add_parser(
+        "board", parents=[board_flags],
+        help="the team board: read and post without interrupting anyone",
+        description="Each team has one board. Posts are stored, never typed into a pane, so "
+                    "nobody is interrupted. `buzz board` shows unread posts and marks them read.",
+    )
+    brd.set_defaults(func=cmd_board_read, unread=True, board_cmd=None,
+                     after=None, before=None, thread=None, limit=None)
+    bsub = brd.add_subparsers(dest="board_cmd", title="board commands")
+
+    brd_read = bsub.add_parser("read", parents=[board_flags],
+                               help="read a page of the board, marking it read")
+    brd_read.add_argument("--after", type=int, metavar="ID", help="posts newer than this id")
+    brd_read.add_argument("--before", type=int, metavar="ID", help="posts older than this id")
+    brd_read.add_argument("--thread", type=int, metavar="ROOT", help="one thread: a root post and its replies")
+    brd_read.add_argument("--limit", type=int, help="posts per page (default 20, max 50)")
+    brd_read.set_defaults(func=cmd_board_read, unread=False)
+
+    brd_show = bsub.add_parser("show", parents=[board_flags],
+                               help="one post in full, with its replies")
+    brd_show.add_argument("id", type=int, metavar="ID")
+    brd_show.set_defaults(func=cmd_board_show, unread=False)
+
+    brd_post = bsub.add_parser("post", parents=[board_flags],
+                               help="write a post; prints its id")
+    brd_post.add_argument("body", help="the post, in Markdown; '-' reads it from stdin")
+    brd_post.add_argument("--subject", help="optional one-line subject (roots only)")
+    brd_post.set_defaults(func=cmd_board_post, unread=False)
+
+    brd_reply = bsub.add_parser("reply", parents=[board_flags],
+                                help="reply to a root post")
+    brd_reply.add_argument("id", type=int, metavar="ID", help="the root post to reply to")
+    brd_reply.add_argument("body", help="the reply, in Markdown; '-' reads it from stdin")
+    brd_reply.set_defaults(func=cmd_board_reply, unread=False)
 
     sup = sub.add_parser(
         "supervisor",
