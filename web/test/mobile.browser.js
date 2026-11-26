@@ -937,7 +937,7 @@ for (const width of [390, 1500]) {
       // wait a loaded machine can read it a beat before the tabs render.
       await page.waitForSelector('nav.views a[href="#/tab/usage"]');
       // The agent tab (latest owner conversation) sits between overview and chats.
-      assert.deepEqual(await page.locator('nav.views a:not(.agent-view-tab)').allTextContents(), ['overview', 'chats', 'task history', 'usage', 'prs']);
+      assert.deepEqual(await page.locator('nav.views a:not(.agent-view-tab)').allTextContents(), ['overview', 'chats', 'task history', 'boards', 'usage', 'prs']);
       assert.equal(await page.locator('nav.views a').nth(1).getAttribute('class'), 'agent-view-tab ');
       for (const name of ['usage', 'prs']) {
         await page.locator(`nav.views a[href="#/tab/${name}"]`).click();
@@ -972,6 +972,7 @@ test('Ctrl+Shift+[ / ] step through the header views, including extra tabs', asy
     };
     await go('Control+Shift+BracketRight', '#/chats');
     await go('Control+Shift+BracketRight', '#/tasks');
+    await go('Control+Shift+BracketRight', '#/board');
     await go('Control+Shift+BracketRight', '#/tab/usage');
     // From inside the tab's page too.
     await page.frameLocator('iframe.tab-frame').locator('#q').click();

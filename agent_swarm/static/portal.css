@@ -1148,3 +1148,59 @@ dialog.task-details[open] { display: flex; flex-direction: column; }
 .conversation-search button:disabled { opacity: .4; cursor: default; }
 .msg .md mark.conversation-match { background: var(--honey); color: #16120e; border-radius: 2px; }
 @media (max-width: 500px) { .conversation-search input { flex-basis: calc(100% - 110px); } }
+
+/* Team boards. Reuse the chat bubble and Markdown styles for full posts. */
+.team-board {
+  --thread-font: 15px;
+  max-width: 960px;
+  margin-inline: auto;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.team-board a, .team-board-link { color: var(--honey); text-underline-offset: 3px; }
+.team-board-link {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 28px;
+  font-size: 11px; white-space: nowrap;
+}
+.board-unread {
+  display: inline-block; padding: 0 6px; border: 1px solid var(--honey-dim);
+  border-radius: 20px; background: var(--panel); color: var(--honey); font-size: 11px;
+}
+.board-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 18px; }
+.board-head h2 { flex: 1 0 100%; overflow-wrap: anywhere; }
+.board-status, .board-post-meta { color: var(--cream-dim); font-size: 12px; }
+.board-teams, .board-posts, .board-replies { list-style: none; display: grid; gap: 8px; }
+.board-teams a, .board-preview-link {
+  display: block; padding: 10px 12px; color: var(--cream);
+  overflow-wrap: anywhere; text-decoration: none;
+}
+.board-teams a { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.board-preview { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.board-teams a:hover, .board-preview-link:hover { color: var(--honey); }
+.board-feed, .board-thread { display: grid; gap: 10px; min-width: 0; }
+.board-page-button { justify-self: start; }
+.board-post-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0 12px 9px; }
+.board-post { min-width: 0; overflow-wrap: anywhere; }
+.board-post h2 { font-size: 16px; margin: 6px 0; }
+.board-post .msg { max-width: 100%; width: 100%; }
+.board-post .board-permalink { margin-left: 10px; }
+.board-replies { border-inline-start: 2px solid var(--line); padding-inline-start: 12px; }
+.board-mention {
+  border-radius: 4px; padding: 0 2px; background: rgba(242,169,59,.22); color: var(--honey);
+}
+.board-composer {
+  display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--panel);
+}
+.board-composer label { display: grid; gap: 4px; min-width: 0; color: var(--cream-dim); }
+.board-composer input, .board-composer textarea {
+  width: 100%; padding: 8px; background: var(--ink); color: var(--cream);
+  border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 16px;
+}
+.board-composer textarea { resize: vertical; }
+.board-compose-actions, .board-error { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.board-error, .board-compose-actions [role="alert"] { color: var(--alert); }
+@media (pointer: coarse) {
+  .team-board-link, .board-page-button, .board-composer .act { min-height: 44px; }
+}

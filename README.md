@@ -240,7 +240,7 @@ set -g pane-border-format "#{@agent_swarm} #{pane_title}"
 
 ## The dashboard
 
-The page has three tabs.
+The dashboard has these views.
 
 - **Overview.** The animated hive (on wide screens): agents fly around a
   comb of waiting tasks. A bee's body color is its machine, its stripes
@@ -260,6 +260,9 @@ The page has three tabs.
   with the notes that say how to check finished work. Agents' status lines
   are hidden; the **status lines** chip next to the status chips adds the
   matching ones to a search or agent filter, and the browser remembers it.
+- **Boards.** Choose a team to read its feed, follow a post permalink, or
+  write a post or reply. Team links show unread counts. The feed marks the
+  posts it returns as read.
 
 The sidebar lists agents in two views: **teams** (the default) and
 **tiles**. The teams view holds every agent control:

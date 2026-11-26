@@ -16,7 +16,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import {
   POLL_MS, stopAgentPrompt,
   PEEK_MS,
-  JSONH,
+  JSONH, newClientId,
   FLAVOR_ICON,
   STATE,
   agentStatus,
@@ -41,6 +41,7 @@ import { machineColor, machineList, machineName } from "./machines.js";
 import { COMPACT_LAYOUT, useMedia } from "./use-media.js";
 import { CompactBees, HiveView } from "./hive.js";
 import { TabView } from "./tabs.js";
+import { BOARD_ROUTE, BoardLink, BoardView, parseBoardRoute } from "./board.js";
 import { TAB_ROUTE, stepView, tabHash } from "./views.js";
 import { HistoryView, HISTORY_ROUTE, historyHash } from "./history.js";
 import { AttachmentList, AttachmentPicker, useAttachments } from "./attachments.js";
@@ -950,7 +951,8 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
           onClick=${e => { e.preventDefault(); e.stopPropagation(); setManaging(m => m === g.key ? null : g.key); }}>✎</button>`}
         ${team && html`<button type="button" class="team-bees-manage team-bees-remove"
           aria-label=${`Remove team ${g.name}`} title="remove team (its agents keep running)"
-          onClick=${e => { e.preventDefault(); e.stopPropagation(); removeTeam(team, refresh); }}>✕</button>`}</span></summary>
+          onClick=${e => { e.preventDefault(); e.stopPropagation(); removeTeam(team, refresh); }}>✕</button>`}
+        ${team && html`<${BoardLink} team=${team} />`}</span></summary>
       ${managing === g.key && team && html`<${TeamManage} key=${`${g.key}:${team.queen}`} team=${team} members=${g.members} refresh=${refresh} onDone=${() => setManaging(null)} />`}
       <div class="team-bees-chips">${empty && dragging && html`<span class="team-bees-empty">drop here</span>`}${g.members.map(r => {
         const st = STATE[agentStatus(r)] || STATE.unknown;
@@ -1203,12 +1205,6 @@ function TerminalInput({ user }) {
 // announce them here so the thread can show them the moment send is pressed.
 const pendingSends = new EventTarget();
 let pendingSeq = 0;
-
-// crypto.randomUUID needs a secure context; the dashboard is often opened
-// over plain http on a LAN or tailnet address, where getRandomValues works.
-function newClientId() {
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
-}
 
 // Waits before re-sending a message whose answer was lost. The server knows
 // the message by its client id, so a re-send never delivers it twice.
@@ -1915,6 +1911,7 @@ function useTeammateKeys(members) {
 function TeamStrip({ crew, user, unreadFor }) {
   return html`<nav class="team-strip" aria-label=${`Team ${crew.team.name}`}>
     <span class="team-strip-name">${crew.team.name}</span>
+    <${BoardLink} team=${crew.team} />
     ${crew.members.map(m => {
       const st = STATE[agentStatus(m)] || STATE.unknown;
       const here = m.user_id === user;
@@ -2371,7 +2368,8 @@ function App() {
   const onHistory = route.startsWith(HISTORY_ROUTE);
   const onChats = route.startsWith(CHATS_ROUTE);
   const onTab = route.startsWith(TAB_ROUTE) ? decodeURIComponent(route.slice(TAB_ROUTE.length)) : null;
-  const onOverview = !focusUser && !onHistory && !onChats && !onTab;
+  const boardRoute = parseBoardRoute(route);
+  const onOverview = !focusUser && !onHistory && !onChats && !onTab && !boardRoute;
   const [lastAgent, setLastAgent] = useState(() => {
     try { return JSON.parse(localStorage.getItem("swarm-last-agent")); } catch { return null; }
   });
@@ -2402,7 +2400,7 @@ function App() {
   })() : null;
   const agentTab = currentAgent || savedAgent || recentChat;
   const agentTabHash = agentTab ? focusHash(agentTab.user_id) : null;
-  viewsRef.current = ["#/", ...(agentTabHash ? [agentTabHash] : []), CHATS_ROUTE, HISTORY_ROUTE,
+  viewsRef.current = ["#/", ...(agentTabHash ? [agentTabHash] : []), CHATS_ROUTE, HISTORY_ROUTE, BOARD_ROUTE,
     ...(state?.tabs || []).map(tabHash)];
   useLayoutEffect(() => {
     if (!currentAgent) return;
@@ -2424,13 +2422,14 @@ function App() {
   useEffect(() => { if (focusUser) noteOpened(focusUser); }, [focusUser]);
   // A roster link may be several screens down on a phone. Bring the new
   // view into sight; polling and task-history filters must not move it.
-  const previousView = useRef({ focusUser, onHistory });
+  const boardKey = boardRoute ? `${boardRoute.team}:${boardRoute.post}` : null;
+  const previousView = useRef({ focusUser, onHistory, boardKey });
   useEffect(() => {
     const before = previousView.current;
-    previousView.current = { focusUser, onHistory };
-    if ((before.focusUser !== focusUser || before.onHistory !== onHistory) && compact)
+    previousView.current = { focusUser, onHistory, boardKey };
+    if ((before.focusUser !== focusUser || before.onHistory !== onHistory || before.boardKey !== boardKey) && compact)
       document.querySelector(".stage")?.scrollIntoView({ block: "start" });
-  }, [focusUser, onHistory, compact]);
+  }, [focusUser, onHistory, boardKey, compact]);
 
   const poll = (refresh = true) => {
     const job = polling.current;
@@ -2566,6 +2565,7 @@ function App() {
       </a>`}
       <a href=${CHATS_ROUTE} class=${onChats ? "on" : ""}>chats</a>
       <a href=${HISTORY_ROUTE} class=${onHistory ? "on" : ""}>task history</a>
+      <a href=${BOARD_ROUTE} class=${boardRoute ? "on" : ""}>boards</a>
       ${(state?.tabs || []).map(t => html`<a key=${t} href=${tabHash(t)} class=${onTab === t ? "on" : ""}>${t}</a>`)}
     </nav>
     <${QuickSwitcher} state=${state} navigate=${(user, previous) => {
@@ -2606,9 +2606,12 @@ function App() {
           ? html`<${HistoryView} state=${state} refresh=${poll} />`
           : onChats
             ? html`<${ChatsView} state=${state} unreadFor=${unreadFor} refresh=${poll} />`
-            : onTab !== null
-              ? html`<${TabView} name=${onTab} tabs=${state.tabs || []} />`
-              : html`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
+            : boardRoute
+              ? html`<${BoardView} key=${boardKey} teamId=${boardRoute.team} postId=${boardRoute.post}
+                  teams=${state.teams || []} now=${state.now} />`
+              : onTab !== null
+                ? html`<${TabView} name=${onTab} tabs=${state.tabs || []} />`
+                : html`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
     </div>
     </div>
     ${!compact && html`<div id="agent-sidebar" class=${`roster-drawer ${rosterOpen ? "is-open" : ""}`} inert=${!rosterOpen} aria-hidden=${!rosterOpen}>

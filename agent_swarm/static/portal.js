@@ -9206,7 +9206,7 @@ function parseAgentRoute(hash = "") {
 }
 //#endregion
 //#region web/src/shared.js
-var POLL_MS = 2e3;
+var POLL_MS$1 = 2e3;
 var PEEK_MS = 2e3;
 var JSONH = { "content-type": "application/json" };
 function stopAgentPrompt(agent) {
@@ -9428,6 +9428,9 @@ function retiredLabel(agent) {
 		timeZone: "UTC"
 	});
 	return `${agent.original_id} (retired ${date})`;
+}
+function newClientId() {
+	return Array.from(crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 //#endregion
 //#region web/src/owner-note.js
@@ -9881,7 +9884,7 @@ function useAgentHistory(user, returnState = null) {
 			}
 		};
 		poll();
-		const timer = setInterval(poll, POLL_MS);
+		const timer = setInterval(poll, POLL_MS$1);
 		return () => {
 			active = false;
 			abort.abort();
@@ -10125,8 +10128,39 @@ function highlightSearch(html, words) {
 	return out;
 }
 //#endregion
+//#region web/src/board-mentions.js
+var MENTION = /(?<![A-Za-z0-9_@.-])(@[A-Za-z0-9][A-Za-z0-9-]{0,47})(?![A-Za-z0-9_-])/g;
+function mentionParts(text, members) {
+	return text.split(MENTION).map((part, i) => ({
+		text: part,
+		mention: i % 2 === 1 && members.has(part.slice(1).toLowerCase())
+	}));
+}
+function highlightBoardMentions(markup, members) {
+	if (!members?.size || !markup.includes("@")) return markup;
+	const root = document.createElement("template");
+	root.innerHTML = markup;
+	const walker = document.createTreeWalker(root.content, NodeFilter.SHOW_TEXT);
+	const matches = [];
+	while (walker.nextNode()) {
+		const node = walker.currentNode;
+		if (!node.data.includes("@")) continue;
+		const parts = mentionParts(node.data, members);
+		if (parts.some((part) => part.mention)) matches.push([node, parts]);
+	}
+	for (const [node, parts] of matches) node.replaceWith(...parts.map(({ text, mention }) => {
+		if (!mention) return document.createTextNode(text);
+		const mark = document.createElement("mark");
+		mark.className = "board-mention";
+		mark.textContent = text;
+		return mark;
+	}));
+	return root.innerHTML;
+}
+//#endregion
 //#region web/src/chat-message.js
-function ChatMessage({ m, now, messages, right, pinned, fresh, words = [], historyId, onContextMenu, children }) {
+function ChatMessage({ m, now, messages, right, pinned, fresh, words = [], mentions, historyId, onContextMenu, children }) {
+	const markup = m.content && highlightSearch(renderMarkdown(shellNewlines(m.content)), words);
 	return m$1`<div data-message-id=${historyId} tabindex=${historyId === void 0 ? null : "-1"}
       onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")}
       onContextMenu=${onContextMenu} class=${[
@@ -10139,7 +10173,7 @@ function ChatMessage({ m, now, messages, right, pinned, fresh, words = [], histo
 	].join(" ")}>
     <div class="bubble">
       <${ReplyPreview} message=${m} messages=${messages} />
-      ${m.content && m$1`<div class="md" dangerouslySetInnerHTML=${{ __html: highlightSearch(renderMarkdown(shellNewlines(m.content)), words) }} />`}
+      ${m.content && m$1`<div class="md" dangerouslySetInnerHTML=${{ __html: highlightBoardMentions(markup, mentions) }} />`}
       ${m.attachments?.length > 0 && m$1`<div class=${`msg-images ${m.content ? "" : "only"}`}>
         ${m.attachments.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}
       </div>`}
@@ -11820,6 +11854,272 @@ function TabView({ name, tabs }) {
   </section>`;
 }
 //#endregion
+//#region web/src/board.js
+var BOARD_ROUTE = "#/board";
+var POLL_MS = 5e3;
+var BODY_LIMIT = 16384;
+var SUBJECT_LIMIT = 120;
+function boardHash(team, post) {
+	const params = new URLSearchParams();
+	if (team != null) params.set("team", team);
+	if (post != null) params.set("post", post);
+	return params.size ? `${BOARD_ROUTE}?${params}` : BOARD_ROUTE;
+}
+function parseBoardRoute(hash) {
+	const [path, search] = hash.split("?");
+	if (path !== "#/board") return null;
+	const params = new URLSearchParams(search);
+	const id = (name) => {
+		const value = params.get(name);
+		return /^[1-9]\d*$/.test(value ?? "") && Number.isSafeInteger(Number(value)) ? Number(value) : null;
+	};
+	return {
+		team: id("team"),
+		post: id("post")
+	};
+}
+function UnreadBadge({ count }) {
+	return count > 0 ? m$1`<span class="board-unread" aria-label=${`${count} unread posts`}>${count}</span>` : null;
+}
+function BoardLink({ team }) {
+	return m$1`<a class="team-board-link" href=${boardHash(team.id)}
+      aria-label=${`${team.name} board${team.board_unread > 0 ? `, ${team.board_unread} unread posts` : ""}`}>
+    Board <${UnreadBadge} count=${team.board_unread} />
+  </a>`;
+}
+var BOARD_ERRORS = {
+	board_archived: "This board is archived. Posts can still be read.",
+	invalid_reply_target: "This post can no longer be replied to.",
+	client_id_conflict: "The server has a different post under this submission ID."
+};
+async function boardRequest(url, options, failure) {
+	const response = await fetch(url, options).catch((error) => {
+		if (error.name === "AbortError") throw error;
+		throw Error(failure);
+	});
+	const result = await response.json().catch(() => null);
+	if (!response.ok || !result) {
+		const error = result?.detail?.error;
+		throw Error(Object.hasOwn(BOARD_ERRORS, error) ? BOARD_ERRORS[error] : typeof error === "string" ? error : failure);
+	}
+	return result;
+}
+function useBoard(teamId, postId) {
+	const [data, setData] = d(null);
+	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
+	const readRef = A(null);
+	h(() => {
+		if (teamId === null) return;
+		const controller = new AbortController();
+		const { signal } = controller;
+		const endpoint = `/teams/${teamId}/board`;
+		let current = null;
+		let reading = false;
+		let queued = false;
+		let timer;
+		const read = async (mode) => {
+			if (signal.aborted) return;
+			if (document.hidden) {
+				clearTimeout(timer);
+				timer = setTimeout(() => read("refresh"), POLL_MS);
+				return;
+			}
+			if (reading) {
+				if (mode === "afterWrite") queued = true;
+				return;
+			}
+			const older = mode === "older";
+			if (older && !current?.has_older) return;
+			clearTimeout(timer);
+			reading = true;
+			setBusy(true);
+			try {
+				if (postId !== null) current = await boardRequest(`${endpoint}/${postId}`, {
+					signal,
+					cache: "no-store"
+				}, "Could not load the post.");
+				else {
+					const query = new URLSearchParams({ mark: "1" });
+					if (older) query.set("before", current.posts[0].id);
+					else if (current) query.set("after", current.posts.at(-1)?.id ?? 0);
+					const page = await boardRequest(`${endpoint}?${query}`, {
+						signal,
+						cache: "no-store"
+					}, "Could not load the board.");
+					current = current ? {
+						...page,
+						posts: older ? [...page.posts, ...current.posts] : [...current.posts, ...page.posts],
+						has_older: older ? page.has_older : current.has_older,
+						has_newer: older ? current.has_newer : page.has_newer
+					} : page;
+				}
+				if (!signal.aborted) {
+					setData(current);
+					setError("");
+				}
+			} catch (error) {
+				if (!signal.aborted) setError(error.message);
+			} finally {
+				reading = false;
+				if (!signal.aborted) {
+					setBusy(false);
+					if (queued) {
+						queued = false;
+						read("refresh");
+					} else timer = setTimeout(() => read("refresh"), POLL_MS);
+				}
+			}
+		};
+		readRef.current = read;
+		read("refresh");
+		return () => {
+			clearTimeout(timer);
+			controller.abort();
+			readRef.current = null;
+		};
+	}, [teamId, postId]);
+	return {
+		data,
+		busy,
+		error,
+		read: (mode) => readRef.current?.(mode)
+	};
+}
+function MentionText({ text, members }) {
+	return mentionParts(text, members).map(({ text, mention }) => mention ? m$1`<mark class="board-mention">${text}</mark>` : text);
+}
+function BoardComposer({ teamId, replyTo, onPosted }) {
+	const [subject, setSubject] = d("");
+	const [body, setBody] = d("");
+	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
+	const attempt = A(null);
+	const inFlight = A(false);
+	const tooLong = new TextEncoder().encode(body).length > BODY_LIMIT;
+	const valid = body.trim() && !tooLong;
+	const submit = async (event) => {
+		event.preventDefault();
+		if (!valid || inFlight.current) return;
+		const title = subject.trim() || null;
+		const clientId = attempt.current?.body === body && attempt.current.subject === title ? attempt.current.id : newClientId();
+		attempt.current = {
+			body,
+			subject: title,
+			id: clientId
+		};
+		inFlight.current = true;
+		setBusy(true);
+		setError("");
+		const uncertain = "Could not confirm the post. Retry to check without posting a duplicate.";
+		try {
+			const result = await boardRequest(`/teams/${teamId}/board`, {
+				method: "POST",
+				headers: JSONH,
+				body: JSON.stringify({
+					body,
+					subject: title,
+					reply_to: replyTo,
+					client_id: clientId
+				})
+			}, uncertain);
+			if (!Number.isSafeInteger(result.id)) throw Error(uncertain);
+			attempt.current = null;
+			setSubject("");
+			setBody("");
+			onPosted();
+		} catch (error) {
+			setError(error.message);
+		} finally {
+			inFlight.current = false;
+			setBusy(false);
+		}
+	};
+	return m$1`<form class="board-composer" onSubmit=${submit}>
+    ${replyTo === null && m$1`<label>Subject (optional)<input value=${subject}
+      maxlength=${SUBJECT_LIMIT} disabled=${busy} onInput=${(e) => setSubject(e.target.value)} /></label>`}
+    <label>${replyTo === null ? "New post" : "Reply"}
+      <textarea value=${body} rows="4" disabled=${busy} onInput=${(e) => setBody(e.target.value)}></textarea>
+    </label>
+    <div class="board-compose-actions">
+      <button type="submit" class="act" disabled=${busy || !valid}>${busy ? "Posting…" : replyTo === null ? "Post" : "Reply"}</button>
+      ${tooLong && m$1`<span role="alert">Post exceeds the 16 KB limit.</span>`}
+      ${error && m$1`<span role="alert">${error}</span>`}
+    </div>
+  </form>`;
+}
+function BoardFeed({ data, read, busy, teamId, members, now }) {
+	return m$1`<div class="board-feed">
+    ${data.has_older && m$1`<button type="button" class="mini board-page-button" disabled=${busy}
+      onClick=${() => read("older")}>${busy ? "Loading…" : "Load older posts"}</button>`}
+    ${data.posts.length === 0 && m$1`<p class="board-status">No posts yet.</p>`}
+    <ol class="board-posts">
+      ${data.posts.map((post) => m$1`<li key=${post.id} class="board-preview">
+        <a class="board-preview-link" href=${boardHash(teamId, post.id)}>
+          <${MentionText} text=${post.preview} members=${members} />
+        </a>
+        <div class="board-post-meta">
+          <span>#${post.id} · ${disp(post.author)} · ${rel(post.created_at, now)}</span>
+          ${post.reply_to !== null ? m$1`<a href=${boardHash(teamId, post.reply_to)}>Reply to #${post.reply_to}</a>` : post.replies > 0 && m$1`<a href=${boardHash(teamId, post.id)}>${post.replies} ${post.replies === 1 ? "reply" : "replies"}</a>`}
+        </div>
+      </li>`)}
+    </ol>
+    ${data.has_newer && m$1`<button type="button" class="mini board-page-button" disabled=${busy}
+      onClick=${() => read("refresh")}>Load newer posts</button>`}
+  </div>`;
+}
+function BoardPost({ post, teamId, now, members }) {
+	const message = {
+		sender: post.author,
+		content: post.body,
+		ts: post.created_at
+	};
+	return m$1`<article class="board-post" aria-label=${`Post #${post.id}`}>
+    ${post.subject && m$1`<h2><${MentionText} text=${post.subject} members=${members} /></h2>`}
+    <${ChatMessage} m=${message} now=${now} right=${post.author === "owner"} mentions=${members}>
+      <a class="board-permalink" href=${boardHash(teamId, post.id)} aria-label=${`Permalink to post #${post.id}`}>#${post.id}</a>
+    </${ChatMessage}>
+  </article>`;
+}
+function BoardView({ teamId, postId, teams, now }) {
+	const { data, busy, error, read } = useBoard(teamId, postId);
+	const team = teams.find((team) => team.id === teamId);
+	const members = T(() => new Set((team?.members || []).map((name) => name.toLowerCase())), [team?.members]);
+	const archived = !team || data?.archived;
+	const title = data?.name || team?.name || `Team #${teamId}`;
+	if (teamId === null) return m$1`<section class="team-board" aria-label="Team boards">
+    <h2>Team boards</h2>
+    ${teams.length ? m$1`<ul class="board-teams">
+      ${teams.map((team) => m$1`<li key=${team.id}><a href=${boardHash(team.id)}>
+        ${team.name} <${UnreadBadge} count=${team.board_unread} />
+      </a></li>`)}
+    </ul>` : m$1`<p class="board-status">No teams yet.</p>`}
+  </section>`;
+	return m$1`<section class="team-board" aria-label=${`${title} board`}>
+    <header class="board-head">
+      <a href=${boardHash()}>Team boards</a>
+      <h2>${title} board</h2>
+      ${postId !== null && m$1`<a href=${boardHash(teamId)}>Back to feed</a>`}
+      ${archived && data && m$1`<span class="board-status">Archived · read-only</span>`}
+    </header>
+    ${error && m$1`<div class="board-error" role="alert">${error}
+      <button type="button" class="mini" onClick=${() => read("refresh")}>Retry</button>
+    </div>`}
+    ${!data && !error && m$1`<p class="board-status" role="status">Loading board…</p>`}
+    ${data && (postId === null ? m$1`<${BoardFeed} data=${data} read=${read} busy=${busy} teamId=${teamId} members=${members} now=${now} />` : m$1`<div class="board-thread">
+          ${data.post.reply_to !== null && m$1`<a href=${boardHash(teamId, data.post.reply_to)}>Open thread #${data.post.reply_to}</a>`}
+          <${BoardPost} post=${data.post} teamId=${teamId} members=${members} now=${now} />
+          ${data.replies.length > 0 && m$1`<ol class="board-replies" aria-label="Replies">
+            ${data.replies.map((post) => m$1`<li key=${post.id}>
+              <${BoardPost} post=${post} teamId=${teamId} members=${members} now=${now} />
+            </li>`)}
+          </ol>`}
+        </div>`)}
+    ${data && !archived && (postId === null || data.post.reply_to === null) && m$1`
+      <${BoardComposer} teamId=${teamId} replyTo=${postId} onPosted=${() => read("afterWrite")} />`}
+  </section>`;
+}
+//#endregion
 //#region web/src/views.js
 var TAB_ROUTE = "#/tab/";
 var tabHash = (name) => `${TAB_ROUTE}${encodeURIComponent(name)}`;
@@ -13490,7 +13790,8 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 			e.preventDefault();
 			e.stopPropagation();
 			removeTeam(team, refresh);
-		}}>✕</button>`}</span></summary>
+		}}>✕</button>`}
+        ${team && m$1`<${BoardLink} team=${team} />`}</span></summary>
       ${managing === g.key && team && m$1`<${TeamManage} key=${`${g.key}:${team.queen}`} team=${team} members=${g.members} refresh=${refresh} onDone=${() => setManaging(null)} />`}
       <div class="team-bees-chips">${empty && dragging && m$1`<span class="team-bees-empty">drop here</span>`}${g.members.map((r) => {
 			const st = STATE[agentStatus(r)] || STATE.unknown;
@@ -13733,9 +14034,6 @@ function TerminalInput({ user }) {
 }
 var pendingSends = new EventTarget();
 var pendingSeq = 0;
-function newClientId() {
-	return Array.from(crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-}
 var RESEND_DELAYS_MS = [
 	1e3,
 	3e3,
@@ -14485,6 +14783,7 @@ function useTeammateKeys(members) {
 function TeamStrip({ crew, user, unreadFor }) {
 	return m$1`<nav class="team-strip" aria-label=${`Team ${crew.team.name}`}>
     <span class="team-strip-name">${crew.team.name}</span>
+    <${BoardLink} team=${crew.team} />
     ${crew.members.map((m) => {
 		const st = STATE[agentStatus(m)] || STATE.unknown;
 		const here = m.user_id === user;
@@ -14938,7 +15237,8 @@ function App() {
 	const onHistory = route.startsWith(HISTORY_ROUTE);
 	const onChats = route.startsWith(CHATS_ROUTE);
 	const onTab = route.startsWith("#/tab/") ? decodeURIComponent(route.slice(TAB_ROUTE.length)) : null;
-	const onOverview = !focusUser && !onHistory && !onChats && !onTab;
+	const boardRoute = parseBoardRoute(route);
+	const onOverview = !focusUser && !onHistory && !onChats && !onTab && !boardRoute;
 	const [lastAgent, setLastAgent] = d(() => {
 		try {
 			return JSON.parse(localStorage.getItem("swarm-last-agent"));
@@ -14972,6 +15272,7 @@ function App() {
 		...agentTabHash ? [agentTabHash] : [],
 		CHATS_ROUTE,
 		HISTORY_ROUTE,
+		BOARD_ROUTE,
 		...(state?.tabs || []).map(tabHash)
 	];
 	_(() => {
@@ -14994,20 +15295,24 @@ function App() {
 	h(() => {
 		if (focusUser) noteOpened(focusUser);
 	}, [focusUser]);
+	const boardKey = boardRoute ? `${boardRoute.team}:${boardRoute.post}` : null;
 	const previousView = A({
 		focusUser,
-		onHistory
+		onHistory,
+		boardKey
 	});
 	h(() => {
 		const before = previousView.current;
 		previousView.current = {
 			focusUser,
-			onHistory
+			onHistory,
+			boardKey
 		};
-		if ((before.focusUser !== focusUser || before.onHistory !== onHistory) && compact) document.querySelector(".stage")?.scrollIntoView({ block: "start" });
+		if ((before.focusUser !== focusUser || before.onHistory !== onHistory || before.boardKey !== boardKey) && compact) document.querySelector(".stage")?.scrollIntoView({ block: "start" });
 	}, [
 		focusUser,
 		onHistory,
+		boardKey,
 		compact
 	]);
 	const poll = (refresh = true) => {
@@ -15061,7 +15366,7 @@ function App() {
 	};
 	h(() => {
 		poll(false);
-		const t = setInterval(() => poll(false), POLL_MS);
+		const t = setInterval(() => poll(false), POLL_MS$1);
 		const c = setInterval(() => setClock((/* @__PURE__ */ new Date()).toLocaleTimeString()), 1e3);
 		const onHash = () => setRoute(location.hash);
 		const onKey = (e) => {
@@ -15117,6 +15422,7 @@ function App() {
       </a>`}
       <a href=${CHATS_ROUTE} class=${onChats ? "on" : ""}>chats</a>
       <a href=${HISTORY_ROUTE} class=${onHistory ? "on" : ""}>task history</a>
+      <a href=${BOARD_ROUTE} class=${boardRoute ? "on" : ""}>boards</a>
       ${(state?.tabs || []).map((t) => m$1`<a key=${t} href=${tabHash(t)} class=${onTab === t ? "on" : ""}>${t}</a>`)}
     </nav>
     <${QuickSwitcher} state=${state} navigate=${(user, previous) => {
@@ -15153,7 +15459,8 @@ function App() {
     <div class="stage">
       ${focusUser ? m$1`<${FocusView} key=${`${focusUser}:${currentRetirement}`} user=${focusUser} messageId=${agentRoute?.messageId ?? null}
             state=${view} refresh=${poll} freshIds=${freshIds} unreadFor=${unreadFor}
-            returnState=${currentAgent ? conversation.current : null} />` : onHistory ? m$1`<${HistoryView} state=${state} refresh=${poll} />` : onChats ? m$1`<${ChatsView} state=${state} unreadFor=${unreadFor} refresh=${poll} />` : onTab !== null ? m$1`<${TabView} name=${onTab} tabs=${state.tabs || []} />` : m$1`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
+            returnState=${currentAgent ? conversation.current : null} />` : onHistory ? m$1`<${HistoryView} state=${state} refresh=${poll} />` : onChats ? m$1`<${ChatsView} state=${state} unreadFor=${unreadFor} refresh=${poll} />` : boardRoute ? m$1`<${BoardView} key=${boardKey} teamId=${boardRoute.team} postId=${boardRoute.post}
+                  teams=${state.teams || []} now=${state.now} />` : onTab !== null ? m$1`<${TabView} name=${onTab} tabs=${state.tabs || []} />` : m$1`<${Overview} state=${state} refresh=${poll} machine=${machine} harness=${harness} setHarness=${setHarness} unreadFor=${unreadFor} />`}
     </div>
     </div>
     ${!compact && m$1`<div id="agent-sidebar" class=${`roster-drawer ${rosterOpen ? "is-open" : ""}`} inert=${!rosterOpen} aria-hidden=${!rosterOpen}>

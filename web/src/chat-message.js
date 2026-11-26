@@ -1,5 +1,6 @@
 // The conversation and the expanded pin use the same message bubble.
 import { html } from "htm/preact";
+import { highlightBoardMentions } from "./board-mentions.js";
 import { AttachmentLink } from "./attachments.js";
 import { highlightSearch } from "./conversation-search.js";
 import { renderMarkdown } from "./markdown.js";
@@ -8,9 +9,10 @@ import { ReplyPreview } from "./reply-preview.js";
 import { disp, rel } from "./shared.js";
 
 export function ChatMessage({
-  m, now, messages, right, pinned, fresh, words = [],
+  m, now, messages, right, pinned, fresh, words = [], mentions,
   historyId, onContextMenu, children,
 }) {
+  const markup = m.content && highlightSearch(renderMarkdown(shellNewlines(m.content)), words);
   return html`<div data-message-id=${historyId} tabindex=${historyId === undefined ? null : "-1"}
       onAnimationEnd=${e => e.currentTarget.classList.remove("reply-highlight")}
       onContextMenu=${onContextMenu} class=${[
@@ -21,7 +23,7 @@ export function ChatMessage({
     <div class="bubble">
       <${ReplyPreview} message=${m} messages=${messages} />
       ${m.content && html`<div class="md" dangerouslySetInnerHTML=${{
-        __html: highlightSearch(renderMarkdown(shellNewlines(m.content)), words),
+        __html: highlightBoardMentions(markup, mentions),
       }} />`}
       ${m.attachments?.length > 0 && html`<div class=${`msg-images ${m.content ? "" : "only"}`}>
         ${m.attachments.map(name => html`<${AttachmentLink} key=${name} name=${name} />`)}

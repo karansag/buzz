@@ -165,3 +165,9 @@ export function retiredLabel(agent) {
   });
   return `${agent.original_id} (retired ${date})`;
 }
+
+// crypto.randomUUID needs a secure context; the dashboard is often opened
+// over plain http on a LAN or tailnet address, where getRandomValues works.
+export function newClientId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+}
