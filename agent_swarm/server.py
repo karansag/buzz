@@ -533,7 +533,7 @@ def _queen_prompt(team: dict, objective: str, previous_queen: str | None = None)
         "a board they should read with `buzz board` at task boundaries.\n\n"
         "Decompose the objective into concrete tasks; create and assign them to "
         "teammates with buzz task-create and buzz task-update, and "
-        "record ordering with --depends-on <ids> so the board shows the "
+        "record ordering with --depends-on <ids> so the task board shows the "
         "dependency graph. Tasks "
         "the owner assigns to the team are delivered to you: parcel them out by "
         "reassigning or splitting them among teammates as appropriate, and "
