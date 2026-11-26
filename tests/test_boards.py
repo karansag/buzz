@@ -180,3 +180,33 @@ def test_node_credential_cannot_read_board_as_owner(client, board):
     _post(client, path)
     assert remote.get(path).status_code == 403
     assert remote.post(path, json={"body": "spoof owner"}).status_code == 403
+
+
+def test_numeric_board_links_cannot_be_shadowed_by_a_team_name(client, board):
+    conn, team, path = board
+    assert team == 1
+    shadow = db.create_team(conn, "1")["id"]
+    assert shadow != team
+    original = _post(client, path, body="original board")
+    other = _post(client, f"/teams/{shadow}/board", body="other board")
+    response = client.get(path).json()
+    assert response["team_id"] == team
+    assert [p["id"] for p in response["posts"]] == [original]
+    assert client.get(f"{path}/{other}").status_code == 404
+    assert client.get(f"/teams/{team}/view").json()["team"]["id"] == team
+
+    db.delete_team(conn, team)
+    archive = client.get(path).json()
+    assert archive["archived"] and archive["team_id"] == team
+    assert client.get(f"{path}/{original}").json()["post"]["body"] == "original board"
+    assert client.post(path, json={"body": "blocked"}).status_code == 409
+    assert client.get(f"/teams/{team}/view").json()["team"]["id"] == shadow
+
+
+def test_board_unread_count_reflects_the_marked_page(client, board):
+    _, _, path = board
+    for _ in range(3):
+        _post(client, path)
+    query = {**ACTOR, "unread": 1, "limit": 1}
+    assert client.get(path, params=query).json()["unread"] == 3
+    assert client.get(path, params={**query, "mark": 1}).json()["unread"] == 2

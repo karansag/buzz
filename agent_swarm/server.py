@@ -1610,7 +1610,7 @@ def create_app(
         """A team by name (case-insensitive) or id; 404 or 409 otherwise."""
         teams = db.list_teams(conn)
         named = [t for t in teams if t["name"].casefold() == ref.casefold()]
-        found = named or [t for t in teams if ref.isdigit() and t["id"] == int(ref)]
+        found = [t for t in teams if str(t["id"]) == ref.lstrip("0")] or named
         if not found:
             raise HTTPException(status_code=404, detail={
                 "error": "no such team", "team": ref,
@@ -2063,13 +2063,16 @@ def create_app(
 
 
     def _board_team_id(ref: str, actor: str) -> int:
+        if ref.isascii() and ref.isdecimal():
+            digits = ref.lstrip("0")
+            if digits and len(digits) <= 19 and int(digits) < 2**63:
+                return int(digits)
+            raise HTTPException(status_code=404, detail={"error": "no such board"})
         try:
             return _find_team(ref)["id"]
         except HTTPException as exc:
             if exc.status_code != 404 and actor == OWNER:
                 raise
-            if actor == OWNER and re.fullmatch(r"[0-9]{1,19}", ref) and int(ref) < 2**63:
-                return int(ref)
             raise HTTPException(status_code=404, detail={"error": "no such board"}) from exc
 
     def _board_call(fn, *args, **kwargs):
@@ -2096,6 +2099,7 @@ def create_app(
         thread: int | None = Query(None, gt=0, le=2**63 - 1),
         limit: int = Query(20, ge=1, le=50),
     ):
+        """List previews. With mark=1, unread counts what remains after this page."""
         actor = _actor(request, caller)
         if sum((after is not None, before is not None, unread)) > 1:
             raise HTTPException(status_code=422, detail={"error": "use one of after, before, or unread"})
