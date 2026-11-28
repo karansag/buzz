@@ -47,7 +47,9 @@ impl std::ops::Deref for Conn<'_> {
 impl Drop for Conn<'_> {
     fn drop(&mut self) {
         if let (Some(conn), Ok(mut idle)) = (self.conn.take(), self.pool.idle.lock()) {
-            if idle.len() < 64 {
+            // A panic inside a write leaves its transaction open. Such a
+            // connection is closed, not reused: closing rolls it back.
+            if conn.is_autocommit() && idle.len() < 64 {
                 idle.push(conn);
             }
         }
