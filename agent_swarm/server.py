@@ -518,7 +518,7 @@ def _supervisor_prompt(user_id: str, objective: str, peers: list[dict]) -> str:
         "(`--minutes N` for a window, or `--after-message ID` from the end of your "
         "last digest) and reply in a few lines: what changed, who needs attention, "
         "what is done, what is stalled. For one task, read `buzz tasks` and "
-        "the messages tagged `task-N` (`buzz messages --user <handle>`); "
+        "the messages tagged `task #N` (`buzz messages --user <handle>`); "
         "if that does not say, ask the assignee with `buzz send` and "
         "relay the answer.\n"
         "- Delegate when asked. `buzz task-create \"title\" --description ... "
