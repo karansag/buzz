@@ -9508,16 +9508,37 @@ function Crown({ teams, user, word = false, teamName = false }) {
 	return m$1`<span class="crown" title=${said}><span aria-hidden="true">♛</span>${shown && m$1`<span class="crown-word" aria-hidden="true">${shown}</span>`}<span class="sr-only">${said}</span></span>`;
 }
 //#endregion
+//#region web/src/storage.js
+function readStored(key) {
+	try {
+		return localStorage.getItem(key);
+	} catch {
+		return null;
+	}
+}
+function writeStored(key, value) {
+	try {
+		if (value === null) localStorage.removeItem(key);
+		else localStorage.setItem(key, value);
+	} catch {}
+}
+function readJSON(key, fallback = null) {
+	try {
+		return JSON.parse(localStorage.getItem(key) || "null") ?? fallback;
+	} catch {
+		return fallback;
+	}
+}
+function writeJSON(key, value) {
+	writeStored(key, value === null ? null : JSON.stringify(value));
+}
+//#endregion
 //#region web/src/quick-switch.js
 var OPENED_KEY = "agent-swarm:agent-opened";
 var OPENED_LIMIT = 200;
 function readOpened() {
-	try {
-		const saved = JSON.parse(localStorage.getItem(OPENED_KEY) || "{}");
-		return saved && typeof saved === "object" ? saved : {};
-	} catch {
-		return {};
-	}
+	const saved = readJSON(OPENED_KEY, {});
+	return typeof saved === "object" ? saved : {};
 }
 function noteOpened(user) {
 	const opened = {
@@ -9525,9 +9546,7 @@ function noteOpened(user) {
 		[user]: Date.now()
 	};
 	const kept = Object.entries(opened).sort((a, b) => b[1] - a[1]).slice(0, OPENED_LIMIT);
-	try {
-		localStorage.setItem(OPENED_KEY, JSON.stringify(Object.fromEntries(kept)));
-	} catch {}
+	writeJSON(OPENED_KEY, Object.fromEntries(kept));
 }
 function switchOptions(state, mode, query, opened = {}) {
 	if (!state) return [];
@@ -10746,12 +10765,10 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		let lastDraw = 0;
 		const POS_KEY = "agent-swarm-hive-team-pos";
 		const teamPos = /* @__PURE__ */ new Map();
-		try {
-			for (const [k, v] of Object.entries(JSON.parse(localStorage.getItem(POS_KEY) || "{}"))) if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) teamPos.set(Number(k), {
-				x: v.x,
-				y: v.y
-			});
-		} catch {}
+		for (const [k, v] of Object.entries(readJSON(POS_KEY, {}))) if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) teamPos.set(Number(k), {
+			x: v.x,
+			y: v.y
+		});
 		const savePos = () => {
 			const known = new Set((stateRef.current.teams || []).map((t) => t.id));
 			const obj = {};
@@ -10759,9 +10776,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				x: Math.round(p.x),
 				y: Math.round(p.y)
 			};
-			try {
-				localStorage.setItem(POS_KEY, JSON.stringify(obj));
-			} catch {}
+			writeJSON(POS_KEY, obj);
 		};
 		const hex = (x, y, radius, fill, stroke) => {
 			ctx.beginPath();
@@ -12255,18 +12270,8 @@ function agentChips(agentCount, recipients, selected) {
 //#region web/src/history.js
 var HISTORY_ROUTE = "#/tasks";
 var LINES_KEY = "agent-swarm.history.statusLines";
-var readLines = () => {
-	try {
-		return localStorage.getItem(LINES_KEY) === "1";
-	} catch {
-		return false;
-	}
-};
-var saveLines = (on) => {
-	try {
-		localStorage.setItem(LINES_KEY, on ? "1" : "0");
-	} catch {}
-};
+var readLines = () => readStored(LINES_KEY) === "1";
+var saveLines = (on) => writeStored(LINES_KEY, on ? "1" : "0");
 var STATUSES = [
 	["", "all"],
 	["open", "open"],
@@ -13024,9 +13029,7 @@ function AgentControls({ r, refresh }) {
 	const command = (r.pane_alive || (r.offline_reason || "").includes("bare shell")) && String(r.tmux_pane).startsWith("%") ? `switch-client -t ${r.tmux_pane}` : null;
 	const toggle = () => {
 		setMore(!more);
-		try {
-			localStorage.setItem(AGENT_MORE_KEY, JSON.stringify(!more));
-		} catch {}
+		writeJSON(AGENT_MORE_KEY, !more);
 	};
 	return m$1`<div class="agent-controls">
     <div class="agent-primary-controls">
@@ -13561,13 +13564,7 @@ function requestTaskFocus() {
 }
 function TaskComposer({ state, refresh, user = "", folded = false }) {
 	const draftKey = `agent-swarm:task-draft:${user || "board"}`;
-	const [draft] = d(() => {
-		try {
-			return JSON.parse(localStorage.getItem(draftKey) || "null") || {};
-		} catch {
-			return {};
-		}
-	});
+	const [draft] = d(() => readJSON(draftKey) || {});
 	const [title, setTitle] = d(draft.title || "");
 	const [description, setDescription] = d(draft.description || "");
 	const ownTeam = queenTeam(state.teams || [], user);
@@ -13578,15 +13575,12 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
 	const [busy, setBusy] = d(false);
 	const attachments = useAttachments(files, setFiles, setStatus, draftKey);
 	h(() => {
-		try {
-			if (title || description || files.length) localStorage.setItem(draftKey, JSON.stringify({
-				title,
-				description,
-				assignee,
-				files
-			}));
-			else localStorage.removeItem(draftKey);
-		} catch {}
+		writeJSON(draftKey, title || description || files.length ? {
+			title,
+			description,
+			assignee,
+			files
+		} : null);
 	}, [
 		draftKey,
 		title,
@@ -13691,13 +13685,6 @@ var AGENTS_VIEW_KEY = "agent-swarm:mobile-agents-view";
 var SIDEBAR_VIEW_KEY = "agent-swarm:sidebar-agents-view";
 var AGENTS_VIEWS = [["teams", "teams"], ["tiles", "tiles"]];
 var COLLAPSED_TEAMS_KEY = "agent-swarm:collapsed-teams";
-function readJSON(key, fallback) {
-	try {
-		return JSON.parse(localStorage.getItem(key) || "null") ?? fallback;
-	} catch {
-		return fallback;
-	}
-}
 function TeamManage({ team, members, refresh, onDone }) {
 	const [name, setName] = d(team.name);
 	const [queen, setQueen] = d(team.queen || "");
@@ -13784,9 +13771,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 		const next = new Set(prev);
 		if (open) next.delete(key);
 		else next.add(key);
-		try {
-			localStorage.setItem(COLLAPSED_TEAMS_KEY, JSON.stringify([...next]));
-		} catch {}
+		writeJSON(COLLAPSED_TEAMS_KEY, [...next]);
 		return next;
 	});
 	const live = state.recipients.filter((r) => r.pane_alive && agentShown(r, machine, harness));
@@ -13974,18 +13959,10 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
   </div>`;
 }
 function AgentsPanel({ state, refresh, machine, harness, setHarness, unreadFor, storageKey = AGENTS_VIEW_KEY, focusUser = null, onClose = null }) {
-	const [view, setView] = d(() => {
-		try {
-			return localStorage.getItem(storageKey) === "tiles" ? "tiles" : "teams";
-		} catch {
-			return "teams";
-		}
-	});
+	const [view, setView] = d(() => readStored(storageKey) === "tiles" ? "tiles" : "teams");
 	const pick = (v) => {
 		setView(v);
-		try {
-			localStorage.setItem(storageKey, v);
-		} catch {}
+		writeStored(storageKey, v);
 	};
 	const live = state.recipients.filter((r) => r.pane_alive && agentShown(r, machine, harness)).length;
 	const filter = m$1`<${HarnessFilter} recipients=${state.recipients} harness=${harness} setHarness=${setHarness} />`;
@@ -14200,14 +14177,12 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 	const attachments = useAttachments(images, setImages, setStatus, draftKey);
 	const { uploading, dragging } = attachments;
 	h(() => {
-		try {
-			const draft = JSON.parse(localStorage.getItem(draftKey) || "null");
-			setText(draft?.text || "");
-			setContext(draft?.context || "");
-			setImages(Array.isArray(draft?.images) ? draft.images : []);
-			setRetryOf(draft?.retryOf || null);
-			setStatus("");
-		} catch {}
+		const draft = readJSON(draftKey);
+		setText(draft?.text || "");
+		setContext(draft?.context || "");
+		setImages(Array.isArray(draft?.images) ? draft.images : []);
+		setRetryOf(draft?.retryOf || null);
+		setStatus("");
 	}, [draftKey]);
 	h(() => {
 		const el = composerRef.current;
@@ -14250,15 +14225,12 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 			loadedKey.current = draftKey;
 			return;
 		}
-		try {
-			if (text || context || images.length) localStorage.setItem(draftKey, JSON.stringify({
-				text,
-				context,
-				images,
-				retryOf
-			}));
-			else localStorage.removeItem(draftKey);
-		} catch {}
+		writeJSON(draftKey, text || context || images.length ? {
+			text,
+			context,
+			images,
+			retryOf
+		} : null);
 	}, [
 		draftKey,
 		text,
@@ -14317,19 +14289,13 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 		setContext("");
 		setImages([]);
 		setRetryOf(null);
-		try {
-			localStorage.removeItem(draftKey);
-		} catch {}
+		writeStored(draftKey, null);
 		pendingSends.dispatchEvent(new CustomEvent("add", { detail: pending }));
 		const report = (detail) => pendingSends.dispatchEvent(new CustomEvent("outcome", { detail: {
 			draftKey,
 			...detail
 		} }));
-		const keepDraft = () => {
-			try {
-				localStorage.setItem(draftKey, JSON.stringify(draft));
-			} catch {}
-		};
+		const keepDraft = () => writeJSON(draftKey, draft);
 		const attempt = async () => {
 			try {
 				const r = await fetch("/owner/send", {
@@ -14437,20 +14403,11 @@ var FOCUS_FONT = {
 };
 var FOCUS_FONT_KEY = "agent-swarm:focus-font";
 var THREAD_FOCUS_KEY = "agent-swarm:thread-focus";
-var savedFocus = (agent) => {
-	try {
-		return JSON.parse(localStorage.getItem(THREAD_FOCUS_KEY) || "{}")[agent];
-	} catch {
-		return;
-	}
-};
-var saveFocus = (agent, on) => {
-	try {
-		const saved = JSON.parse(localStorage.getItem(THREAD_FOCUS_KEY) || "{}");
-		saved[agent] = on;
-		localStorage.setItem(THREAD_FOCUS_KEY, JSON.stringify(saved));
-	} catch {}
-};
+var savedFocus = (agent) => readJSON(THREAD_FOCUS_KEY, {})[agent];
+var saveFocus = (agent, on) => writeJSON(THREAD_FOCUS_KEY, {
+	...readJSON(THREAD_FOCUS_KEY, {}),
+	[agent]: on
+});
 var FOCUS_HOLD_MS = 500;
 function sentByViewer(sender, a, b, page) {
 	if (a === "owner" || b === "owner") return sender === "owner";
@@ -14510,13 +14467,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	const [focused, setFocused] = d(() => !!recipient && (savedFocus(recipient) ?? !!switchCarry?.focus));
 	const threadRef = A(null);
 	const focusShortcut = IS_MAC ? "⌘⇧L" : "Ctrl+Shift+L";
-	const [focusFont, setFocusFont] = d(() => {
-		try {
-			return Number(localStorage.getItem(FOCUS_FONT_KEY)) || FOCUS_FONT.start;
-		} catch {
-			return FOCUS_FONT.start;
-		}
-	});
+	const [focusFont, setFocusFont] = d(() => Number(readStored(FOCUS_FONT_KEY)) || FOCUS_FONT.start);
 	const scrollAnchor = A(null);
 	const holdUntil = A(0);
 	const rememberScroll = () => {
@@ -14535,9 +14486,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 		rememberScroll();
 		setFocusFont((size) => {
 			const next = Math.max(FOCUS_FONT.min, Math.min(FOCUS_FONT.max, size + by));
-			try {
-				localStorage.setItem(FOCUS_FONT_KEY, String(next));
-			} catch {}
+			writeStored(FOCUS_FONT_KEY, String(next));
 			return next;
 		});
 	};
@@ -15289,6 +15238,8 @@ function EnableNotifications() {
 	}}>${permission === "denied" ? "notifications blocked" : "enable notifications"}</button>
     ${error && m$1`<span role="status">${error}</span>`}</span>`;
 }
+var ROSTER_OPEN_KEY = "swarm-roster-open";
+var LAST_AGENT_KEY = "swarm-last-agent";
 var reportNotifications = notificationReporter({ invoke: globalThis.__TAURI__?.core?.invoke });
 var reportAttention = attentionReporter(globalThis.__TAURI__?.core?.invoke);
 function App() {
@@ -15297,23 +15248,14 @@ function App() {
 	const [machine, setMachine] = d(null);
 	const [harness, setHarness] = d(null);
 	const viewsRef = A([]);
-	const [rosterOpen, setRosterOpen] = d(() => {
-		try {
-			const saved = localStorage.getItem("swarm-roster-open");
-			return saved === null ? true : saved === "true";
-		} catch {
-			return true;
-		}
-	});
+	const [rosterOpen, setRosterOpen] = d(() => (readStored(ROSTER_OPEN_KEY) ?? "true") === "true");
 	const rosterOpenRef = A(rosterOpen);
 	rosterOpenRef.current = rosterOpen;
 	const toggleRef = A(null);
 	const updateRoster = (open) => {
 		rosterOpenRef.current = open;
 		setRosterOpen(open);
-		try {
-			localStorage.setItem("swarm-roster-open", String(open));
-		} catch {}
+		writeStored(ROSTER_OPEN_KEY, String(open));
 	};
 	const toggleRoster = () => updateRoster(!rosterOpen);
 	const closeRoster = () => {
@@ -15373,13 +15315,7 @@ function App() {
 	const onTab = route.startsWith("#/tab/") ? decodeURIComponent(route.slice(TAB_ROUTE.length)) : null;
 	const boardRoute = parseBoardRoute(route);
 	const onOverview = !focusUser && !onHistory && !onChats && !onTab && !boardRoute;
-	const [lastAgent, setLastAgent] = d(() => {
-		try {
-			return JSON.parse(localStorage.getItem("swarm-last-agent"));
-		} catch {
-			return null;
-		}
-	});
+	const [lastAgent, setLastAgent] = d(() => readJSON(LAST_AGENT_KEY));
 	const retirement = (user) => (state?.retired_agents || []).filter((r) => r.original_id === user).map((r) => r.archive_id).sort().join(",");
 	const currentAgent = state?.recipients.find((r) => r.user_id === focusUser);
 	const currentRetirement = retirement(focusUser);
@@ -15416,9 +15352,7 @@ function App() {
 			retirement: currentRetirement
 		};
 		setLastAgent(next);
-		try {
-			localStorage.setItem("swarm-last-agent", JSON.stringify(next));
-		} catch {}
+		writeJSON(LAST_AGENT_KEY, next);
 	}, [currentAgent?.user_id, currentRetirement]);
 	const conversation = A(null);
 	if (currentAgent && (conversation.current?.user !== focusUser || conversation.current.retirement !== currentRetirement)) conversation.current = {

@@ -7,6 +7,7 @@ import { agentChips } from "./agent-chips.js";
 import { TaskStatusActions } from "./task-status.js";
 import { TaskTrash } from "./task-trash.js";
 import { Crown } from "./queen.js";
+import { readStored, writeStored } from "./storage.js";
 
 /* The history view: every task as a tile, newest first, with a live text
    search. Its main job is to answer "who was working on X".
@@ -30,8 +31,8 @@ export const HISTORY_ROUTE = "#/tasks";
 // The "status lines" chip is a per-viewer choice, so it lives in localStorage
 // (the hash holds the shareable search). Storage can be blocked: off then.
 const LINES_KEY = "agent-swarm.history.statusLines";
-const readLines = () => { try { return localStorage.getItem(LINES_KEY) === "1"; } catch { return false; } };
-const saveLines = (on) => { try { localStorage.setItem(LINES_KEY, on ? "1" : "0"); } catch { /* not remembered */ } };
+const readLines = () => readStored(LINES_KEY) === "1";
+const saveLines = (on) => writeStored(LINES_KEY, on ? "1" : "0");
 
 const STATUSES = [
   ["", "all"],

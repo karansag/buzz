@@ -3,6 +3,7 @@ import { html } from "htm/preact";
 import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Bee, IS_MAC, platformModifier } from "./shared.js";
 import { Crown, queenSuffix } from "./queen.js";
+import { readJSON, writeJSON } from "./storage.js";
 
 // When the owner last opened each agent, newest first in the agent switcher.
 // Kept per browser; the switcher works the same without storage.
@@ -10,16 +11,14 @@ const OPENED_KEY = "agent-swarm:agent-opened";
 const OPENED_LIMIT = 200;
 
 export function readOpened() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(OPENED_KEY) || "{}");
-    return saved && typeof saved === "object" ? saved : {};
-  } catch { return {}; }
+  const saved = readJSON(OPENED_KEY, {});
+  return typeof saved === "object" ? saved : {};
 }
 
 export function noteOpened(user) {
   const opened = { ...readOpened(), [user]: Date.now() };
   const kept = Object.entries(opened).sort((a, b) => b[1] - a[1]).slice(0, OPENED_LIMIT);
-  try { localStorage.setItem(OPENED_KEY, JSON.stringify(Object.fromEntries(kept))); } catch { /* not kept */ }
+  writeJSON(OPENED_KEY, Object.fromEntries(kept));
 }
 
 export function switchOptions(state, mode, query, opened = {}) {

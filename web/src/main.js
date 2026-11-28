@@ -57,6 +57,7 @@ import { shellNewlines } from "./newlines.js";
 import { PinDialog, PinStrip, PinnedList, pinHref, pinsOf, setPinned } from "./pins.js";
 import { agentThreads } from "./chats.js";
 import { agentHash, parseAgentRoute } from "./agent-route.js";
+import { readJSON, readStored, writeJSON, writeStored } from "./storage.js";
 
 /* ---------- agent controls ---------- */
 
@@ -87,7 +88,7 @@ function AgentControls({ r, refresh }) {
   const command = paneExists && String(r.tmux_pane).startsWith("%") ? `switch-client -t ${r.tmux_pane}` : null;
   const toggle = () => {
     setMore(!more);
-    try { localStorage.setItem(AGENT_MORE_KEY, JSON.stringify(!more)); } catch { /* not kept */ }
+    writeJSON(AGENT_MORE_KEY, !more);
   };
   return html`<div class="agent-controls">
     <div class="agent-primary-controls">
@@ -631,9 +632,7 @@ function requestTaskFocus() {
 // open when an unsent draft is waiting.
 function TaskComposer({ state, refresh, user = "", folded = false }) {
   const draftKey = `agent-swarm:task-draft:${user || "board"}`;
-  const [draft] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(draftKey) || "null") || {}; } catch { return {}; }
-  });
+  const [draft] = useState(() => readJSON(draftKey) || {});
   const [title, setTitle] = useState(draft.title || "");
   const [description, setDescription] = useState(draft.description || "");
   // On a queen's page a new task goes to the team, which the queen parcels out.
@@ -645,10 +644,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
   const [busy, setBusy] = useState(false);
   const attachments = useAttachments(files, setFiles, setStatus, draftKey);
   useEffect(() => {
-    try {
-      if (title || description || files.length) localStorage.setItem(draftKey, JSON.stringify({ title, description, assignee, files }));
-      else localStorage.removeItem(draftKey);
-    } catch { /* draft storage is best effort */ }
+    writeJSON(draftKey, title || description || files.length ? { title, description, assignee, files } : null);
   }, [draftKey, title, description, assignee, files]);
   useEffect(() => {
     if (taskFocusPending && focusTaskBox()) taskFocusPending = false;
@@ -747,10 +743,6 @@ const SIDEBAR_VIEW_KEY = "agent-swarm:sidebar-agents-view";
 const AGENTS_VIEWS = [["teams", "teams"], ["tiles", "tiles"]];
 const COLLAPSED_TEAMS_KEY = "agent-swarm:collapsed-teams";
 
-function readJSON(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
-}
-
 // A team's ✎ button opens its name and queen settings.
 function TeamManage({ team, members, refresh, onDone }) {
   const [name, setName] = useState(team.name);
@@ -832,7 +824,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
   const toggle = (key, open) => setCollapsed(prev => {
     const next = new Set(prev);
     if (open) next.delete(key); else next.add(key);
-    try { localStorage.setItem(COLLAPSED_TEAMS_KEY, JSON.stringify([...next])); } catch { /* not kept */ }
+    writeJSON(COLLAPSED_TEAMS_KEY, [...next]);
     return next;
   });
   const live = state.recipients.filter(r => r.pane_alive && agentShown(r, machine, harness));
@@ -997,12 +989,10 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 
 // `onClose` (the desktop sidebar) adds a heading with "Hide →" above every view.
 function AgentsPanel({ state, refresh, machine, harness, setHarness, unreadFor, storageKey = AGENTS_VIEW_KEY, focusUser = null, onClose = null }) {
-  const [view, setView] = useState(() => {
-    try { return localStorage.getItem(storageKey) === "tiles" ? "tiles" : "teams"; } catch { return "teams"; }
-  });
+  const [view, setView] = useState(() => (readStored(storageKey) === "tiles" ? "tiles" : "teams"));
   const pick = (v) => {
     setView(v);
-    try { localStorage.setItem(storageKey, v); } catch { /* not kept */ }
+    writeStored(storageKey, v);
   };
   const live = state.recipients.filter(r => r.pane_alive && agentShown(r, machine, harness)).length;
   // The desktop sidebar has room in its heading row; elsewhere the filter
@@ -1234,14 +1224,12 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
   const attachments = useAttachments(images, setImages, setStatus, draftKey);
   const { uploading, dragging } = attachments;
   useEffect(() => {
-    try {
-      const draft = JSON.parse(localStorage.getItem(draftKey) || "null");
-      setText(draft?.text || "");
-      setContext(draft?.context || "");
-      setImages(Array.isArray(draft?.images) ? draft.images : []);
-      setRetryOf(draft?.retryOf || null);
-      setStatus("");
-    } catch { /* an invalid saved draft should not block messaging */ }
+    const draft = readJSON(draftKey);
+    setText(draft?.text || "");
+    setContext(draft?.context || "");
+    setImages(Array.isArray(draft?.images) ? draft.images : []);
+    setRetryOf(draft?.retryOf || null);
+    setStatus("");
   }, [draftKey]);
   // On an agent's page the reply box takes focus, so typing starts the reply
   // without clicking it first. Not on touch screens, where focus opens the
@@ -1286,10 +1274,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
   const loadedKey = useRef(null);
   useLayoutEffect(() => {
     if (loadedKey.current !== draftKey) { loadedKey.current = draftKey; return; }
-    try {
-      if (text || context || images.length) localStorage.setItem(draftKey, JSON.stringify({ text, context, images, retryOf }));
-      else localStorage.removeItem(draftKey);
-    } catch { /* storage full or blocked: the draft just isn't kept */ }
+    writeJSON(draftKey, text || context || images.length ? { text, context, images, retryOf } : null);
   }, [draftKey, text, context, images, retryOf]);
   const canSend = !sending && uploading === 0 && (text.trim() || images.length > 0);
   const send = async (e) => {
@@ -1319,16 +1304,14 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
     // to an agent turns this lone composer into a thread with a new one,
     // which mounts before this one's effect runs and would load the old
     // draft back. A failed or unconfirmed send writes it back (keepDraft).
-    try { localStorage.removeItem(draftKey); } catch { /* best effort */ }
+    writeStored(draftKey, null);
     pendingSends.dispatchEvent(new CustomEvent("add", { detail: pending }));
     // The outcome is addressed by draft key, not to this component: sending
     // the first message turns the empty panel into a thread with its own
     // composer, and that one has to show the result and get the draft back.
     const report = (detail) => pendingSends.dispatchEvent(
       new CustomEvent("outcome", { detail: { draftKey, ...detail } }));
-    const keepDraft = () => {
-      try { localStorage.setItem(draftKey, JSON.stringify(draft)); } catch { /* best effort */ }
-    };
+    const keepDraft = () => writeJSON(draftKey, draft);
     const attempt = async () => {
       try {
         const r = await fetch("/owner/send", {
@@ -1422,16 +1405,8 @@ const FOCUS_FONT_KEY = "agent-swarm:focus-font";
 // Focus mode per agent page, {agent: true|false}: the owner's chat with an
 // agent opens the way it was left.
 const THREAD_FOCUS_KEY = "agent-swarm:thread-focus";
-const savedFocus = (agent) => {
-  try { return JSON.parse(localStorage.getItem(THREAD_FOCUS_KEY) || "{}")[agent]; } catch { return undefined; }
-};
-const saveFocus = (agent, on) => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(THREAD_FOCUS_KEY) || "{}");
-    saved[agent] = on;
-    localStorage.setItem(THREAD_FOCUS_KEY, JSON.stringify(saved));
-  } catch { /* not kept */ }
-};
+const savedFocus = (agent) => readJSON(THREAD_FOCUS_KEY, {})[agent];
+const saveFocus = (agent, on) => writeJSON(THREAD_FOCUS_KEY, { ...readJSON(THREAD_FOCUS_KEY, {}), [agent]: on });
 // How long a scroll anchor is held across the reflows that follow a layout
 // change in focus mode (a phone's viewport sizing, a font swapping in).
 const FOCUS_HOLD_MS = 500;
@@ -1510,9 +1485,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   const [focused, setFocused] = useState(() => !!recipient && (savedFocus(recipient) ?? !!switchCarry?.focus));
   const threadRef = useRef(null);
   const focusShortcut = IS_MAC ? "⌘⇧L" : "Ctrl+Shift+L";
-  const [focusFont, setFocusFont] = useState(() => {
-    try { return Number(localStorage.getItem(FOCUS_FONT_KEY)) || FOCUS_FONT.start; } catch { return FOCUS_FONT.start; }
-  });
+  const [focusFont, setFocusFont] = useState(() => Number(readStored(FOCUS_FONT_KEY)) || FOCUS_FONT.start);
   // Focus mode reflows every bubble: it sets its own type size and padding,
   // and A-/A+ change that size. The scroll is therefore anchored on how much
   // conversation is left below the reader rather than on an absolute scrollTop,
@@ -1538,7 +1511,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     rememberScroll();
     setFocusFont(size => {
       const next = Math.max(FOCUS_FONT.min, Math.min(FOCUS_FONT.max, size + by));
-      try { localStorage.setItem(FOCUS_FONT_KEY, String(next)); } catch { /* not kept, still applied */ }
+      writeStored(FOCUS_FONT_KEY, String(next));
       return next;
     });
   };
@@ -2294,6 +2267,9 @@ function EnableNotifications() {
     ${error && html`<span role="status">${error}</span>`}</span>`;
 }
 
+const ROSTER_OPEN_KEY = "swarm-roster-open";
+const LAST_AGENT_KEY = "swarm-last-agent";
+
 const reportNotifications = notificationReporter({ invoke: globalThis.__TAURI__?.core?.invoke });
 const reportAttention = attentionReporter(globalThis.__TAURI__?.core?.invoke);
 
@@ -2303,17 +2279,14 @@ function App() {
   const [machine, setMachine] = useState(null);
   const [harness, setHarness] = useState(null);
   const viewsRef = useRef([]);
-  const [rosterOpen, setRosterOpen] = useState(() => {
-    try { const saved = localStorage.getItem("swarm-roster-open"); return saved === null ? true : saved === "true"; }
-    catch { return true; }
-  });
+  const [rosterOpen, setRosterOpen] = useState(() => (readStored(ROSTER_OPEN_KEY) ?? "true") === "true");
   const rosterOpenRef = useRef(rosterOpen);
   rosterOpenRef.current = rosterOpen;
   const toggleRef = useRef(null);
   const updateRoster = open => {
     rosterOpenRef.current = open;
     setRosterOpen(open);
-    try { localStorage.setItem("swarm-roster-open", String(open)); } catch {}
+    writeStored(ROSTER_OPEN_KEY, String(open));
   };
   // Desktop only: the compact layout has no drawer (the overview's agents
   // panel holds the roster).
@@ -2369,9 +2342,7 @@ function App() {
   const onTab = route.startsWith(TAB_ROUTE) ? decodeURIComponent(route.slice(TAB_ROUTE.length)) : null;
   const boardRoute = parseBoardRoute(route);
   const onOverview = !focusUser && !onHistory && !onChats && !onTab && !boardRoute;
-  const [lastAgent, setLastAgent] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("swarm-last-agent")); } catch { return null; }
-  });
+  const [lastAgent, setLastAgent] = useState(() => readJSON(LAST_AGENT_KEY));
   // A reused handle is a different conversation. Include the most recent
   // retirement of that handle in the remembered address.
   const retirement = user => (state?.retired_agents || [])
@@ -2405,7 +2376,7 @@ function App() {
     if (!currentAgent) return;
     const next = { user: focusUser, retirement: currentRetirement };
     setLastAgent(next);
-    try { localStorage.setItem("swarm-last-agent", JSON.stringify(next)); } catch { /* use App state */ }
+    writeJSON(LAST_AGENT_KEY, next);
   }, [currentAgent?.user_id, currentRetirement]);
 
   // Keep one conversation's loaded pages and reading position while visiting

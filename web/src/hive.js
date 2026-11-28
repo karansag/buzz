@@ -12,6 +12,7 @@ import { COMPACT_LAYOUT, useMedia } from "./use-media.js";
 
 import { machineColor, machineName } from "./machines.js";
 import { Crown, queenSuffix, teamOption } from "./queen.js";
+import { readJSON, writeJSON } from "./storage.js";
 
 const TASK_CELL_RADIUS = 18;
 const TASK_CELL_CLEARANCE = TASK_CELL_RADIUS + 4;
@@ -193,17 +194,15 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
     // Owner-placed team box positions, kept across reloads.
     const POS_KEY = "agent-swarm-hive-team-pos";
     const teamPos = new Map();
-    try {
-      for (const [k, v] of Object.entries(JSON.parse(localStorage.getItem(POS_KEY) || "{}")))
-        if (v && Number.isFinite(v.x) && Number.isFinite(v.y))
-          teamPos.set(Number(k), { x: v.x, y: v.y });
-    } catch { /* start unplaced */ }
+    for (const [k, v] of Object.entries(readJSON(POS_KEY, {})))
+      if (v && Number.isFinite(v.x) && Number.isFinite(v.y))
+        teamPos.set(Number(k), { x: v.x, y: v.y });
     const savePos = () => {
       const known = new Set((stateRef.current.teams || []).map(t => t.id));
       const obj = {};
       for (const [id, p] of teamPos)
         if (known.has(id)) obj[id] = { x: Math.round(p.x), y: Math.round(p.y) };
-      try { localStorage.setItem(POS_KEY, JSON.stringify(obj)); } catch { /* session only */ }
+      writeJSON(POS_KEY, obj);
     };
 
     const hex = (x, y, radius, fill, stroke) => {
