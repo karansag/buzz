@@ -1,21 +1,11 @@
-// Uses installed stable Chrome with its sandbox enabled: `npm run test:browser`.
-// Uses the production bundle and isolated API fixtures; never contacts a hub.
+// Run with `npm run test:browser` (see fixtures/browser.js).
 import assert from 'node:assert/strict';
-import { before, after, test } from 'node:test';
-import { preview } from 'vite';
-import { chromium } from 'playwright';
+import { test } from 'node:test';
+import { launch, openPage } from './fixtures/browser.js';
 import { fixture, mock } from './fixtures/mobile-state.js';
 
-let browser, server, base;
-before(async () => {
-  server = await preview({ preview: { host: '127.0.0.1', port: 0, open: false } });
-  base = `http://127.0.0.1:${server.httpServer.address().port}/portal.html`;
-  browser = await chromium.launch({ channel: 'chrome', chromiumSandbox: true });
-});
-after(async () => {
-  await browser?.close();
-  await new Promise(resolve => server.httpServer.close(resolve));
-});
+let browser, base;
+launch(started => ({ browser, base } = started));
 
 // Three tasks whose text mentions the fourth one's number, and an agent
 // status line that does too: typing "310" used to list all four.
@@ -39,11 +29,7 @@ function historyState() {
 }
 
 async function openHistory(state = historyState(), viewport = { width: 1100, height: 900 }) {
-  const page = await browser.newPage({ viewport });
-  page.setDefaultTimeout(5000);
-  const errors = [];
-  page.on('pageerror', e => errors.push(e.message));
-  page.on('dialog', d => { errors.push(`native ${d.type()}: ${d.message()}`); d.dismiss(); });
+  const { page, errors } = await openPage(browser, { viewport });
   await mock(page, state);
   await page.goto(base + '#/tasks');
   await page.waitForSelector('.h-search');

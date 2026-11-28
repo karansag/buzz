@@ -1,28 +1,14 @@
-// Uses installed stable Chrome with its sandbox enabled: `npm run test:browser`.
-// Uses the production bundle and isolated API fixtures; never contacts a hub.
+// Run with `npm run test:browser` (see fixtures/browser.js).
 import assert from 'node:assert/strict';
-import { before, after, test } from 'node:test';
-import { preview } from 'vite';
-import { chromium } from 'playwright';
+import { test } from 'node:test';
+import { launch, openPage } from './fixtures/browser.js';
 import { mock, names, file, image, now } from './fixtures/mobile-state.js';
 
-let browser, server, base;
-before(async () => {
-  server = await preview({ preview: { host: '127.0.0.1', port: 0, open: false } });
-  base = `http://127.0.0.1:${server.httpServer.address().port}/portal.html`;
-  browser = await chromium.launch({ channel: 'chrome', chromiumSandbox: true });
-});
-after(async () => {
-  await browser?.close();
-  await new Promise(resolve => server.httpServer.close(resolve));
-});
+let browser, base;
+launch(started => ({ browser, base } = started));
+
 async function setup(width, height, touch = true) {
-  const page = await browser.newPage({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
-  page.setDefaultTimeout(5000);
-  const errors = [];
-  page.on('pageerror', e => errors.push(e.message));
-  // The Mac app's web view shows no native JS dialogs, so the page must not use them.
-  page.on('dialog', d => { errors.push(`native ${d.type()}: ${d.message()}`); d.dismiss(); });
+  const { page, errors } = await openPage(browser, { viewport: { width, height }, hasTouch: touch, isMobile: touch });
   const state = await mock(page);
   return { page, state, errors };
 }

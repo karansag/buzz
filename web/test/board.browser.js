@@ -1,27 +1,15 @@
-// Runs against the production bundle in sandboxed Chrome and an isolated hub fixture.
+// Run with `npm run test:browser` (see fixtures/browser.js).
 import assert from "node:assert/strict";
-import { before, after, test } from "node:test";
-import { preview } from "vite";
-import { chromium } from "playwright";
+import { test } from "node:test";
+import { launch, openPage } from "./fixtures/browser.js";
 import { fixture, mock } from "./fixtures/mobile-state.js";
 
-let browser, server, base;
-before(async () => {
-  server = await preview({ preview: { host: "127.0.0.1", port: 0, open: false } });
-  base = `http://127.0.0.1:${server.httpServer.address().port}/portal.html`;
-  browser = await chromium.launch({ channel: "chrome", chromiumSandbox: true });
-});
-after(async () => {
-  await browser?.close();
-  if (server) await new Promise(resolve => server.httpServer.close(resolve));
-});
+let browser, base;
+launch(started => ({ browser, base } = started));
 
 async function setup(width) {
   const phone = width < 600;
-  const page = await browser.newPage({ viewport: { width, height: 800 }, isMobile: phone, hasTouch: phone });
-  page.setDefaultTimeout(5000);
-  const errors = [];
-  page.on("pageerror", error => errors.push(error.message));
+  const { page, errors } = await openPage(browser, { viewport: { width, height: 800 }, isMobile: phone, hasTouch: phone });
   const state = fixture();
   const [team] = state.teams;
   team.board_unread = 3;
