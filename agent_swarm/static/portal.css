@@ -110,9 +110,7 @@
     background: var(--hue, #6b5327);
     font-size: 26px;
   }
-  .hex.small { width: 34px; height: 38px; font-size: 17px; }
   .hex .mono2 { font-family: var(--serif); font-style: italic; color: var(--ink); font-size: 20px; }
-  .hex.small .mono2 { font-size: 13px; }
   .hex.tiny { width: 22px; height: 24px; font-size: 12px; }
   .hex.tiny .mono2 { font-size: 10px; }
   .status { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 7px; vertical-align: 2px; }
@@ -124,7 +122,6 @@
   .status.stopped { background: var(--state-stopped); }
   .status.unknown { background: transparent; box-shadow: inset 0 0 0 1px var(--state-unknown); }
   @keyframes statepulse { 0% { box-shadow: 0 0 0 0 rgba(242,169,59,.5); } 70% { box-shadow: 0 0 0 6px rgba(242,169,59,0); } 100% { box-shadow: 0 0 0 0 rgba(242,169,59,0); } }
-  .stateword { font-size: 11px; }
   .attn { color: var(--state-attention); }
   .agent-error { color: #e5484d; }
   .ctx-use.warn { color: var(--state-attention); }
@@ -203,8 +200,6 @@
     border-radius: 6px; padding: 3px 9px; cursor: pointer; font-family: var(--mono); font-size: 11px;
   }
   button.mini:hover { color: var(--cream); border-color: var(--honey-dim); }
-  form.newtask { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
-  form.newtask input[type="text"] { flex: 1; min-width: 220px; }
 
   /* ---------- kanban board ---------- */
   .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
@@ -380,7 +375,6 @@
     border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--cream); cursor: pointer; font-size: 12px;
   }
   .compose-image .remove:hover, .compose-image .remove:focus-visible { border-color: var(--honey); color: var(--honey); }
-  .composer .uploading { font-size: 10px; color: var(--cream-dim); }
   .msg .msg-images { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .msg .msg-images.only { margin-top: 0; }
   .msg .image-expired {
@@ -726,11 +720,8 @@ button:focus-visible { outline:2px solid var(--cream); outline-offset:3px; }
 
 .hive-scroll { overflow-x:auto; }
 .hive-panel canvas { min-width:660px; }
-.hive-scroll-hint { display:none; padding:5px 12px; color:var(--cream-dim); font-size:10px; }
 .spawn-heading { grid-column:1 / -1; color:var(--cream-dim); font-size:11px; margin:4px 0; }
-@media (max-width:760px) { .hive-scroll-hint { display:block; } }
 
-.agent-team { display:inline-block; margin-left:6px; color:var(--cream-dim); font-size:9px; }
 @media (prefers-reduced-motion:reduce) { .tcard { animation:none; } }
 
 .agent-bee { width:64px; height:48px; flex:none; overflow:visible; }
