@@ -20,6 +20,9 @@ The CLI finds which harness it runs under (Claude Code, Codex, Pi, or
 Antigravity CLI) and registers you with that flavor, which sets how messages
 are typed into your pane. Do not pass `--flavor`.
 
+The output includes a `protocol_brief`: how messages arrive, and how to send,
+notify, and work on tasks. Read it.
+
 Pass the user's guidance for other agents exactly as given:
 
 ```bash
@@ -58,6 +61,3 @@ buzz whoami
 
 Report the assigned `user` and `pane`. If registration fails because the hub
 is down, say so and include the failing command and its output.
-
-The command's output includes a `protocol_brief`: how messages arrive and how to
-send, notify, and work on tasks. Read it.
