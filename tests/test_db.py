@@ -28,10 +28,10 @@ def test_shared_connection_concurrent_reads_and_writes(tmp_path):
 def test_register_and_lookup(tmp_path):
     conn = db.connect(tmp_path / "t.sqlite")
     db.register(conn, "alice", "0:0.0")
-    assert db.lookup_pane(conn, "alice") == "0:0.0"
+    assert db.get_recipient(conn, "alice")["tmux_pane"] == "0:0.0"
     db.register(conn, "alice", "0:1.0")  # update
-    assert db.lookup_pane(conn, "alice") == "0:1.0"
-    assert db.lookup_pane(conn, "bob") is None
+    assert db.get_recipient(conn, "alice")["tmux_pane"] == "0:1.0"
+    assert db.get_recipient(conn, "bob") is None
 
 
 def test_record_and_fetch(tmp_path):

@@ -138,11 +138,6 @@ def harness_model(harness: str | None) -> str | None:
     return None
 
 
-def harness_session_id() -> str | None:
-    """The calling harness's session id, or None outside a harness."""
-    return harness_session()[1]
-
-
 def harness_session() -> tuple[str | None, str | None]:
     """(harness, session id) of the calling harness, or (None, None).
 
@@ -209,14 +204,6 @@ def whoami_lookup(who: dict) -> dict:
         code, text = getattr(r, "status_code", "?"), getattr(r, "text", "")
         return {"user_id": None, "detail": f"server said {code}: {text[:200]}"}
     return r.json()
-
-
-def registered_user(pane: str) -> str | None:
-    """The handle registered for this caller (by session id, else this pane)."""
-    who = caller(pane)
-    who["explicit_pane"] = False
-    who["pane_verified"] = who["pane_in_tree"] = tmux.process_in_pane(pane)
-    return whoami_lookup(who).get("user_id")
 
 
 def _not_in_pane_message(who: dict) -> str:

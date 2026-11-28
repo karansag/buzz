@@ -162,7 +162,6 @@ CREATE TABLE IF NOT EXISTS pins (
 );
 """
 
-SUMMARY_SOURCES = ("agent", "title", "owner")
 # Older summaries past this many per agent are dropped as new ones arrive.
 SUMMARY_HISTORY = 20
 
@@ -521,13 +520,6 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         "ON messages(sender, client_id) WHERE client_id IS NOT NULL"
     )
     conn.commit()
-
-
-def lookup_pane(conn: sqlite3.Connection, user_id: str) -> str | None:
-    row = conn.execute(
-        "SELECT tmux_pane FROM recipients WHERE user_id=?", (user_id,)
-    ).fetchone()
-    return row["tmux_pane"] if row else None
 
 
 @_writes

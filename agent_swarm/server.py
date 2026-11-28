@@ -1294,9 +1294,7 @@ def create_app(
         # known harness to 'generic': the write COALESCEs, but only over NULL,
         # so fall back to what is already stored before defaulting.
         current = db.get_recipient(conn, user_id)
-        flavor = req.flavor or (tmux.infer_flavor(req.model) if req.model else None)
-        if flavor is None:
-            flavor = (current["flavor"] if current else None) or tmux.infer_flavor(None)
+        flavor = flavor_hint or (current["flavor"] if current else None) or tmux.infer_flavor(None)
         submit_key = req.submit_key or tmux.submit_key_for_flavor(flavor)
         db.register(
             conn,
@@ -1365,9 +1363,6 @@ def create_app(
         except nodes.Unavailable as e:
             log.warning("node %s could not be observed: %s", node.name, e)
             return None
-
-    def _snapshot_named(name: str | None) -> nodes.PaneSnapshot | None:
-        return _try_snapshot(fleet.get(name))
 
     def _pane_ref(target: str, node: nodes.Node) -> tuple[str, str, str | None]:
         """(pane id, session:window.pane label, tmux server) for a pane target.

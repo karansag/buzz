@@ -448,13 +448,13 @@ def _fake_server(monkeypatch, answer):
     return calls
 
 
-def test_harness_session_id_comes_from_the_environment(monkeypatch):
-    assert client.harness_session_id() is None
+def test_harness_session_comes_from_the_environment(monkeypatch):
+    assert client.harness_session() == (None, None)
     monkeypatch.setenv("CODEX_THREAD_ID", "codex-thread")
-    assert client.harness_session_id() == "codex-thread"
+    assert client.harness_session()[1] == "codex-thread"
     monkeypatch.delenv("CODEX_THREAD_ID")
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "claude-session")
-    assert client.harness_session_id() == "claude-session"
+    assert client.harness_session()[1] == "claude-session"
 
 
 def test_pi_reports_its_session_so_it_can_be_resumed(monkeypatch):
@@ -471,11 +471,11 @@ def test_with_both_ids_set_the_nearest_harness_wins(monkeypatch):
     monkeypatch.setattr(tmux, "ancestors", lambda pid=None: [
         (3, "/bin/zsh -c x"), (2, "claude -p hi"), (1, "codex --no-daemon --yolo"),
     ])
-    assert client.harness_session_id() == "claude-session"
+    assert client.harness_session()[1] == "claude-session"
     monkeypatch.setattr(tmux, "ancestors", lambda pid=None: [
         (3, "/bin/zsh -c x"), (2, "codex exec hi"), (1, "/Users/k/.local/share/claude/versions/2.1.280"),
     ])
-    assert client.harness_session_id() == "codex-thread"
+    assert client.harness_session()[1] == "codex-thread"
 
 
 def test_attached_command_sends_its_session_and_verified_pane(monkeypatch):
@@ -553,7 +553,7 @@ def test_explicit_agent_id_beats_the_environment(monkeypatch):
     assert calls["post"][0]["agent_id"] == "explicit"
 
 
-def test_registered_user_asks_the_server_for_this_pane_on_this_node(monkeypatch):
+def test_whoami_lookup_asks_the_server_for_this_pane_on_this_node(monkeypatch):
     # Matching the pane id alone would confuse this pane with one of the same
     # id on another machine, so the CLI hands the full address to the server.
     captured = {}
@@ -565,12 +565,12 @@ def test_registered_user_asks_the_server_for_this_pane_on_this_node(monkeypatch)
         return SimpleNamespace(is_success=True, json=lambda: {"user_id": "laptop-agent"})
 
     monkeypatch.setattr(client.httpx, "get", get)
-    monkeypatch.setattr(tmux, "process_in_pane", lambda pane, pid=None: True)
-    assert client.registered_user("%1") == "laptop-agent"
+    who = {"pane": "%1", "agent_id": None, "pane_verified": True, "pane_in_tree": True, "harness": None}
+    assert client.whoami_lookup(who)["user_id"] == "laptop-agent"
     assert captured["url"] == "http://localhost:8765/whoami"
     assert captured["params"] == {"tmux_pane": "%1", "node": "laptop", "pane_verified": "true", "pane_in_tree": "true"}
     monkeypatch.setattr(client.httpx, "get", lambda url, params, headers, timeout: SimpleNamespace(is_success=False))
-    assert client.registered_user("%1") is None
+    assert client.whoami_lookup(who)["user_id"] is None
 
 
 def test_settings_come_from_env_then_file_then_defaults(monkeypatch, tmp_path):
