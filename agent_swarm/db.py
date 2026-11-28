@@ -458,8 +458,7 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
     if "team_id" not in cols:
         conn.execute("ALTER TABLE recipients ADD COLUMN team_id INTEGER")
     # tmux_pane holds the pane id (%N); tmux_server is the tmux server that
-    # issued it (NULL for rows from before pane ids, which migrate_panes
-    # rebinds); pane_label is the last-known session:window.pane, display only.
+    # issued it; pane_label is the last-known session:window.pane, display only.
     for col in ("tmux_server", "pane_label"):
         if col not in cols:
             conn.execute(f"ALTER TABLE recipients ADD COLUMN {col} TEXT")
@@ -554,18 +553,9 @@ def lookup_user_by_restored_label(
     return row["user_id"] if row else None
 
 
-# tmux_server value for a row that could not be tied to any pane (see
-# migrate_panes): offline until the agent registers again.
+# tmux_server value for a row that could not be tied to any pane: offline
+# until the agent registers again.
 UNBOUND = "unbound"
-
-
-@_writes
-def legacy_pane_rows(conn: sqlite3.Connection) -> list[dict]:
-    """Rows still addressed the old way (no tmux server recorded)."""
-    return [dict(r) for r in conn.execute(
-        "SELECT user_id, tmux_pane, flavor, node, registered_at FROM recipients "
-        "WHERE tmux_server IS NULL AND reserved=0"
-    )]
 
 
 @_writes

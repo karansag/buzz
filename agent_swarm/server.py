@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import activity, attachments, boards, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restart, restore, team_view, tmux
+from . import activity, attachments, boards, bundle, db, digest, handoff, model_switch, names, nodes, notifications, protocol, restart, restore, team_view, tmux
 
 log = logging.getLogger("agent_swarm.monitor")
 
@@ -688,7 +688,6 @@ def create_app(
                 log.warning("supervisor nudge not delivered: %s", exc.detail)
 
     async def _monitor_tick():
-        _migrate_legacy_panes()
         recipients = db.list_recipients(conn)
         # One look at each node's tmux per tick, all nodes at once. The node
         # object is held for the whole tick so a reconnect mid-tick cannot
@@ -1124,7 +1123,6 @@ def create_app(
 
     @app.post("/register")
     def register(req: RegisterReq, request: Request):
-        _migrate_legacy_panes()
         node = _claimed_node(request, req.node)
         pane, label, server = _pane_ref(req.tmux_pane, node)
         if server is None:
@@ -1353,7 +1351,6 @@ def create_app(
         return None
 
     def _annotated_recipients() -> list[dict]:
-        _migrate_legacy_panes()
         rows = db.list_recipients(conn)
         held = {name: fleet.get(name) for name in {r["node"] for r in rows}}
         snaps = {name: _try_snapshot(node) for name, node in held.items()}
@@ -1384,30 +1381,6 @@ def create_app(
         if (row.get("node"), row.get("tmux_pane"), row.get("tmux_server")) == here:
             return False
         return _is_alive(user_id)
-
-    def _migrate_legacy_panes() -> None:
-        """Rebind rows stored before pane ids; see agent_swarm/panes.py."""
-        # Only this machine's rows can predate pane ids: no other node could
-        # have registered before nodes existed. A row with no node at all is
-        # from that era too, so it is stamped local first.
-        db.fill_missing_node(conn, fleet.local.name)
-        rows = [r for r in db.legacy_pane_rows(conn) if r["node"] == fleet.local.name]
-        if not rows:
-            return
-        snap = _try_snapshot(fleet.local)
-        if snap is None or snap.server is None:
-            return  # no tmux right now; try again on a later call
-        for d in panes.plan(rows, snap.table, snap.server_start):
-            row = next(r for r in rows if r["user_id"] == d.user_id)
-            if d.pane_id is not None:
-                db.bind_pane(conn, d.user_id, d.pane_id, snap.server, d.label)
-            elif d.gone:
-                # Keeping the old address under this server reads as "pane no
-                # longer exists" (addresses never match ids), so prune clears it.
-                db.bind_pane(conn, d.user_id, row["tmux_pane"], snap.server, row["tmux_pane"])
-            else:
-                db.bind_pane(conn, d.user_id, row["tmux_pane"], db.UNBOUND, row["tmux_pane"])
-            log.info("pane migration: %s -> %s (%s)", d.user_id, d.pane_id or "offline", d.reason)
 
     def _reach(
         sender: str, recipient: dict, context, content, files: list[str] | None = None

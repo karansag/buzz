@@ -6,7 +6,7 @@ panes by id with a positional label, the way the real one does."""
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_swarm import db, panes, server, tmux
+from agent_swarm import db, server, tmux
 
 
 class FakeTmux:
@@ -179,73 +179,3 @@ def test_a_live_handle_still_cannot_be_taken(fake):
     a = register(fake, "work:0.0")["user_id"]
     r = fake.client.post("/register", json={"tmux_pane": "work:1.0", "requested_user": a})
     assert r.status_code == 409
-
-
-# --- migration of rows stored before pane ids ----------------------------------
-
-def legacy(user_id, pane, flavor="claude", registered_at=100.0):
-    return {"user_id": user_id, "tmux_pane": pane, "flavor": flavor, "registered_at": registered_at}
-
-
-def pane(label, command="claude", title=""):
-    return {"label": label, "command": command, "title": title}
-
-
-def test_migration_binds_only_panes_that_agree_with_the_row():
-    table = {
-        "%1": pane("a:0.0", "2.1.280"),
-        "%2": pane("a:1.0", "codex"),  # a claude agent was registered here
-        "%3": pane("a:2.0", "zsh"),
-        "%4": pane("a:3.0", "codex", tmux.status_title("titled", "codex")),
-        "%5": pane("a:4.0", "codex"),
-    }
-    rows = [
-        legacy("claude-ok", "a:0.0"),
-        legacy("drifted", "a:1.0"),
-        legacy("shell", "a:2.0"),
-        legacy("titled", "a:3.0", "codex"),
-        legacy("gone", "z:9.0"),
-        legacy("bare-id", "%5", "codex", registered_at=100.0),
-        legacy("old-id", "%1", registered_at=10.0),  # before this tmux server
-    ]
-    got = {d.user_id: d for d in panes.plan(rows, table, server_start=50.0)}
-    assert got["claude-ok"].pane_id == "%1"
-    assert got["drifted"].pane_id is None and "not claude" in got["drifted"].reason
-    assert got["shell"].pane_id is None and not got["shell"].gone
-    assert got["titled"].pane_id == "%4"
-    assert got["gone"].pane_id is None and got["gone"].gone
-    assert got["bare-id"].pane_id == "%5"
-    assert got["old-id"].pane_id is None
-
-
-def test_migration_gives_a_contested_pane_to_the_stronger_claim():
-    table = {"%1": pane("a:0.0", "codex", tmux.status_title("named", "codex"))}
-    rows = [
-        legacy("named", "a:0.0", "codex", registered_at=1.0),
-        legacy("newer", "a:0.0", "codex", registered_at=2.0),
-    ]
-    got = {d.user_id: d for d in panes.plan(rows, table, server_start=0.0)}
-    assert got["named"].pane_id == "%1"
-    assert got["newer"].pane_id is None and "named holds that pane" in got["newer"].reason
-
-
-def test_legacy_rows_are_migrated_when_the_server_starts(fake):
-    fake.add("x:0.0", "codex")   # %0 a codex, where claude "drifted" was registered
-    fake.add("x:1.0")            # %1 claude
-    conn = db.connect(fake.db_path)
-    for user, where in (("drifted", "x:0.0"), ("ok", "x:1.0"), ("gone", "x:7.0")):
-        conn.execute(
-            "INSERT INTO recipients(user_id, tmux_pane, flavor, registered_at) VALUES(?,?,?,?)",
-            (user, where, "claude", 1.0),
-        )
-    conn.commit()
-
-    rows = recipients(fake)
-    assert rows["ok"]["alive"] and rows["ok"]["tmux_pane"] == "%1"
-    assert not rows["drifted"]["alive"] and "could not be verified" in rows["drifted"]["offline_reason"]
-    assert not rows["gone"]["alive"] and "no longer exists" in rows["gone"]["offline_reason"]
-    assert owner_send(fake, "drifted").status_code == 409
-    assert fake.delivered == []
-    # Default prune clears the gone one and keeps the unverifiable one.
-    pruned = fake.client.post("/recipients/prune", json={}).json()
-    assert pruned["removed"] == ["gone"]
