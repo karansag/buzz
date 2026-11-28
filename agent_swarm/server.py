@@ -231,13 +231,23 @@ class OwnerNoteReq(BaseModel):
     text: str = Field(max_length=1000)
 
 
-class StatusReq(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class ActorFields(BaseModel):
+    """Who is calling, as the CLI reports it; see _resolve_caller.
+
+    The owner's dashboard sends none of these. An agent's CLI sends its pane,
+    node and session, and what follows goes out in that agent's name rather
+    than the owner's: a node token must never be able to speak as the human.
+    """
 
     tmux_pane: str | None = Field(
         default=None,
         description="The caller's pane, when it has one. A session in a "
         "background host has none and is identified by agent_id alone.",
+    )
+    node: str | None = Field(
+        default=None,
+        description="Machine the caller's pane lives on; the CLI sends "
+        "$AGENT_SWARM_NODE or its short hostname. Omitted means the server's own.",
     )
     agent_id: str | None = Field(
         default=None,
@@ -262,50 +272,16 @@ class StatusReq(BaseModel):
         description="Which harness the session id came from: claude or codex.",
     )
 
-    node: str | None = Field(
-        default=None,
-        description="Machine the caller's pane lives on; the CLI sends "
-        "$AGENT_SWARM_NODE or its short hostname. Omitted means the server's own.",
-    )
+
+class StatusReq(ActorFields):
+    model_config = ConfigDict(extra="forbid")
+
     text: str = Field(min_length=1, max_length=200)
 
 
-class SendReq(BaseModel):
+class SendReq(ActorFields):
     model_config = ConfigDict(extra="forbid")
 
-    tmux_pane: str | None = Field(
-        default=None,
-        description="The caller's pane, when it has one. A session in a "
-        "background host has none and is identified by agent_id alone.",
-    )
-    agent_id: str | None = Field(
-        default=None,
-        description="The caller's harness session id (CLAUDE_CODE_SESSION_ID, "
-        "CODEX_THREAD_ID). When given it identifies the caller; the pane is only "
-        "a fallback for a registration that has no session id yet.",
-    )
-    pane_verified: bool | None = Field(
-        default=None,
-        description="True when the CLI checked that it runs inside tmux_pane "
-        "(or the pane was given explicitly). Only a verified pane may vouch for "
-        "an unknown session id.",
-    )
-    pane_in_tree: bool | None = Field(
-        default=None,
-        description="True only when the CLI found the pane's own process among "
-        "its ancestors (an explicit --pane does not count). With a matching "
-        "harness, it lets the pane's registration move to a new session id.",
-    )
-    harness: str | None = Field(
-        default=None,
-        description="Which harness the session id came from: claude or codex.",
-    )
-
-    node: str | None = Field(
-        default=None,
-        description="Machine the caller's pane lives on; the CLI sends "
-        "$AGENT_SWARM_NODE or its short hostname. Omitted means the server's own.",
-    )
     recipient: str = Field(min_length=1)
     content: str = Field(min_length=1)
     reply_to: int | None = Field(default=None, gt=0)
@@ -331,25 +307,6 @@ class OwnerSendReq(BaseModel):
         "id again (a retry after a lost answer) returns the first attempt's "
         "outcome instead of delivering a second copy.",
     )
-
-
-class ActorFields(BaseModel):
-    """Who is acting, for requests whose effects are delivered as messages.
-
-    The owner's dashboard sends neither field. An agent's CLI sends its pane
-    and node, and the notification goes out in that agent's name rather than
-    the owner's: a node token must never be able to speak as the human.
-    """
-
-    tmux_pane: str | None = None
-    node: str | None = None
-    agent_id: str | None = Field(
-        default=None,
-        description="The acting agent's harness session id; see SendReq.agent_id.",
-    )
-    pane_verified: bool | None = None
-    pane_in_tree: bool | None = Field(default=None, description="See SendReq.pane_in_tree.")
-    harness: str | None = Field(default=None, description="See SendReq.harness.")
 
 
 class BoardPostReq(ActorFields):
@@ -1121,6 +1078,19 @@ def create_app(
                 },
             )
         return row
+
+    def _agent_or_404(user_id: str) -> dict:
+        recipient = db.get_recipient(conn, user_id)
+        if recipient is None:
+            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        return recipient
+
+    def _node_failure(error: str, result) -> HTTPException:
+        """502 when the node's outcome is unknown, 500 when it reported failure."""
+        return HTTPException(
+            status_code=502 if result.status == "unknown" else 500,
+            detail={"error": error, "status": result.status, "detail": result.error},
+        )
 
     def _actor(request: Request, req: ActorFields) -> str:
         """Whose name a resulting message goes out in.
@@ -2196,14 +2166,7 @@ def create_app(
         if spawned.pane is None:
             # Unknown with no pane: nothing to register, and a retry could
             # leave a second window behind, so the caller decides.
-            raise HTTPException(
-                status_code=502 if spawned.status == "unknown" else 500,
-                detail={
-                    "error": "could not create tmux window",
-                    "status": spawned.status,
-                    "detail": spawned.error,
-                },
-            )
+            raise _node_failure("could not create tmux window", spawned)
         pane = spawned.pane
         user_id = names.pick_unused(conn)
         label, server = spawned.label or pane, spawned.tmux_server
@@ -2306,9 +2269,7 @@ def create_app(
         """Start a stopped agent's own session again in a new window, in the
         folder it last ran in, on its own machine. It keeps its handle,
         conversation, tasks and history. Its old pane is left alone."""
-        recipient = db.get_recipient(conn, user_id)
-        if recipient is None:
-            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        recipient = _agent_or_404(user_id)
         if not recipient.get("agent_id") or not recipient.get("flavor"):
             raise HTTPException(status_code=409, detail={"error": f"{user_id} has no saved session to resume"})
         node = _node_of(recipient)
@@ -2334,10 +2295,7 @@ def create_app(
             raise HTTPException(status_code=409, detail={"error": f"no resume command for {recipient['flavor']}"})
         spawned = node.spawn(nodes.new_op_id(), command, cwd, resume=True)
         if spawned.pane is None:
-            raise HTTPException(
-                status_code=502 if spawned.status == "unknown" else 500,
-                detail={"error": "could not create tmux window", "status": spawned.status, "detail": spawned.error},
-            )
+            raise _node_failure("could not create tmux window", spawned)
         pane, label, server = spawned.pane, spawned.label or spawned.pane, spawned.tmux_server
         # Bound to the new pane now, so the harness's own registration from
         # there finds this handle by its session id.
@@ -2353,9 +2311,7 @@ def create_app(
 
     @app.post("/agents/{user_id}/stop")
     def agents_stop(user_id: str, _: None = Depends(_require_owner)):
-        recipient = db.get_recipient(conn, user_id)
-        if recipient is None:
-            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        recipient = _agent_or_404(user_id)
         return _stop_agent(recipient)
 
     def _stop_agent(recipient: dict, *, stop_live: bool = True) -> dict:
@@ -2384,14 +2340,7 @@ def create_app(
             raise HTTPException(status_code=409, detail={"error": "agent is still running", "live": True})
         killed = node.kill(nodes.new_op_id(), pane, recipient.get("tmux_server"))
         if not killed.ok:
-            raise HTTPException(
-                status_code=502 if killed.status == "unknown" else 500,
-                detail={
-                    "error": "could not stop tmux pane",
-                    "status": killed.status,
-                    "detail": killed.error,
-                },
-            )
+            raise _node_failure("could not stop tmux pane", killed)
         return {
             "ok": True, "user_id": user_id, "tmux_pane": pane,
             "already_stopped": False,
@@ -2399,9 +2348,7 @@ def create_app(
 
     def _retire(user_id: str, *, stop_live: bool) -> dict:
         with retirement_lock:
-            recipient = db.get_recipient(conn, user_id)
-            if recipient is None:
-                raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+            recipient = _agent_or_404(user_id)
             stopped = _stop_agent(recipient, stop_live=stop_live)
             archived = db.retire_recipient(conn, recipient)
             if archived is None:
@@ -2424,10 +2371,7 @@ def create_app(
         hub does this for agents on its own machine, where the pane and the
         transcripts are.
         """
-        recipient = db.get_recipient(conn, user_id)
-        if recipient is None:
-            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
-        row = dict(recipient)
+        row = _agent_or_404(user_id)
         node = _node_of(row)
         if node is None:
             raise HTTPException(status_code=409, detail={"error": f"node {row['node']} is not connected"})
@@ -2488,9 +2432,7 @@ def create_app(
             )
         if req.text is not None and not req.text.strip():
             raise HTTPException(status_code=422, detail={"error": "text is empty"})
-        recipient = db.get_recipient(conn, user_id)
-        if recipient is None:
-            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        recipient = _agent_or_404(user_id)
         node = _node_of(recipient)
         reason = _offline(recipient, node, _try_snapshot(node))
         if reason is not None:
@@ -2507,11 +2449,7 @@ def create_app(
                 retry_submit=False,
             )
         if sent.status != "ok":
-            raise HTTPException(
-                status_code=502 if sent.status == "unknown" else 500,
-                detail={"error": "could not type into the pane",
-                        "status": sent.status, "detail": sent.error},
-            )
+            raise _node_failure("could not type into the pane", sent)
         return {"ok": True, "user_id": user_id}
 
     @app.get("/teams")
@@ -2735,9 +2673,7 @@ def create_app(
         queen of.
         """
         actor = _actor(request, req)
-        recipient = db.get_recipient(conn, user_id)
-        if recipient is None:
-            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        recipient = _agent_or_404(user_id)
         if actor == user_id:
             # The switch types into the pane, which would land in the caller's own turn.
             raise HTTPException(
@@ -3109,9 +3045,7 @@ def create_app(
     peek_workers = anyio.CapacityLimiter(8)
 
     def _capture_peek(user_id: str) -> dict:
-        recipient = db.get_recipient(conn, user_id)
-        if recipient is None:
-            raise HTTPException(status_code=404, detail={"error": "unknown agent"})
+        recipient = _agent_or_404(user_id)
         node = _node_of(recipient)
         pane = recipient["tmux_pane"]
         if node is None:
