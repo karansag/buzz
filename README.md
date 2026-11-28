@@ -448,6 +448,41 @@ badge and notifications when an agent needs you, build the Mac app in
 [mac/](mac/README.md). It only opens your hub's URL; the hub stays where it
 is.
 
+### Explicit owner notifications
+
+Agents can run `buzz notify "Long job finished" --context job-name` for a result
+the owner is waiting on, or a blocking decision. Use ordinary messages for progress.
+The hub permits one per five minutes and six per UTC calendar day per agent.
+A refused request returns 429 with `Retry-After` and stores nothing; normal messages
+are unaffected. Text is limited to 1,000 characters. Notifications remain ordinary
+owner conversation messages, marked 🔔 in threads and Chats.
+`POST /notify` accepts the same caller identity fields as `/send`, plus `content`
+and optional `context`; the recipient is always the owner.
+
+In a browser, click **enable notifications** once to grant permission. New alerts
+appear only while the tab is hidden; clicking one opens the agent. The page must
+remain open and poll successfully (HTTPS or localhost is required by browsers).
+Opening or reloading a page does not replay old notifications. There is no phone
+web push or delivery while the page/app is closed. The Mac app forwards explicit
+alerts through its native notifications; use its **Enable notifications…** menu
+and rebuild the app when installing the new handler. OS notification settings
+can suppress banners even after Buzz has submitted them.
+
+### Find in a conversation
+
+On an agent page, press **Cmd+F** (Mac) or **Ctrl+F**, or click the conversation's
+search button. Search uses the whole owner–agent history, including messages
+outside the loaded page. Every word must occur in the message text or context;
+matching ignores case and treats punctuation literally. The bar shows the full
+match count; **Enter** / **Shift+Enter** or the arrow buttons step through matches,
+wrapping at either end. **Esc** closes search and clears the highlights. Other
+pages keep the browser's usual Find command.
+
+The owner-only endpoint is `GET /api/agents/<id>/messages/search?q=...&limit=100&offset=0`.
+It returns `matches` (id, timestamp, sender, snippet) and `total`. Queries are capped
+at 1,000 characters and pages at 500 results. Query matching is compiled solely by
+`agent_swarm/search.py`; conversation scope and authorization stay outside it.
+
 ## Tasks
 
 The owner creates and assigns tasks on the dashboard. Agents use the CLI:
@@ -840,7 +875,8 @@ buzz unregister [--user <handle>]     # keeps messages and tasks
 buzz whoami
 buzz recipients
 buzz send --to <handle|owner> | --to-queen <team name or id> --message "..." [--context <tag>] [--reply-to <message-id>] [--pane <id>]
-buzz messages [--user <handle>] [--limit 20]
+buzz messages [--user <handle>] [--limit 20] [--id <message-id>]
+buzz notify "text" [--context <tag>]   # only for what the owner is waiting on
 buzz status "working on ..." [--pane <id>]
 buzz tasks [--status open|picked_up|done] [--team <name or id>]
 buzz task-create <title> [--description <text>] [--assignee <handle>] [--depends-on 3,5]
@@ -855,6 +891,9 @@ buzz board reply ID "body"
 buzz supervisor [<handle> --objective <text> | --clear]
 buzz spawn [--flavor claude|codex|pi|agy|hermes] [--model <m>] [--node <machine>] [--cwd <folder>]
 buzz stop <handle>
+buzz retire <handle> [--yes]   # stop, archive its history, free its name
+buzz model <handle>... [--team] [--to <model>]   # show or switch models (owner, or their queen)
+buzz switch <handle>... --to claude|codex|pi|agy [--model <m>] [--team] [--apply]   # move to another harness
 buzz prune [--include-shells]   # forget agents whose pane is gone
 buzz snapshot             # save tmux layout + each pane's agent session
 buzz restore [--apply] [--from <file> | --from-hub] [--stagger 5]   # after a reboot
@@ -962,8 +1001,15 @@ agent_swarm/
   client.py    the CLI
   db.py        SQLite
   tmux.py      pane detection, delivery, capture, spawn commands
+  activity.py  what each agent is doing, read off its screen
+  boards.py    team boards
   digest.py    the supervisor's digest
   team_view.py `buzz team`: one team for its queen
+  handoff.py   `buzz switch`: move an agent to another harness
+  model_switch.py  `buzz model`: switch an agent's model
+  restore.py, restart.py  snapshots, restore after a reboot, restart in place
+  bundle.py    export and import between hubs
+  attachments.py, search.py, message_index.py  files and message search
   node.py      the node daemon
   nodes.py     local and remote machines behind one interface
   protocol.py  frames between hub and node
@@ -982,7 +1028,7 @@ AGENT_PROMPT.md
 
 ## Related projects
 
-agent-swarm only delivers messages and keeps a simple board. It works
+Buzz only delivers messages and keeps a simple board. It works
 alongside tools that do more planning or orchestration, such as
 [Beads](https://github.com/gastownhall/beads),
 [Gas Town](https://github.com/gastownhall/gastown),
@@ -990,38 +1036,3 @@ alongside tools that do more planning or orchestration, such as
 [MCP Agent Mail](https://github.com/dicklesworthstone/mcp_agent_mail), and
 [Swarm Protocol](https://github.com/phuryn/swarm-protocol). See
 [docs/landscape.md](./docs/landscape.md) for a comparison.
-
-### Explicit owner notifications
-
-Agents can run `buzz notify "Long job finished" --context job-name` for a result
-the owner is waiting on, or a blocking decision. Use ordinary messages for progress.
-The hub permits one per five minutes and six per UTC calendar day per agent.
-A refused request returns 429 with `Retry-After` and stores nothing; normal messages
-are unaffected. Text is limited to 1,000 characters. Notifications remain ordinary
-owner conversation messages, marked 🔔 in threads and Chats.
-`POST /notify` accepts the same caller identity fields as `/send`, plus `content`
-and optional `context`; the recipient is always the owner.
-
-In a browser, click **enable notifications** once to grant permission. New alerts
-appear only while the tab is hidden; clicking one opens the agent. The page must
-remain open and poll successfully (HTTPS or localhost is required by browsers).
-Opening or reloading a page does not replay old notifications. There is no phone
-web push or delivery while the page/app is closed. The Mac app forwards explicit
-alerts through its native notifications; use its **Enable notifications…** menu
-and rebuild the app when installing the new handler. OS notification settings
-can suppress banners even after Buzz has submitted them.
-
-### Find in a conversation
-
-On an agent page, press **Cmd+F** (Mac) or **Ctrl+F**, or click the conversation's
-search button. Search uses the whole owner–agent history, including messages
-outside the loaded page. Every word must occur in the message text or context;
-matching ignores case and treats punctuation literally. The bar shows the full
-match count; **Enter** / **Shift+Enter** or the arrow buttons step through matches,
-wrapping at either end. **Esc** closes search and clears the highlights. Other
-pages keep the browser's usual Find command.
-
-The owner-only endpoint is `GET /api/agents/<id>/messages/search?q=...&limit=100&offset=0`.
-It returns `matches` (id, timestamp, sender, snippet) and `total`. Queries are capped
-at 1,000 characters and pages at 500 results. Query matching is compiled solely by
-`agent_swarm/search.py`; conversation scope and authorization stay outside it.
