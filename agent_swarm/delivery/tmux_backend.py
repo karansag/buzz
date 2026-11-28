@@ -507,9 +507,8 @@ class TmuxBackend(NodeRegistry):
 
     def arrival_note(self) -> str:
         return (
-            "Incoming messages from the owner and other agents are delivered by injecting a "
-            "line into your tmux pane (as if typed) followed by the configured "
-            "submit key (default `C-m`)."
+            "Messages from the owner and other agents are typed into your tmux pane "
+            "and submitted, as if a user typed them."
         )
 
     def on_inbound(self, handler: Callable[[Inbound], None]) -> None:
