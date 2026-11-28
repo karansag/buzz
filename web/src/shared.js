@@ -6,6 +6,10 @@ export const POLL_MS = 2000;
 export const PEEK_MS = 2000;
 export const JSONH = { "content-type": "application/json" };
 
+// Shortcuts use Cmd on Apple devices and Ctrl elsewhere.
+export const IS_MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || "");
+export const platformModifier = (e) => (IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
+
 export function stopAgentPrompt(agent) {
   return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`;
 }

@@ -9209,6 +9209,8 @@ function parseAgentRoute(hash = "") {
 var POLL_MS$1 = 2e3;
 var PEEK_MS = 2e3;
 var JSONH = { "content-type": "application/json" };
+var IS_MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || "");
+var platformModifier = (e) => IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 function stopAgentPrompt(agent) {
 	return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`;
 }
@@ -9570,8 +9572,7 @@ function QuickSwitcher({ state, navigate }) {
 	const [query, setQuery] = d("");
 	const [selected, setSelected] = d(null);
 	const dialog = A(null), input = A(null), previous = A(null);
-	const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-	const shortcut = mac ? "⌘" : "Ctrl+";
+	const shortcut = IS_MAC ? "⌘" : "Ctrl+";
 	const open = (next) => {
 		if (!state) return;
 		if (!dialog.current?.open) previous.current = document.activeElement;
@@ -9585,8 +9586,7 @@ function QuickSwitcher({ state, navigate }) {
 	};
 	_(() => {
 		const onKey = (e) => {
-			const platformModifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-			if (e.isComposing || e.altKey || !platformModifier || e.code !== "KeyK") return;
+			if (e.isComposing || e.altKey || !platformModifier(e) || e.code !== "KeyK") return;
 			e.preventDefault();
 			e.stopImmediatePropagation();
 			if (!e.repeat) open(e.shiftKey ? "teams" : "agents");
@@ -14020,11 +14020,10 @@ function terminalRuns(text) {
 function Scope({ user }) {
 	const [open, setOpen] = d(false);
 	const scopeRef = A(null);
-	const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-	const shortcut = mac ? "⌘⇧Y" : "Ctrl+Shift+Y";
+	const shortcut = IS_MAC ? "⌘⇧Y" : "Ctrl+Shift+Y";
 	_(() => {
 		const onKey = (e) => {
-			if (!(mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) || !e.shiftKey || e.altKey || e.code !== "KeyY" || e.isComposing || e.defaultPrevented || document.querySelector("dialog[open], .thread.focused")) return;
+			if (!platformModifier(e) || !e.shiftKey || e.altKey || e.code !== "KeyY" || e.isComposing || e.defaultPrevented || document.querySelector("dialog[open], .thread.focused")) return;
 			e.preventDefault();
 			e.stopImmediatePropagation();
 			if (e.repeat) return;
@@ -14037,7 +14036,7 @@ function Scope({ user }) {
 		};
 		addEventListener("keydown", onKey, true);
 		return () => removeEventListener("keydown", onKey, true);
-	}, [mac]);
+	}, []);
 	const [data, setData] = d(null);
 	const preRef = A(null);
 	const pinned = A(true);
@@ -14510,8 +14509,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 	const [expanded, setExpanded] = d(() => returnState?.expanded ?? !!recipient);
 	const [focused, setFocused] = d(() => !!recipient && (savedFocus(recipient) ?? !!switchCarry?.focus));
 	const threadRef = A(null);
-	const focusMac = /Mac|iPhone|iPad/.test(navigator.platform);
-	const focusShortcut = focusMac ? "⌘⇧L" : "Ctrl+Shift+L";
+	const focusShortcut = IS_MAC ? "⌘⇧L" : "Ctrl+Shift+L";
 	const [focusFont, setFocusFont] = d(() => {
 		try {
 			return Number(localStorage.getItem(FOCUS_FONT_KEY)) || FOCUS_FONT.start;
@@ -14690,8 +14688,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 				setFocus(false);
 				return;
 			}
-			const modifier = focusMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-			if (page && (recipient || focused) && (!document.querySelector(".thread.focused") || focused) && e.code === "KeyL" && e.shiftKey && modifier && !e.altKey) {
+			if (page && (recipient || focused) && (!document.querySelector(".thread.focused") || focused) && e.code === "KeyL" && e.shiftKey && platformModifier(e) && !e.altKey) {
 				e.preventDefault();
 				e.stopImmediatePropagation();
 				if (!e.repeat) toggleFocus();
@@ -15323,12 +15320,10 @@ function App() {
 		updateRoster(false);
 		requestAnimationFrame(() => toggleRef.current?.focus());
 	};
-	const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-	const rosterShortcut = mac ? "⌘B" : "Ctrl+B";
+	const rosterShortcut = IS_MAC ? "⌘B" : "Ctrl+B";
 	_(() => {
 		const onKey = (e) => {
-			const modifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-			if (compact || !modifier || e.code !== "KeyB" || e.shiftKey || e.altKey || e.isComposing || e.defaultPrevented || document.activeElement?.isContentEditable || document.querySelector("dialog[open], .thread.focused")) return;
+			if (compact || !platformModifier(e) || e.code !== "KeyB" || e.shiftKey || e.altKey || e.isComposing || e.defaultPrevented || document.activeElement?.isContentEditable || document.querySelector("dialog[open], .thread.focused")) return;
 			e.preventDefault();
 			if (e.repeat) return;
 			if (rosterOpenRef.current && document.activeElement?.closest?.("#agent-sidebar")) closeRoster();
@@ -15336,7 +15331,7 @@ function App() {
 		};
 		addEventListener("keydown", onKey);
 		return () => removeEventListener("keydown", onKey);
-	}, [compact, mac]);
+	}, [compact]);
 	const [connected, setConnected] = d(true);
 	const [clock, setClock] = d((/* @__PURE__ */ new Date()).toLocaleTimeString());
 	const [route, setRoute] = d(location.hash);
@@ -15524,9 +15519,8 @@ function App() {
 				e.preventDefault();
 				requestTaskFocus();
 			}
-			const modifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 			const by = e.code === "BracketRight" ? 1 : e.code === "BracketLeft" ? -1 : 0;
-			if (by && modifier && e.shiftKey && !e.altKey && !e.isComposing && !document.querySelector(".quick-switch[open]")) {
+			if (by && platformModifier(e) && e.shiftKey && !e.altKey && !e.isComposing && !document.querySelector(".quick-switch[open]")) {
 				e.preventDefault();
 				location.hash = stepView(location.hash, viewsRef.current, by);
 			}
@@ -15552,8 +15546,8 @@ function App() {
     <h1 style="cursor:pointer" onClick=${() => {
 		location.hash = "#/";
 	}}>Buzz</h1>
-    <nav class="views" aria-label="views" title=${`Switch views: ${mac ? "⌘⇧[ / ⌘⇧]" : "Ctrl+Shift+[ / ]"}`}>
-      <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${mac ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
+    <nav class="views" aria-label="views" title=${`Switch views: ${IS_MAC ? "⌘⇧[ / ⌘⇧]" : "Ctrl+Shift+[ / ]"}`}>
+      <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${IS_MAC ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
       ${agentTab && m$1`<a class=${`agent-view-tab ${focusUser ? "on" : ""}`} href=${agentTabHash}
         aria-current=${focusUser ? "page" : null} title=${`Return to ${agentTab.user_id}`}>
         <span aria-hidden="true">${FLAVOR_ICON[agentTab.flavor] || FLAVOR_ICON.generic}</span>
@@ -15575,7 +15569,7 @@ function App() {
 	}} />
     ${!compact && m$1`<button type="button" ref=${toggleRef} class=${`mini roster-toggle ${rosterOpen ? "is-open" : ""}`}
       aria-pressed=${rosterOpen} aria-expanded=${rosterOpen} aria-controls="agent-sidebar" onClick=${toggleRoster}
-      title=${`Toggle agent sidebar (${rosterShortcut})`} aria-keyshortcuts=${mac ? "Meta+b" : "Control+b"}>
+      title=${`Toggle agent sidebar (${rosterShortcut})`} aria-keyshortcuts=${IS_MAC ? "Meta+b" : "Control+b"}>
       sidebar ${state?.recipients?.filter((r) => r.pane_alive).length ?? 0} <kbd>${rosterShortcut}</kbd>
     </button>`}
     <div class="right">

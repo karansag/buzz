@@ -1,7 +1,7 @@
 import { agentPreview } from "./agent-preview.js";
 import { html } from "htm/preact";
 import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
-import { Bee } from "./shared.js";
+import { Bee, IS_MAC, platformModifier } from "./shared.js";
 import { Crown, queenSuffix } from "./queen.js";
 
 // When the owner last opened each agent, newest first in the agent switcher.
@@ -62,8 +62,7 @@ export function QuickSwitcher({ state, navigate }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const dialog = useRef(null), input = useRef(null), previous = useRef(null);
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const shortcut = mac ? "⌘" : "Ctrl+";
+  const shortcut = IS_MAC ? "⌘" : "Ctrl+";
   const open = next => {
     if (!state) return;
     if (!dialog.current?.open) previous.current = document.activeElement;
@@ -72,8 +71,7 @@ export function QuickSwitcher({ state, navigate }) {
   const close = () => { dialog.current?.close(); setMode(null); };
   useLayoutEffect(() => {
     const onKey = e => {
-      const platformModifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (e.isComposing || e.altKey || !platformModifier || e.code !== "KeyK") return;
+      if (e.isComposing || e.altKey || !platformModifier(e) || e.code !== "KeyK") return;
       e.preventDefault(); e.stopImmediatePropagation();
       if (!e.repeat) open(e.shiftKey ? "teams" : "agents");
     };

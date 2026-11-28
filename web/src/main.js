@@ -18,6 +18,7 @@ import {
   POLL_MS, stopAgentPrompt,
   PEEK_MS,
   JSONH, newClientId,
+  IS_MAC, platformModifier,
   FLAVOR_ICON,
   STATE,
   agentStatus,
@@ -1047,12 +1048,10 @@ function terminalRuns(text) {
 function Scope({ user }) {
   const [open, setOpen] = useState(false);
   const scopeRef = useRef(null);
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const shortcut = mac ? "⌘⇧Y" : "Ctrl+Shift+Y";
+  const shortcut = IS_MAC ? "⌘⇧Y" : "Ctrl+Shift+Y";
   useLayoutEffect(() => {
     const onKey = e => {
-      const modifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (!modifier || !e.shiftKey || e.altKey || e.code !== "KeyY" || e.isComposing
+      if (!platformModifier(e) || !e.shiftKey || e.altKey || e.code !== "KeyY" || e.isComposing
           || e.defaultPrevented || document.querySelector("dialog[open], .thread.focused")) return;
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -1066,7 +1065,7 @@ function Scope({ user }) {
     };
     addEventListener("keydown", onKey, true);
     return () => removeEventListener("keydown", onKey, true);
-  }, [mac]);
+  }, []);
   const [data, setData] = useState(null);
   const preRef = useRef(null);
   const pinned = useRef(true);
@@ -1510,8 +1509,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   // in focus mode lands in focus mode.
   const [focused, setFocused] = useState(() => !!recipient && (savedFocus(recipient) ?? !!switchCarry?.focus));
   const threadRef = useRef(null);
-  const focusMac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const focusShortcut = focusMac ? "⌘⇧L" : "Ctrl+Shift+L";
+  const focusShortcut = IS_MAC ? "⌘⇧L" : "Ctrl+Shift+L";
   const [focusFont, setFocusFont] = useState(() => {
     try { return Number(localStorage.getItem(FOCUS_FONT_KEY)) || FOCUS_FONT.start; } catch { return FOCUS_FONT.start; }
   });
@@ -1685,9 +1683,8 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
         setFocus(false);
         return;
       }
-      const modifier = focusMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (page && (recipient || focused) && (!document.querySelector(".thread.focused") || focused)
-          && e.code === "KeyL" && e.shiftKey && modifier && !e.altKey) {
+          && e.code === "KeyL" && e.shiftKey && platformModifier(e) && !e.altKey) {
         e.preventDefault();
         e.stopImmediatePropagation();
         if (!e.repeat) toggleFocus();
@@ -2322,12 +2319,10 @@ function App() {
   // panel holds the roster).
   const toggleRoster = () => updateRoster(!rosterOpen);
   const closeRoster = () => { updateRoster(false); requestAnimationFrame(() => toggleRef.current?.focus()); };
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const rosterShortcut = mac ? "⌘B" : "Ctrl+B";
+  const rosterShortcut = IS_MAC ? "⌘B" : "Ctrl+B";
   useLayoutEffect(() => {
     const onKey = e => {
-      const modifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (compact || !modifier || e.code !== "KeyB" || e.shiftKey || e.altKey
+      if (compact || !platformModifier(e) || e.code !== "KeyB" || e.shiftKey || e.altKey
           || e.isComposing || e.defaultPrevented || document.activeElement?.isContentEditable
           || document.querySelector("dialog[open], .thread.focused")) return;
       e.preventDefault();
@@ -2339,7 +2334,7 @@ function App() {
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [compact, mac]);
+  }, [compact]);
   const [connected, setConnected] = useState(true);
   const [clock, setClock] = useState(new Date().toLocaleTimeString());
   const [route, setRoute] = useState(location.hash);
@@ -2528,9 +2523,8 @@ function App() {
       // Cmd+Shift+[ / ] (Ctrl+Shift elsewhere) step through the header's
       // views. Browsers keep these keys for their own tabs; the Mac app and
       // an installed app window pass them to the page.
-      const modifier = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       const by = e.code === "BracketRight" ? 1 : e.code === "BracketLeft" ? -1 : 0;
-      if (by && modifier && e.shiftKey && !e.altKey && !e.isComposing
+      if (by && platformModifier(e) && e.shiftKey && !e.altKey && !e.isComposing
           && !document.querySelector(".quick-switch[open]")) {
         e.preventDefault();
         location.hash = stepView(location.hash, viewsRef.current, by);
@@ -2560,8 +2554,8 @@ function App() {
 
   const header = html`<header class="top">
     <h1 style="cursor:pointer" onClick=${() => { location.hash = "#/"; }}>Buzz</h1>
-    <nav class="views" aria-label="views" title=${`Switch views: ${mac ? "⌘⇧[ / ⌘⇧]" : "Ctrl+Shift+[ / ]"}`}>
-      <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${mac ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
+    <nav class="views" aria-label="views" title=${`Switch views: ${IS_MAC ? "⌘⇧[ / ⌘⇧]" : "Ctrl+Shift+[ / ]"}`}>
+      <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${IS_MAC ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
       ${agentTab && html`<a class=${`agent-view-tab ${focusUser ? "on" : ""}`} href=${agentTabHash}
         aria-current=${focusUser ? "page" : null} title=${`Return to ${agentTab.user_id}`}>
         <span aria-hidden="true">${FLAVOR_ICON[agentTab.flavor] || FLAVOR_ICON.generic}</span>
@@ -2580,7 +2574,7 @@ function App() {
     }} />
     ${!compact && html`<button type="button" ref=${toggleRef} class=${`mini roster-toggle ${rosterOpen ? "is-open" : ""}`}
       aria-pressed=${rosterOpen} aria-expanded=${rosterOpen} aria-controls="agent-sidebar" onClick=${toggleRoster}
-      title=${`Toggle agent sidebar (${rosterShortcut})`} aria-keyshortcuts=${mac ? "Meta+b" : "Control+b"}>
+      title=${`Toggle agent sidebar (${rosterShortcut})`} aria-keyshortcuts=${IS_MAC ? "Meta+b" : "Control+b"}>
       sidebar ${state?.recipients?.filter(r => r.pane_alive).length ?? 0} <kbd>${rosterShortcut}</kbd>
     </button>`}
     <div class="right">
