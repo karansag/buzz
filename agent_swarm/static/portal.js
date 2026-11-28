@@ -9209,6 +9209,42 @@ function parseAgentRoute(hash = "") {
 var POLL_MS$1 = 2e3;
 var PEEK_MS = 2e3;
 var JSONH = { "content-type": "application/json" };
+var jsonInit = (method, body) => ({
+	method,
+	headers: JSONH,
+	body: JSON.stringify(body)
+});
+var errorText = (body) => [body?.detail?.error, body?.detail?.detail].filter(Boolean).join(" — ");
+async function controlRequest(url, init = { method: "POST" }) {
+	try {
+		const response = await fetch(url, init);
+		const body = await response.json().catch(() => null);
+		if (response.ok && body?.ok === true) return {
+			ok: true,
+			body
+		};
+		return {
+			ok: false,
+			error: body?.detail?.status === "unknown" || !body?.detail?.error ? null : errorText(body)
+		};
+	} catch {
+		return {
+			ok: false,
+			error: null
+		};
+	}
+}
+async function stopRequest(user) {
+	const result = await controlRequest(`/agents/${encodeURIComponent(user)}/stop`);
+	if (result.ok) return result;
+	return {
+		ok: false,
+		error: result.error === null ? "Stop not confirmed. Check the agent's status before retrying." : `Could not stop agent: ${result.error}`
+	};
+}
+async function setAgentTeam(user, teamId) {
+	return !!(await fetch(`/agents/${encodeURIComponent(user)}/team`, jsonInit("POST", { team_id: teamId })).catch(() => null))?.ok;
+}
 var IS_MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || "");
 var platformModifier = (e) => IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 function stopAgentPrompt(agent) {
@@ -9365,11 +9401,7 @@ var disp = (u) => u === "owner" ? m$1`<span class="owner-name">owner</span>` : u
 var focusHash = (u) => agentHash(u);
 async function patchTask(id, patch) {
 	try {
-		const r = await fetch(`/tasks/${id}`, {
-			method: "PATCH",
-			headers: JSONH,
-			body: JSON.stringify(patch)
-		});
+		const r = await fetch(`/tasks/${id}`, jsonInit("PATCH", patch));
 		if (r.ok) return { ok: true };
 		return {
 			ok: false,
@@ -9437,11 +9469,7 @@ function OwnerNote({ agent, refresh }) {
 		setBusy(true);
 		setError("");
 		try {
-			const response = await fetch(`/agents/${encodeURIComponent(agent.user_id)}/owner-note`, {
-				method: "PUT",
-				headers: JSONH,
-				body: JSON.stringify({ text: value })
-			});
+			const response = await fetch(`/agents/${encodeURIComponent(agent.user_id)}/owner-note`, jsonInit("PUT", { text: value }));
 			if (!response.ok) {
 				const body = await response.json();
 				throw new Error(body.detail?.error || "Could not save note.");
@@ -10354,17 +10382,13 @@ function TaskStatusActions({ task, refresh }) {
 //#endregion
 //#region web/src/restart-agent.js
 async function restartRequest(user, force, dryRun) {
-	const response = await fetch(`/agents/${encodeURIComponent(user)}/restart`, {
-		method: "POST",
-		headers: JSONH,
-		body: JSON.stringify({
-			force,
-			dry_run: dryRun
-		})
-	});
+	const response = await fetch(`/agents/${encodeURIComponent(user)}/restart`, jsonInit("POST", {
+		force,
+		dry_run: dryRun
+	}));
 	const body = await response.json().catch(() => null);
 	if (response.ok && body) return body;
-	return { reason: [body?.detail?.error, body?.detail?.detail].filter(Boolean).join(" — ") };
+	return { reason: errorText(body) };
 }
 var hasPlan = (result) => result.ok === true && result.status === "planned" && typeof result.launch === "string" && result.launch.length > 0;
 var canForce = (result) => result.ok === true && result.status === "skipped" && result.forceable === true;
@@ -11558,17 +11582,9 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		const stopBee = async (user) => {
 			const agent = (stateRef.current.recipients || []).find((r) => r.user_id === user);
 			if (!agent || !await confirmDialog(stopAgentPrompt(agent))) return;
-			try {
-				const response = await fetch(`/agents/${encodeURIComponent(user)}/stop`, { method: "POST" });
-				const body = await response.json().catch(() => null);
-				if (response.ok && body?.ok === true) setDropStatus(body.already_stopped ? `${user} is already stopped.` : `Stopped ${user}. Messages and tasks are kept; "resume agent" brings it back.`);
-				else if (body?.detail?.status === "unknown" || !body?.detail?.error) setDropStatus("Stop not confirmed. Check the agent's status before retrying.");
-				else setDropStatus(`Could not stop agent: ${body.detail.error}${body.detail.detail ? ` — ${body.detail.detail}` : ""}`);
-			} catch {
-				setDropStatus("Stop not confirmed. Check the agent's status before retrying.");
-			} finally {
-				refresh();
-			}
+			const result = await stopRequest(user);
+			setDropStatus(!result.ok ? result.error : result.body.already_stopped ? `${user} is already stopped.` : `Stopped ${user}. Messages and tasks are kept; "resume agent" brings it back.`);
+			refresh();
 		};
 		const removeTask = async (id) => {
 			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
@@ -11613,6 +11629,11 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				y: box.y + box.h / 2
 			} : null;
 		};
+		const patchDropped = async (id, patch, target) => {
+			const result = await patchTask(id, patch);
+			setDropStatus(result.ok ? `Assigned #${id} to ${target}.` : `Could not assign #${id}; task was not changed.`);
+			if (result.ok) refresh();
+		};
 		const assign = async (id, assignee) => {
 			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
 			if (!task || task.status === "done") {
@@ -11623,17 +11644,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				setDropStatus(`#${id} is already assigned to ${assignee}.`);
 				return;
 			}
-			try {
-				if (!(await fetch(`/tasks/${id}`, {
-					method: "PATCH",
-					headers: JSONH,
-					body: JSON.stringify({ assignee })
-				})).ok) throw new Error("assignment failed");
-				setDropStatus(`Assigned #${id} to ${assignee}.`);
-				refresh();
-			} catch {
-				setDropStatus(`Could not assign #${id}; task was not changed.`);
-			}
+			await patchDropped(id, { assignee }, assignee);
 		};
 		const assignTeam = async (id, box) => {
 			const task = (stateRef.current.tasks || []).find((t) => t.id === id);
@@ -11645,30 +11656,12 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				setDropStatus(`#${id} is already assigned to team ${box.name}.`);
 				return;
 			}
-			try {
-				if (!(await fetch(`/tasks/${id}`, {
-					method: "PATCH",
-					headers: JSONH,
-					body: JSON.stringify({ team_id: box.id })
-				})).ok) throw new Error("assignment failed");
-				setDropStatus(`Assigned #${id} to team ${box.name}.`);
-				refresh();
-			} catch {
-				setDropStatus(`Could not assign #${id}; task was not changed.`);
-			}
+			await patchDropped(id, { team_id: box.id }, `team ${box.name}`);
 		};
 		const setBeeTeam = async (user, teamId, doneLabel) => {
-			try {
-				if (!(await fetch(`/agents/${encodeURIComponent(user)}/team`, {
-					method: "POST",
-					headers: JSONH,
-					body: JSON.stringify({ team_id: teamId })
-				})).ok) throw new Error("move failed");
-				setDropStatus(doneLabel);
-				refresh();
-			} catch {
-				setDropStatus(`Could not move ${user}.`);
-			}
+			const moved = await setAgentTeam(user, teamId);
+			setDropStatus(moved ? doneLabel : `Could not move ${user}.`);
+			if (moved) refresh();
 		};
 		let press = null;
 		let suppressClick = false;
@@ -12137,16 +12130,12 @@ function BoardComposer({ teamId, replyTo, onPosted }) {
 		setError("");
 		const uncertain = "Could not confirm the post. Retry to check without posting a duplicate.";
 		try {
-			const result = await boardRequest(`/teams/${teamId}/board`, {
-				method: "POST",
-				headers: JSONH,
-				body: JSON.stringify({
-					body,
-					subject: title,
-					reply_to: replyTo,
-					client_id: clientId
-				})
-			}, uncertain);
+			const result = await boardRequest(`/teams/${teamId}/board`, jsonInit("POST", {
+				body,
+				subject: title,
+				reply_to: replyTo,
+				client_id: clientId
+			}), uncertain);
 			if (!Number.isSafeInteger(result.id)) throw Error(uncertain);
 			attempt.current = null;
 			setSubject("");
@@ -12845,11 +12834,7 @@ function stepTeammate(members, user, by) {
 //#region web/src/pins.js
 async function setPinned(id, pinned, refresh) {
 	try {
-		const r = await fetch(`/api/messages/${id}/pin`, {
-			method: "POST",
-			headers: JSONH,
-			body: JSON.stringify({ pinned })
-		});
+		const r = await fetch(`/api/messages/${id}/pin`, jsonInit("POST", { pinned }));
 		if (!r.ok) throw new Error(String(r.status));
 	} catch {
 		showNotice(pinned ? "Could not pin the message. Please try again." : "Could not unpin the message. Please try again.");
@@ -13060,12 +13045,12 @@ function CompactButton({ r }) {
 }
 async function stopAgent(r, state, focusUser, refresh) {
 	if (!await confirmDialog(stopAgentPrompt(r))) return;
-	if ((await fetch(`/agents/${encodeURIComponent(r.user_id)}/stop`, { method: "POST" }).catch(() => null))?.ok) {
-		if (focusUser === r.user_id) {
-			const next = state.recipients.find((x) => x.pane_alive && x.user_id !== r.user_id);
-			location.hash = next ? focusHash(next.user_id) : "#/";
-		}
-	} else await showNotice(`Could not stop ${r.user_id}. Check its status before trying again.`);
+	const result = await stopRequest(r.user_id);
+	if (!result.ok) await showNotice(result.error);
+	else if (focusUser === r.user_id) {
+		const next = state.recipients.find((x) => x.pane_alive && x.user_id !== r.user_id);
+		location.hash = next ? focusHash(next.user_id) : "#/";
+	}
 	refresh();
 }
 async function retireOne(user, refresh) {
@@ -13088,11 +13073,7 @@ async function retireAgents(ids, refresh) {
 	const names = ids.length > 6 ? `${ids.slice(0, 6).join(", ")} and ${ids.length - 6} more` : ids.join(", ");
 	if (!ids.length || !await confirmDialog(`Retire ${names}? ${ids.length > 1 ? "They leave" : "It leaves"} the dashboard and ${ids.length > 1 ? "their teams" : "its team"}. History is archived, unfinished tasks are reopened, and the names can be used again.`)) return null;
 	try {
-		const response = await fetch("/recipients/retire", {
-			method: "POST",
-			headers: JSONH,
-			body: JSON.stringify({ user_ids: ids })
-		});
+		const response = await fetch("/recipients/retire", jsonInit("POST", { user_ids: ids }));
 		const body = await response.json().catch(() => null);
 		if (!response.ok || !body?.ok) {
 			await showNotice("Could not retire. Try again.");
@@ -13126,18 +13107,10 @@ function StopAgentButton({ r, refresh }) {
 		if (busy || !await confirmDialog(stopAgentPrompt(r))) return;
 		setBusy(true);
 		setMessage("");
-		try {
-			const response = await fetch(`/agents/${encodeURIComponent(r.user_id)}/stop`, { method: "POST" });
-			const body = await response.json().catch(() => null);
-			if (response.ok && body?.ok === true) setMessage(body.already_stopped ? "Already stopped." : "Agent stopped. Messages and tasks are kept.");
-			else if (body?.detail?.status === "unknown" || !body?.detail?.error) setMessage("Stop not confirmed. Check the agent's status before retrying.");
-			else setMessage(`Could not stop agent: ${body.detail.error}${body.detail.detail ? ` — ${body.detail.detail}` : ""}`);
-		} catch {
-			setMessage("Stop not confirmed. Check the agent's status before retrying.");
-		} finally {
-			setBusy(false);
-			refresh();
-		}
+		const result = await stopRequest(r.user_id);
+		setMessage(!result.ok ? result.error : result.body.already_stopped ? "Already stopped." : "Agent stopped. Messages and tasks are kept.");
+		setBusy(false);
+		refresh();
 	};
 	return m$1`<span class="agent-stop-control">
     ${r.pane_alive ? m$1`<button type="button" class="mini stop-agent" disabled=${busy} onClick=${stop}>
@@ -13164,7 +13137,7 @@ function ResumeAgentButton({ r, refresh }) {
 			const response = await fetch(`/agents/${encodeURIComponent(r.user_id)}/resume`, { method: "POST" });
 			const body = await response.json().catch(() => null);
 			if (response.ok && body?.ok === true) setMessage(body.launch === "ok" ? `Resuming in ${body.pane_label} (${body.cwd}).` : `Window ${body.pane_label} opened; the launch was not confirmed.`);
-			else setMessage(`Could not resume: ${body?.detail?.error || "the hub did not answer"}${body?.detail?.detail ? ` — ${body.detail.detail}` : ""}`);
+			else setMessage(`Could not resume: ${errorText(body) || "the hub did not answer"}`);
 		} catch {
 			setMessage("Resume not confirmed. Check the agent's status before retrying.");
 		} finally {
@@ -13209,11 +13182,7 @@ function ModelLabel({ r, refresh }) {
 		if (switchable && !value.trim()) return;
 		setBusy(true);
 		const path = switchable ? "switch-model" : "model";
-		const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/${path}`, {
-			method: "POST",
-			headers: JSONH,
-			body: JSON.stringify({ model: value.trim() })
-		}).catch(() => null);
+		const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/${path}`, jsonInit("POST", { model: value.trim() })).catch(() => null);
 		setBusy(false);
 		if (!res || !res.ok) {
 			const body = res ? await res.json().catch(() => ({})) : {};
@@ -13305,17 +13274,8 @@ function SpawnControl({ refresh, nodes }) {
 		if (target.remote) body.node = target.node;
 		if (cwd) body.cwd = cwd;
 		try {
-			const r = await fetch("/agents/spawn", {
-				method: "POST",
-				headers: JSONH,
-				body: JSON.stringify(body)
-			});
-			let payload = null;
-			try {
-				payload = await r.json();
-			} catch {
-				payload = null;
-			}
+			const r = await fetch("/agents/spawn", jsonInit("POST", body));
+			const payload = await r.json().catch(() => null);
 			const outcome = spawnOutcome(r.ok, payload);
 			if (outcome.status === "failed") setErr(`spawn failed: ${outcome.reason}`);
 			else if (outcome.status === "unknown") setErr(`spawn outcome unknown: ${outcome.reason}${outcome.user ? ` (registered as ${outcome.user})` : ""}`);
@@ -13350,21 +13310,9 @@ function SpawnControl({ refresh, nodes }) {
   </form>`;
 }
 var AGENT_DRAG_TYPE = "application/x-agent-swarm-agent";
-async function moveAgentToTeam(user, teamId, refresh) {
-	await fetch(`/agents/${encodeURIComponent(user)}/team`, {
-		method: "POST",
-		headers: JSONH,
-		body: JSON.stringify({ team_id: teamId })
-	});
-	refresh();
-}
 async function persistTeamOrder(teamIds, refresh) {
 	try {
-		const response = await fetch("/teams/reorder", {
-			method: "POST",
-			headers: JSONH,
-			body: JSON.stringify({ order: teamIds })
-		});
+		const response = await fetch("/teams/reorder", jsonInit("POST", { order: teamIds }));
 		if (!response.ok) await showNotice(`Could not save team order: ${await failure(response)}`);
 		else await refresh();
 	} catch {
@@ -13395,11 +13343,7 @@ function NewTeam({ refresh }) {
 	const create = async (e) => {
 		e.preventDefault();
 		if (!name.trim()) return;
-		await fetch("/teams", {
-			method: "POST",
-			headers: JSONH,
-			body: JSON.stringify({ name: name.trim() })
-		});
+		await fetch("/teams", jsonInit("POST", { name: name.trim() }));
 		setName("");
 		refresh();
 	};
@@ -13408,6 +13352,11 @@ function NewTeam({ refresh }) {
       onInput=${(e) => setName(e.target.value)} />
     <button class="act" type="submit">new team</button>
   </form>`;
+}
+async function ownerSend(message) {
+	const r = await fetch("/owner/send", jsonInit("POST", message));
+	const body = await r.json().catch(() => null);
+	return deliveryOutcome(r.ok, body);
 }
 function Resend({ m, refresh }) {
 	const [busy, setBusy] = d(false);
@@ -13421,25 +13370,14 @@ function Resend({ m, refresh }) {
 		setBusy(true);
 		setNote("");
 		try {
-			const r = await fetch("/owner/send", {
-				method: "POST",
-				headers: JSONH,
-				body: JSON.stringify({
-					recipient: m.recipient,
-					content: m.content,
-					context: m.context,
-					attachments: m.attachments || [],
-					reply_to: m.reply_to ?? null,
-					client_id: clientId.current
-				})
+			const outcome = await ownerSend({
+				recipient: m.recipient,
+				content: m.content,
+				context: m.context,
+				attachments: m.attachments || [],
+				reply_to: m.reply_to ?? null,
+				client_id: clientId.current
 			});
-			let body = null;
-			try {
-				body = await r.json();
-			} catch {
-				body = null;
-			}
-			const outcome = deliveryOutcome(r.ok, body);
 			if (outcome.status === "delivered") setSent(true);
 			else setNote(`${outcome.status}: ${outcome.reason}`);
 		} catch (err) {
@@ -13599,11 +13537,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
 		if (assignee.startsWith("t:")) body.team_id = Number(assignee.slice(2));
 		else if (assignee) body.assignee = assignee;
 		try {
-			const response = await fetch("/tasks", {
-				method: "POST",
-				headers: JSONH,
-				body: JSON.stringify(body)
-			});
+			const response = await fetch("/tasks", jsonInit("POST", body));
 			const result = await response.json().catch(() => null);
 			if (!response.ok || !result?.task?.id) {
 				setStatus(result?.detail?.error ? `Task not created: ${result.detail.error}. Draft kept.` : "Creation not confirmed. Check the board before retrying; draft kept.");
@@ -13703,11 +13637,7 @@ function TeamManage({ team, members, refresh, onDone }) {
 		}
 		setError("");
 		setBusy(true);
-		const res = await fetch(`/teams/${team.id}`, {
-			method: "PATCH",
-			headers: JSONH,
-			body: JSON.stringify(body)
-		}).catch(() => null);
+		const res = await fetch(`/teams/${team.id}`, jsonInit("PATCH", body)).catch(() => null);
 		if (!res?.ok) {
 			setError(res ? await failure(res) : "Could not save team: the hub did not answer.");
 			setBusy(false);
@@ -13867,7 +13797,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 		const drop = agentDropProps((on) => setOver((cur) => on ? g.key : cur === g.key ? null : cur), (user) => {
 			setDragging(null);
 			const from = live.find((r) => r.user_id === user);
-			if (from && (teams.some((t) => t.id === from.team_id) ? from.team_id : null) !== g.teamId) moveAgentToTeam(user, g.teamId, refresh);
+			if (from && (teams.some((t) => t.id === from.team_id) ? from.team_id : null) !== g.teamId) setAgentTeam(user, g.teamId).then(refresh);
 		});
 		const team = g.teamId === null ? null : teams.find((t) => t.id === g.teamId);
 		const empty = !g.members.length && !g.gone.length;
@@ -14052,13 +13982,8 @@ var TERMINAL_KEYS = [
 	["Enter", "⏎"],
 	["Tab", "tab"]
 ];
-function typeInto(user, body) {
-	return fetch(`/agents/${encodeURIComponent(user)}/terminal`, {
-		method: "POST",
-		headers: JSONH,
-		body: JSON.stringify(body)
-	});
-}
+var terminalUrl = (user) => `/agents/${encodeURIComponent(user)}/terminal`;
+var typeInto = (user, body) => fetch(terminalUrl(user), jsonInit("POST", body));
 function InterruptAgent({ r }) {
 	const [busy, setBusy] = d(false);
 	const [cooling, setCooling] = d(false);
@@ -14075,23 +14000,15 @@ function InterruptAgent({ r }) {
 		setBusy(true);
 		setMessage("");
 		if (key === "C-c") setCooling(true);
-		try {
-			const response = await typeInto(r.user_id, { key });
-			const body = await response.json().catch(() => null);
-			if (response.ok && body?.ok === true) setMessage(`${label} sent.`);
-			else if (body?.detail?.status === "unknown" || !body?.detail?.error) setMessage(`${label} not confirmed. Check the terminal before trying again.`);
-			else setMessage(`Could not send ${label}: ${body.detail.error}${body.detail.detail ? ` — ${body.detail.detail}` : ""}`);
-		} catch {
-			setMessage(`${label} not confirmed. Check the terminal before trying again.`);
-		} finally {
-			if (key === "C-c") {
-				cooldown.current.until = Date.now() + 2e3;
-				clearTimeout(cooldown.current.timer);
-				cooldown.current.timer = setTimeout(() => setCooling(false), 2e3);
-			}
-			flight.current = false;
-			setBusy(false);
+		const result = await controlRequest(terminalUrl(r.user_id), jsonInit("POST", { key }));
+		setMessage(result.ok ? `${label} sent.` : result.error === null ? `${label} not confirmed. Check the terminal before trying again.` : `Could not send ${label}: ${result.error}`);
+		if (key === "C-c") {
+			cooldown.current.until = Date.now() + 2e3;
+			clearTimeout(cooldown.current.timer);
+			cooldown.current.timer = setTimeout(() => setCooling(false), 2e3);
 		}
+		flight.current = false;
+		setBusy(false);
 	};
 	return m$1`<span class="agent-interrupt" role="group" aria-label=${`Interrupt ${r.user_id}`}>
     <span class="agent-control-label" aria-hidden="true">Keys</span>
@@ -14288,31 +14205,14 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 			...detail
 		} }));
 		const keepDraft = () => writeJSON(draftKey, draft);
-		const attempt = async () => {
-			try {
-				const r = await fetch("/owner/send", {
-					method: "POST",
-					headers: JSONH,
-					body: JSON.stringify({
-						recipient,
-						content,
-						context: pending.context,
-						attachments: images,
-						client_id: clientId,
-						reply_to: replyId
-					})
-				});
-				let body = null;
-				try {
-					body = await r.json();
-				} catch {
-					body = null;
-				}
-				return deliveryOutcome(r.ok, body);
-			} catch (err) {
-				return unansweredOutcome(err);
-			}
-		};
+		const attempt = () => ownerSend({
+			recipient,
+			content,
+			context: pending.context,
+			attachments: images,
+			client_id: clientId,
+			reply_to: replyId
+		}).catch(unansweredOutcome);
 		let outcome = await attempt();
 		for (const delay of RESEND_DELAYS_MS) {
 			if (outcome.status !== "uncertain") break;

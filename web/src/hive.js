@@ -6,7 +6,7 @@ import { AttachmentList } from "./attachments.js";
 import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 
-import { Bee, ERROR_RED, JSONH, STATE, WORKING_HALO, agentShown, agentStatus, focusHash, harnessChoices, harnessStyle, hue, patchTask, stopAgentPrompt } from "./shared.js";
+import { Bee, ERROR_RED, STATE, WORKING_HALO, agentShown, agentStatus, focusHash, harnessChoices, harnessStyle, hue, patchTask, setAgentTeam, stopAgentPrompt, stopRequest } from "./shared.js";
 
 import { COMPACT_LAYOUT, useMedia } from "./use-media.js";
 
@@ -831,19 +831,11 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
     const stopBee = async (user) => {
       const agent = (stateRef.current.recipients || []).find(r => r.user_id === user);
       if (!agent || !await confirmDialog(stopAgentPrompt(agent))) return;
-      try {
-        const response = await fetch(`/agents/${encodeURIComponent(user)}/stop`, { method: "POST" });
-        const body = await response.json().catch(() => null);
-        if (response.ok && body?.ok === true) {
-          setDropStatus(body.already_stopped ? `${user} is already stopped.` : `Stopped ${user}. Messages and tasks are kept; "resume agent" brings it back.`);
-        } else if (body?.detail?.status === "unknown" || !body?.detail?.error) {
-          setDropStatus("Stop not confirmed. Check the agent's status before retrying.");
-        } else {
-          setDropStatus(`Could not stop agent: ${body.detail.error}${body.detail.detail ? ` — ${body.detail.detail}` : ""}`);
-        }
-      } catch {
-        setDropStatus("Stop not confirmed. Check the agent's status before retrying.");
-      } finally { refresh(); }
+      const result = await stopRequest(user);
+      setDropStatus(!result.ok ? result.error
+        : result.body.already_stopped ? `${user} is already stopped.`
+          : `Stopped ${user}. Messages and tasks are kept; "resume agent" brings it back.`);
+      refresh();
     };
     const removeTask = async (id) => {
       const task = (stateRef.current.tasks || []).find(t => t.id === id);
@@ -888,6 +880,11 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
       const box = teamBoxesRef.current.find(b => b.id === id);
       return box ? { x: box.x + box.w / 2, y: box.y + box.h / 2 } : null;
     };
+    const patchDropped = async (id, patch, target) => {
+      const result = await patchTask(id, patch);
+      setDropStatus(result.ok ? `Assigned #${id} to ${target}.` : `Could not assign #${id}; task was not changed.`);
+      if (result.ok) refresh();
+    };
     const assign = async (id, assignee) => {
       const task = (stateRef.current.tasks || []).find(t => t.id === id);
       if (!task || task.status === "done") {
@@ -898,16 +895,7 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
         setDropStatus(`#${id} is already assigned to ${assignee}.`);
         return;
       }
-      try {
-        const r = await fetch(`/tasks/${id}`, {
-          method: "PATCH", headers: JSONH, body: JSON.stringify({ assignee }),
-        });
-        if (!r.ok) throw new Error("assignment failed");
-        setDropStatus(`Assigned #${id} to ${assignee}.`);
-        refresh();
-      } catch {
-        setDropStatus(`Could not assign #${id}; task was not changed.`);
-      }
+      await patchDropped(id, { assignee }, assignee);
     };
     const assignTeam = async (id, box) => {
       const task = (stateRef.current.tasks || []).find(t => t.id === id);
@@ -919,28 +907,12 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
         setDropStatus(`#${id} is already assigned to team ${box.name}.`);
         return;
       }
-      try {
-        const r = await fetch(`/tasks/${id}`, {
-          method: "PATCH", headers: JSONH, body: JSON.stringify({ team_id: box.id }),
-        });
-        if (!r.ok) throw new Error("assignment failed");
-        setDropStatus(`Assigned #${id} to team ${box.name}.`);
-        refresh();
-      } catch {
-        setDropStatus(`Could not assign #${id}; task was not changed.`);
-      }
+      await patchDropped(id, { team_id: box.id }, `team ${box.name}`);
     };
     const setBeeTeam = async (user, teamId, doneLabel) => {
-      try {
-        const r = await fetch(`/agents/${encodeURIComponent(user)}/team`, {
-          method: "POST", headers: JSONH, body: JSON.stringify({ team_id: teamId }),
-        });
-        if (!r.ok) throw new Error("move failed");
-        setDropStatus(doneLabel);
-        refresh();
-      } catch {
-        setDropStatus(`Could not move ${user}.`);
-      }
+      const moved = await setAgentTeam(user, teamId);
+      setDropStatus(moved ? doneLabel : `Could not move ${user}.`);
+      if (moved) refresh();
     };
     let press = null;
     let suppressClick = false;

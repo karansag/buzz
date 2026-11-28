@@ -1,6 +1,6 @@
 import { html } from "htm/preact";
 import { useState } from "preact/hooks";
-import { JSONH } from "./shared.js";
+import { jsonInit } from "./shared.js";
 
 export function OwnerNote({ agent, refresh }) {
   const [editing, setEditing] = useState(false);
@@ -10,9 +10,7 @@ export function OwnerNote({ agent, refresh }) {
   const save = async value => {
     setBusy(true); setError("");
     try {
-      const response = await fetch(`/agents/${encodeURIComponent(agent.user_id)}/owner-note`, {
-        method: "PUT", headers: JSONH, body: JSON.stringify({ text: value }),
-      });
+      const response = await fetch(`/agents/${encodeURIComponent(agent.user_id)}/owner-note`, jsonInit("PUT", { text: value }));
       if (!response.ok) {
         const body = await response.json();
         throw new Error(body.detail?.error || "Could not save note.");

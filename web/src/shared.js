@@ -4,7 +4,41 @@ import { agentHash } from "./agent-route.js";
 
 export const POLL_MS = 2000;
 export const PEEK_MS = 2000;
-export const JSONH = { "content-type": "application/json" };
+const JSONH = { "content-type": "application/json" };
+// The fetch options for a request with a JSON body.
+export const jsonInit = (method, body) => ({ method, headers: JSONH, body: JSON.stringify(body) });
+// "error — detail" from a hub error answer, or "" when it has neither.
+export const errorText = (body) => [body?.detail?.error, body?.detail?.detail].filter(Boolean).join(" — ");
+
+// Send a control action to an agent. `error` is null when the hub gave no
+// clear answer, so the action may or may not have happened.
+export async function controlRequest(url, init = { method: "POST" }) {
+  try {
+    const response = await fetch(url, init);
+    const body = await response.json().catch(() => null);
+    if (response.ok && body?.ok === true) return { ok: true, body };
+    const unclear = body?.detail?.status === "unknown" || !body?.detail?.error;
+    return { ok: false, error: unclear ? null : errorText(body) };
+  } catch {
+    return { ok: false, error: null };
+  }
+}
+
+// Stop an agent's pane. On failure `error` is the sentence to show.
+export async function stopRequest(user) {
+  const result = await controlRequest(`/agents/${encodeURIComponent(user)}/stop`);
+  if (result.ok) return result;
+  return { ok: false, error: result.error === null
+    ? "Stop not confirmed. Check the agent's status before retrying."
+    : `Could not stop agent: ${result.error}` };
+}
+
+// Move an agent to a team, or out of every team with null. Resolves to
+// whether the hub accepted it.
+export async function setAgentTeam(user, teamId) {
+  const response = await fetch(`/agents/${encodeURIComponent(user)}/team`, jsonInit("POST", { team_id: teamId })).catch(() => null);
+  return !!response?.ok;
+}
 
 // Shortcuts use Cmd on Apple devices and Ctrl elsewhere.
 export const IS_MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || "");
@@ -103,7 +137,7 @@ export const focusHash = (u) => agentHash(u);
 
 export async function patchTask(id, patch) {
   try {
-    const r = await fetch(`/tasks/${id}`, { method: "PATCH", headers: JSONH, body: JSON.stringify(patch) });
+    const r = await fetch(`/tasks/${id}`, jsonInit("PATCH", patch));
     if (r.ok) return { ok: true };
     const body = await r.json().catch(() => null);
     return { ok: false, error: body?.detail?.error || `request failed (${r.status})` };

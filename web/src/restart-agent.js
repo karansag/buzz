@@ -1,14 +1,12 @@
 import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { JSONH } from "./shared.js";
+import { errorText, jsonInit } from "./shared.js";
 
 async function restartRequest(user, force, dryRun) {
-  const response = await fetch(`/agents/${encodeURIComponent(user)}/restart`, {
-    method: "POST", headers: JSONH, body: JSON.stringify({ force, dry_run: dryRun }),
-  });
+  const response = await fetch(`/agents/${encodeURIComponent(user)}/restart`, jsonInit("POST", { force, dry_run: dryRun }));
   const body = await response.json().catch(() => null);
   if (response.ok && body) return body;
-  return { reason: [body?.detail?.error, body?.detail?.detail].filter(Boolean).join(" — ") };
+  return { reason: errorText(body) };
 }
 
 const hasPlan = result => result.ok === true && result.status === "planned"

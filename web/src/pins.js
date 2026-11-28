@@ -4,14 +4,14 @@
 // there goes to the message in its chat.
 import { html } from "htm/preact";
 import { useEffect, useRef } from "preact/hooks";
-import { JSONH, disp, pairKey, rel } from "./shared.js";
+import { disp, jsonInit, pairKey, rel } from "./shared.js";
 import { agentHash } from "./agent-route.js";
 import { ChatMessage } from "./chat-message.js";
 import { showNotice } from "./dialogs.js";
 
 export async function setPinned(id, pinned, refresh) {
   try {
-    const r = await fetch(`/api/messages/${id}/pin`, { method: "POST", headers: JSONH, body: JSON.stringify({ pinned }) });
+    const r = await fetch(`/api/messages/${id}/pin`, jsonInit("POST", { pinned }));
     if (!r.ok) throw new Error(String(r.status));
   } catch {
     showNotice(pinned ? "Could not pin the message. Please try again." : "Could not unpin the message. Please try again.");

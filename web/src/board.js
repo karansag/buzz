@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { mentionParts } from "./board-mentions.js";
 import { ChatMessage } from "./chat-message.js";
-import { JSONH, disp, newClientId, rel } from "./shared.js";
+import { disp, jsonInit, newClientId, rel } from "./shared.js";
 
 export const BOARD_ROUTE = "#/board";
 const POLL_MS = 5000;
@@ -165,10 +165,8 @@ function BoardComposer({ teamId, replyTo, onPosted }) {
     setError("");
     const uncertain = "Could not confirm the post. Retry to check without posting a duplicate.";
     try {
-      const result = await boardRequest(`/teams/${teamId}/board`, {
-        method: "POST", headers: JSONH,
-        body: JSON.stringify({ body, subject: title, reply_to: replyTo, client_id: clientId }),
-      }, uncertain);
+      const result = await boardRequest(`/teams/${teamId}/board`,
+        jsonInit("POST", { body, subject: title, reply_to: replyTo, client_id: clientId }), uncertain);
       if (!Number.isSafeInteger(result.id)) throw Error(uncertain);
       attempt.current = null;
       setSubject("");
