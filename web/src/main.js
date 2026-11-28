@@ -336,7 +336,7 @@ function MachineBar({ state, machine, selectMachine }) {
     <div class="machine-heading"><span>Machines</span><small>Color identifies the machine</small></div>
     <div class="machine-choices">
       <button class=${`machine-choice all ${machine === null ? "active" : ""}`} aria-pressed=${machine === null}
-        onClick=${() => selectMachine(null)}><strong>All machines</strong><span>${machines.length} machines · ${state.recipients.filter(r => r.pane_alive).length} live agents</span></button>
+        onClick=${() => selectMachine(null)}><strong>all machines</strong><span>${machines.length} machines · ${state.recipients.filter(r => r.pane_alive).length} live agents</span></button>
       ${machines.map(n => html`<button key=${n.name} class=${`machine-choice ${machine === n.name ? "active" : ""} ${n.connected ? "" : "disconnected"}`}
           style=${`--machine:${machineColor(n.name)}`} aria-pressed=${machine === n.name}
           onClick=${() => selectMachine(machine === n.name ? null : n.name)}>
@@ -344,7 +344,7 @@ function MachineBar({ state, machine, selectMachine }) {
         <span>${n.connected ? "Connected" : n.missing ? "Not enrolled" : "Disconnected"} · ${n.live} live${n.total > n.live ? ` / ${n.total} registered` : " agents"}</span>
       </button>`)}
     </div>
-    ${machine !== null && html`<div class="machine-filter-note">Highlighting bees and showing agents on <b>${machine}</b>. Task board shows all machines. <button onClick=${() => selectMachine(null)}>Clear filter ×</button></div>`}
+    ${machine !== null && html`<div class="machine-filter-note">Highlighting bees and showing agents on <b>${machine}</b>. Task board shows all machines. <button onClick=${() => selectMachine(null)}>clear filter ×</button></div>`}
   </section>`;
 }
 
@@ -795,7 +795,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
   </div>`;
 }
 
-// `onClose` (the desktop sidebar) adds a heading with "Hide →" above every view.
+// `onClose` (the desktop sidebar) adds a heading with "hide →" above every view.
 function AgentsPanel({ state, refresh, machine, harness, setHarness, unreadFor, storageKey = AGENTS_VIEW_KEY, focusUser = null, onClose = null }) {
   const [view, setView] = useState(() => (readStored(storageKey) === "tiles" ? "tiles" : "teams"));
   const pick = (v) => {
@@ -809,7 +809,7 @@ function AgentsPanel({ state, refresh, machine, harness, setHarness, unreadFor, 
   return html`<div class="agents-panel">
     ${onClose && html`<div class="roster-heading"><h2>agents ${live > 0 && html`<span class="count">· ${live}</span>`}</h2>
       ${filter}
-      <button type="button" class="mini" aria-label="Hide agents" onClick=${onClose}>Hide →</button></div>`}
+      <button type="button" class="mini" aria-label="Hide agents" onClick=${onClose}>hide →</button></div>`}
     <div class="agents-view-switch" role="group" aria-label="Agents view">
       <span>view</span>
       ${AGENTS_VIEWS.map(([v, label]) => html`<button key=${v} type="button" aria-pressed=${view === v} onClick=${() => pick(v)}>${label}</button>`)}
@@ -1010,14 +1010,15 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
   const [text, setText] = useState("");
   const [context, setContext] = useState("");
   const [images, setImages] = useState([]);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(null);
   const [sending, setSending] = useState(false);
   // The unconfirmed send this draft came back from: {clientId, text, context, images}.
   const [retryOf, setRetryOf] = useState(null);
   const cancelReply = () => { clearReply(); setRetryOf(null); };
   const composerRef = useRef(null);
   const draftKey = `agent-swarm:draft:${recipient}:thread`;
-  const attachments = useAttachments(images, setImages, setStatus, draftKey);
+  const attachments = useAttachments(images, setImages,
+    message => setStatus({ tone: "error", message }), draftKey);
   const { uploading, dragging } = attachments;
   useEffect(() => {
     const draft = readJSON(draftKey);
@@ -1025,7 +1026,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
     setContext(draft?.context || "");
     setImages(Array.isArray(draft?.images) ? draft.images : []);
     setRetryOf(draft?.retryOf || null);
-    setStatus("");
+    setStatus(null);
   }, [draftKey]);
   // On an agent's page the reply box takes focus, so typing starts the reply
   // without clicking it first. Not on touch screens, where focus opens the
@@ -1059,7 +1060,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
       }
       setStatus(next);
       clearTimeout(timer);
-      if (next === "delivered") timer = setTimeout(() => setStatus(s => (s === "delivered" ? "" : s)), 2500);
+      if (next.tone === "sent") timer = setTimeout(() => setStatus(s => (s === next ? null : s)), 2500);
     };
     pendingSends.addEventListener("outcome", onOutcome);
     return () => { clearTimeout(timer); pendingSends.removeEventListener("outcome", onOutcome); };
@@ -1091,7 +1092,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
     };
     setSending(true);
     setOptionsOpen(false);
-    setStatus("sending…");
+    setStatus({ tone: "pending", message: "sending…" });
     setText("");
     setContext("");
     setImages([]);
@@ -1105,8 +1106,8 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
     // The outcome is addressed by draft key, not to this component: sending
     // the first message turns the empty panel into a thread with its own
     // composer, and that one has to show the result and get the draft back.
-    const report = (detail) => pendingSends.dispatchEvent(
-      new CustomEvent("outcome", { detail: { draftKey, ...detail } }));
+    const report = (tone, message, restoredDraft) => pendingSends.dispatchEvent(
+      new CustomEvent("outcome", { detail: { draftKey, status: { tone, message }, draft: restoredDraft } }));
     const keepDraft = () => writeJSON(draftKey, draft);
     const attempt = () => ownerSend({ recipient, content, context: pending.context, attachments: images, client_id: clientId, reply_to: replyId })
       .catch(unansweredOutcome);
@@ -1115,22 +1116,22 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
     let outcome = await attempt();
     for (const delay of RESEND_DELAYS_MS) {
       if (outcome.status !== "uncertain") break;
-      report({ status: `not confirmed (${outcome.reason}); checking again…` });
+      report("warning", `not confirmed (${outcome.reason}); checking again…`);
       await new Promise(resolve => setTimeout(resolve, delay));
       outcome = await attempt();
     }
     if (outcome.status === "delivered") {
-      report({ status: "delivered" });
+      report("sent", "delivered");
     } else if (outcome.status === "unknown") {
       // The paste may have landed. No draft comes back: resending is a
       // deliberate act on the marked message, not a reflex.
-      report({ status: `outcome unknown: ${outcome.reason}. The agent may have it; see the marked message.` });
+      report("warning", `outcome unknown: ${outcome.reason}. The agent may have it; see the marked message.`);
     } else if (outcome.status === "uncertain") {
       keepDraft();
-      report({ status: `not confirmed: ${outcome.reason}. Draft kept. Sending it again unchanged will not duplicate it`, draft });
+      report("warning", `not confirmed: ${outcome.reason}. Draft kept. Sending it again unchanged will not duplicate it`, draft);
     } else {
       keepDraft();
-      report({ status: `delivery failed: ${outcome.reason}. Draft kept`, draft });
+      report("error", `delivery failed: ${outcome.reason}. Draft kept`, draft);
     }
     // Swap the placeholder for the server's copy in one step, no flicker.
     await refresh();
@@ -1141,12 +1142,13 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
     setText("");
     setContext("");
     setImages([]);
-    setStatus("");
+    setStatus(null);
     composerRef.current?.focus();
   };
   const submit = html`<button class="act" type="submit" disabled=${!canSend}>
     ${sending ? "sending…" : uploading ? "uploading…" : "send"}
   </button>`;
+  const feedback = status && html`<span class=${`compose-status ${status.tone}`} role="status">${status.message}</span>`;
   const optionsId = `compose-options-${encodeURIComponent(recipient)}`;
   return html`<form class=${`composer ${compact ? "compact-composer" : ""} ${optionsOpen ? "options-open" : ""} ${dragging ? "dragging" : ""}`} onSubmit=${send} ...${sending ? {} : attachments.dropProps}>
     ${(replyTo || retryOf?.replyTo) && html`<div class="compose-reply">
@@ -1175,12 +1177,12 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
       <span class="count">${plural(text.length, "character")}${images.length > 0 ? ` · ${plural(images.length, "file")}` : ""}</span>
       ${!compact && html`<span class="hint">Enter to send · Shift + Enter for a new line</span>`}
       <div class="actions">
-        ${!compact && status && html`<span class=${status.startsWith("delivery failed") ? "error" : "sent"} role="status">${status}</span>`}
+        ${!compact && feedback}
         ${(text || context || images.length > 0) && html`<button type="button" class="mini" onClick=${clearDraft}>clear</button>`}
         ${!compact && submit}
       </div>
     </div>
-    ${compact && status && html`<div class="compose-status" role="status">${status}</div>`}
+    ${compact && feedback}
   </form>`;
 }
 
@@ -1551,7 +1553,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
       ${older?.more && html`<button type="button" key="older" class="mini older-history" disabled=${older.busy} onClick=${older.load}>
-        ${older.busy ? "Loading older messages…" : "Scroll up or click for older messages"}</button>`}
+        ${older.busy ? "loading older messages…" : "scroll up or click for older messages"}</button>`}
       ${msgs.map(m => html`${gapAt.has(m.id) && html`<div key=${`gap-${m.id}`} class="msg-gap" role="note">
         <span>${gapLabel(gapAt.get(m.id))}</span>
         ${loadGap && html`<button type="button" class="mini" onClick=${() => loadGap(gapAt.get(m.id))}>load them</button>`}</div>`}
@@ -1563,14 +1565,14 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}
         </${ChatMessage}>`)}
       ${recipient && html`<div class="jump-dock">${awayFrom !== null && html`<button type="button" class="jump-bottom" onClick=${jumpToBottom}
-        title="Scroll to the newest message">↓ Jump to bottom${newSinceAway > 0 ? html` <span class="jump-new">· ${newSinceAway} new</span>` : ""}</button>`}</div>`}
+        title="Scroll to the newest message">↓ jump to bottom${newSinceAway > 0 ? html` <span class="jump-new">· ${newSinceAway} new</span>` : ""}</button>`}</div>`}
     </div>
     ${menu && html`<div class="msg-menu" role="menu" style=${{ left: `${menu.x}px`, top: `${menu.y}px` }}
         onClick=${e => e.stopPropagation()}>
-      <button type="button" role="menuitem" autofocus onClick=${() => { setReplyTo(menu.m); setMenu(null); }}>↩ Reply</button>
-      <button type="button" role="menuitem" onClick=${() => { navigator.clipboard?.writeText(menu.m.content || ""); setMenu(null); }}>Copy text</button>
+      <button type="button" role="menuitem" autofocus onClick=${() => { setReplyTo(menu.m); setMenu(null); }}>↩ reply</button>
+      <button type="button" role="menuitem" onClick=${() => { navigator.clipboard?.writeText(menu.m.content || ""); setMenu(null); }}>copy text</button>
       <button type="button" role="menuitem" onClick=${() => { setPinned(menu.m.id, !pinned.has(menu.m.id), refresh); setMenu(null); }}>
-        ${pinned.has(menu.m.id) ? "Unpin" : "📌 Pin"}</button>
+        ${pinned.has(menu.m.id) ? "unpin" : "📌 pin"}</button>
     </div>`}
     ${openPin && html`<${PinDialog} m=${pins.find(p => p.id === openPin.id) || openPin} now=${now} refresh=${refresh}
       messages=${msgs} right=${sentByViewer(openPin.sender, a, b, page)}
@@ -1818,7 +1820,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       <button type="button" class="mini" disabled=${history.busy} onClick=${() => history.loadGap(gap)}>
         ${history.busy ? "loading…" : "load the missing messages"}</button></p>`)}
     ${!hasOwnerThread && history.more && html`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
-      ${history.busy ? "Loading older messages…" : "Load older messages"}</button>`}
+      ${history.busy ? "loading older messages…" : "load older messages"}</button>`}
     ${hasOwnerThread ? renderThread(groups.get(ownerThread)) : html`<div class="thread">
       <${ConversationSearchBar} search=${conversationSearch} />
       ${threads.length > 0

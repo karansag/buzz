@@ -63,8 +63,8 @@ function RestartDialog({ user, initial, onClose }) {
         <pre aria-label="Launch command and working directory">${plan.launch}</pre>
       </div>`}
       <div class="page-dialog-actions">
-        <button type="submit" value="cancel" class="mini" autofocus>Cancel</button>
-        <button type="submit" value="restart" class="act" disabled=${checking || !hasPlan(plan) || (forceable && !force)}>Restart</button>
+        <button type="submit" value="cancel" class="mini" autofocus>cancel</button>
+        <button type="submit" value="restart" class="act" disabled=${checking || !hasPlan(plan) || (forceable && !force)}>restart</button>
       </div>
     </form>
   </dialog>`;
@@ -81,7 +81,7 @@ export function RestartAgentButton({ r, refresh }) {
     if (!r.pane_alive || inFlight.current || review) return;
     event.currentTarget.focus();
     inFlight.current = true;
-    setBusy("Checking…");
+    setBusy("checking…");
     setMessage("");
     try {
       const result = await restartRequest(user, false, true);
@@ -99,7 +99,7 @@ export function RestartAgentButton({ r, refresh }) {
     setReview(null);
     if (!approved || inFlight.current) return;
     inFlight.current = true;
-    setBusy("Restarting…");
+    setBusy("restarting…");
     try {
       const result = await restartRequest(user, force, false);
       if (result.ok === true && result.status === "restarted") {

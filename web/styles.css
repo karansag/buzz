@@ -382,8 +382,10 @@
     color: var(--cream-dim); border: 1px dashed var(--line); border-radius: 4px;
   }
   .msg .msg-images img { display: block; max-height: 180px; max-width: min(320px, 100%); border-radius: 4px; border: 1px solid var(--line); }
-  .composer .sent { color: var(--moss); }
-  .composer .error { color: var(--alert); }
+  .composer .compose-status { color: var(--cream-dim); }
+  .composer .compose-status.sent { color: var(--moss); }
+  .composer .compose-status.error { color: var(--alert); }
+  .composer .compose-status.warning { color: var(--honey); }
   .composer .actions { display: flex; gap: 7px; align-items: center; }
   .composer .actions .mini { padding: 4px 8px; }
   .composer .actions .act { padding: 4px 10px; }
@@ -1022,7 +1024,7 @@ form.team-manage input { flex-basis: 100%; }
   .compact-composer .count { display: none; }
   .compact-composer .actions { width: auto; margin-left: auto; }
   .compact-composer .compose-images { margin-top: 8px; max-height: 120px; overflow-y: auto; }
-  .compact-composer .compose-status { padding: 4px 6px 0; color: var(--cream-dim); font-size: 11px; overflow-wrap: anywhere; }
+  .compact-composer .compose-status { display: block; padding: 4px 6px 0; font-size: 11px; overflow-wrap: anywhere; }
   .msgs { grid-template-columns: minmax(0, 1fr); padding: 12px; }
   .msg { min-width: 0; max-width: 100%; }
   .msg .tag { overflow-wrap: anywhere; }

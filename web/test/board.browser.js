@@ -100,7 +100,7 @@ for (const width of [390, 1280]) {
       await feed.first().waitFor();
       assert.deepEqual(await feed.allTextContents(), ["Release for @stoat", "Existing reply"]);
       assert.equal(requests[0].searchParams.get("mark"), "1");
-      await page.getByRole("button", { name: "Load older posts" }).click();
+      await page.getByRole("button", { name: "load older posts" }).click();
       await page.getByText("Older post", { exact: true }).waitFor();
       assert.deepEqual(await feed.allTextContents(), ["Older post", "Unrelated post", "Release for @stoat", "Existing reply"]);
       assert.equal(requests[1].searchParams.get("before"), "7");
@@ -116,7 +116,7 @@ for (const width of [390, 1280]) {
       assert.equal(await page.locator(".board-replies article").count(), 1);
 
       await page.getByRole("textbox", { name: "Reply", exact: true }).fill("Reply from the owner.");
-      await page.getByRole("button", { name: "Reply", exact: true }).click();
+      await page.getByRole("button", { name: "reply", exact: true }).click();
       const reply = page.getByRole("article", { name: "Post #20" });
       await reply.locator(".msg.from-owner").waitFor();
       assert.equal(submissions[0].reply_to, 7);
@@ -129,7 +129,7 @@ for (const width of [390, 1280]) {
       await page.getByRole("link", { name: "Back to feed" }).click();
       await page.getByRole("textbox", { name: "Subject (optional)" }).fill("New root");
       await page.getByRole("textbox", { name: "New post" }).fill("A root post.");
-      await page.getByRole("button", { name: "Post", exact: true }).click();
+      await page.getByRole("button", { name: "post", exact: true }).click();
       await page.getByRole("link", { name: "New root", exact: true }).waitFor();
       assert.equal(submissions[1].reply_to, null);
       assert.equal(submissions[1].subject, "New root");
@@ -146,7 +146,7 @@ test("a lost post acknowledgement keeps the draft and retries the same client ID
     await page.goto(base + "#/board?team=1");
     const body = page.getByRole("textbox", { name: "New post" });
     await body.fill("Keep only one copy.");
-    const submit = page.getByRole("button", { name: "Post", exact: true });
+    const submit = page.getByRole("button", { name: "post", exact: true });
     loseNextPost();
     await submit.click();
     await page.getByRole("alert").getByText(/Could not confirm/).waitFor();

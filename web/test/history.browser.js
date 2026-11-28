@@ -176,7 +176,7 @@ test('task details show the full text at a readable size and return focus on clo
     assert.equal(await page.locator('.h-search').inputValue(), '310');
 
     await expand.click();
-    await dialog.getByRole('button', { name: 'Close' }).click();
+    await dialog.getByRole('button', { name: 'close' }).click();
     await dialog.waitFor({ state: 'hidden' });
     assert.deepEqual(errors, []);
   } finally { await page.close(); }

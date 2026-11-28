@@ -43,8 +43,8 @@ export function ReplyPreview({ message, messages }) {
   return html`<div class="reply-reference">
     <button type="button" class="reply-quote" onClick=${open} disabled=${busy}
       aria-label=${`Show original message ${id}`} aria-expanded=${show}>
-      <strong>${preview?.sender || `Message #${id}`}</strong>
-      <span>${busy ? "Loading original…" : preview ? replySnippet(preview) : "Show original message"}</span>
+      <strong>${preview?.sender || `message #${id}`}</strong>
+      <span>${busy ? "loading original…" : preview ? replySnippet(preview) : "show original message"}</span>
     </button>
     ${show && original && html`<div class="reply-original" tabindex="0">
       <strong>${original.sender} · message #${id}</strong>

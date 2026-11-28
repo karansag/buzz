@@ -100,7 +100,7 @@ function HiveTaskDetail({ task, state, refresh, onClose }) {
   const agents = [...new Set([...(state.recipients || []).map(r => r.user_id), ...(task.assignee ? [task.assignee] : [])])];
   return html`<section class="hive-task-detail" aria-label=${`Task #${task.id} details`}>
     <header><h3>#${task.id} · ${task.title}</h3>
-      <button type="button" class="mini" onClick=${onClose}>Collapse</button></header>
+      <button type="button" class="mini" onClick=${onClose}>collapse</button></header>
     <p>${task.status.replaceAll("_", " ")} · ${task.assignee || "unassigned"}${queenSuffix(state.teams, task.assignee)}${task.team_id ? ` · team ${(state.teams || []).find(t => t.id === task.team_id)?.name || task.team_id}` : ""}</p>
     ${task.description && html`<p class="task-description">${task.description}</p>`}
     ${task.depends_on?.length > 0 && html`<p>Depends on ${task.depends_on.map(id => `#${id}`).join(", ")}</p>`}

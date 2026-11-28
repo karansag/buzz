@@ -23,6 +23,6 @@ export function TaskTrash({ task, refresh, onDeleted }) {
     } finally { setBusy(false); }
   };
   return html`<span class="task-trash"><button type="button" class="mini danger" disabled=${busy}
-    title=${`Permanently trash task #${task.id}`} onClick=${remove}>${busy ? "Trashing…" : "⌫ Trash"}</button>
+    title=${`Permanently trash task #${task.id}`} onClick=${remove}>${busy ? "trashing…" : "⌫ trash"}</button>
     ${error && html`<span role="alert" class="tnote-err">${error}</span>`}</span>`;
 }

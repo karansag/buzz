@@ -31,13 +31,13 @@ export function TaskStatusActions({ task, refresh }) {
   return html`<div class=${`task-status-actions ${editing ? "editing" : ""}`}>
     ${task.status === "done"
       ? html`<button type="button" class="mini" disabled=${busy}
-          onClick=${() => change({ status: task.assignee || task.team_id ? "picked_up" : "open" })}>Reopen</button>`
+          onClick=${() => change({ status: task.assignee || task.team_id ? "picked_up" : "open" })}>reopen</button>`
       : html`${task.status === "open" && html`<button type="button" class="mini"
           disabled=${busy || !(task.assignee || task.team_id)}
           title=${task.assignee || task.team_id ? "Start work on this task" : "Assign this task first"}
-          onClick=${() => change({ status: "picked_up" })}>Start work</button>`}
+          onClick=${() => change({ status: "picked_up" })}>start work</button>`}
         <button type="button" class="mini" disabled=${busy || (editing && !note.trim())}
-          onClick=${complete}>${busy ? "Updating…" : "Complete task"}</button>`}
+          onClick=${complete}>${busy ? "updating…" : "complete task"}</button>`}
     ${editing && task.status !== "done" && html`<div class="task-verification">
       <label>Verification note <span aria-hidden="true">*</span>
         <textarea rows="3" value=${note} autofocus
@@ -45,7 +45,7 @@ export function TaskStatusActions({ task, refresh }) {
           onInput=${e => setNote(e.target.value)}></textarea>
       </label>
       <button type="button" class="mini" disabled=${busy}
-        onClick=${() => { setEditing(false); setError(""); }}>Cancel</button>
+        onClick=${() => { setEditing(false); setError(""); }}>cancel</button>
     </div>`}
     ${error && html`<span class="task-action-error" role="alert">${error}</span>`}
   </div>`;

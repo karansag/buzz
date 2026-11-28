@@ -132,23 +132,23 @@ test('task completion has one note-aware action across board, agent, and honeyco
   try {
     await page.goto(base);
     const card = page.locator('.col.picked_up .tcard').first();
-    await card.getByRole('button', { name: 'Complete task' }).tap();
+    await card.getByRole('button', { name: 'complete task' }).tap();
     assert.equal(patches.length, 0);
     await card.locator('.task-verification textarea').fill('Check the mobile dashboard at 390px.');
-    await card.getByRole('button', { name: 'Complete task' }).tap();
+    await card.getByRole('button', { name: 'complete task' }).tap();
     await page.waitForFunction(() => [...document.querySelectorAll('.col.done .tcard')]
       .some(e => e.textContent.includes('Make the dashboard mobile friendly')));
     assert.deepEqual(patches[0], { id: 73, status: 'done', note: 'Check the mobile dashboard at 390px.' });
     const done = page.locator('.col.done .tcard').filter({ has: page.locator('.t', { hasText: 'Make the dashboard mobile friendly' }) });
     assert.equal(await done.getByRole('combobox', { name: 'Assign task #73' }).isDisabled(), true);
-    await done.getByRole('button', { name: 'Reopen' }).tap();
+    await done.getByRole('button', { name: 'reopen' }).tap();
     await page.waitForFunction(() => [...document.querySelectorAll('.col.picked_up .tcard')]
       .some(e => e.textContent.includes('Make the dashboard mobile friendly')));
     assert.deepEqual(patches[1], { id: 73, status: 'picked_up' });
     const unassigned = page.locator('.col.open .tcard').filter({ hasText: 'Long path regression' });
-    assert.equal(await unassigned.getByRole('button', { name: 'Start work' }).isDisabled(), true);
+    assert.equal(await unassigned.getByRole('button', { name: 'start work' }).isDisabled(), true);
     await unassigned.getByRole('combobox', { name: 'Assign task #74' }).selectOption('stoat');
-    await unassigned.getByRole('button', { name: 'Start work' }).tap();
+    await unassigned.getByRole('button', { name: 'start work' }).tap();
     await page.waitForFunction(() => [...document.querySelectorAll('.col.picked_up .tcard')]
       .some(e => e.textContent.includes('Long path regression')));
     assert.deepEqual(patches[2], { id: 74, assignee: 'stoat' });
@@ -156,7 +156,7 @@ test('task completion has one note-aware action across board, agent, and honeyco
 
     await page.goto(base + '#/agent/stoat');
     const row = page.locator('.trow').filter({ hasText: 'Make the dashboard mobile friendly' });
-    await row.getByRole('button', { name: 'Complete task' }).tap();
+    await row.getByRole('button', { name: 'complete task' }).tap();
     await page.waitForFunction(() => [...document.querySelectorAll('.trow.done')]
       .some(e => e.textContent.includes('Make the dashboard mobile friendly')));
     assert.deepEqual(patches[4], { id: 73, status: 'done', note: 'Check the mobile dashboard at 390px.' });
@@ -164,9 +164,9 @@ test('task completion has one note-aware action across board, agent, and honeyco
     await page.goto(base);
     await page.locator('.hive-task-picker select').selectOption('74');
     const detail = page.locator('.hive-task-detail');
-    await detail.getByRole('button', { name: 'Complete task' }).tap();
+    await detail.getByRole('button', { name: 'complete task' }).tap();
     await detail.locator('.task-verification textarea').fill('Open the board and inspect task #74.');
-    await detail.getByRole('button', { name: 'Complete task' }).tap();
+    await detail.getByRole('button', { name: 'complete task' }).tap();
     await page.waitForFunction(() => document.querySelector('.hive-task-detail')?.textContent.includes('done'));
     assert.deepEqual(patches[5], { id: 74, status: 'done', note: 'Open the board and inspect task #74.' });
     assert.deepEqual(errors, []);
@@ -491,7 +491,7 @@ test('pinned messages: pin from the menu, open from the strip, list on the chats
     await message.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await message.click({ button: 'right' });
-    await page.getByRole('menuitem', { name: '📌 Pin' }).click();
+    await page.getByRole('menuitem', { name: '📌 pin' }).click();
     const chip = page.locator('.thread .pin-strip .pin-chip');
     await chip.waitFor();
     assert.deepEqual(posts, [[501, true]]);
@@ -523,7 +523,7 @@ test('pinned messages: pin from the menu, open from the strip, list on the chats
     // Let the jump's scroll and highlight settle: a scroll closes the menu.
     await page.waitForTimeout(1200);
     await page.locator('.thread .msg[data-message-id="501"]').click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'Unpin' }).click();
+    await page.getByRole('menuitem', { name: 'unpin' }).click();
     await chip.waitFor({ state: 'detached' });
     assert.deepEqual(posts, [[501, true], [501, false]]);
     assert.deepEqual(errors, []);
@@ -1506,7 +1506,7 @@ test('unknown delivery still requires confirmation before sending again', async 
     await page.goto(base + '#/agent/stoat');
     const resend = page.locator('[data-message-id="80"] .resend');
     await resend.click();
-    assert.match(await answer(page, 'Cancel'), /agent may already have it/);
+    assert.match(await answer(page, 'cancel'), /agent may already have it/);
     assert.equal(requests.length, 0);
     await resend.click();
     await answer(page);
@@ -2233,7 +2233,7 @@ test('detail stop confirms, handles failure, retries, and keeps history on the p
     await page.locator('.agent-primary-controls').getByRole('button', { name: 'more', exact: true }).click();
     const stop = page.locator('.fhead').getByRole('button', { name: 'stop agent', exact: true });
     await stop.click();
-    await answer(page, 'Cancel');
+    await answer(page, 'cancel');
     assert.equal(calls, 0);
     assert.equal(await page.evaluate(() => document.activeElement?.textContent.trim()), 'stop agent');
     await stop.click();
@@ -2674,16 +2674,16 @@ test('task history tiles edit, complete, and reopen a task', async () => {
     await tile().getByRole('button', { name: 'Edit task #73' }).tap();
     await tile().getByLabel('Title').fill('Mobile dashboard, renamed');
     await tile().getByLabel('Description').fill('New description');
-    await tile().getByRole('button', { name: 'Save' }).tap();
+    await tile().getByRole('button', { name: 'save' }).tap();
     await page.waitForFunction(() => document.querySelector('.h-grid').textContent.includes('Mobile dashboard, renamed'));
     assert.deepEqual(patches[0], { id: 73, title: 'Mobile dashboard, renamed', description: 'New description' });
-    await tile().getByRole('button', { name: 'Complete task' }).tap();
+    await tile().getByRole('button', { name: 'complete task' }).tap();
     await tile().locator('.task-verification textarea').fill('Open #/tasks at 390px.');
-    await tile().getByRole('button', { name: 'Complete task' }).tap();
-    await tile().getByRole('button', { name: 'Reopen' }).waitFor();
+    await tile().getByRole('button', { name: 'complete task' }).tap();
+    await tile().getByRole('button', { name: 'reopen' }).waitFor();
     assert.deepEqual(patches[1], { id: 73, status: 'done', note: 'Open #/tasks at 390px.' });
-    await tile().getByRole('button', { name: 'Reopen' }).tap();
-    await tile().getByRole('button', { name: 'Complete task' }).waitFor();
+    await tile().getByRole('button', { name: 'reopen' }).tap();
+    await tile().getByRole('button', { name: 'complete task' }).waitFor();
     assert.deepEqual(patches[2], { id: 73, status: 'picked_up' });
     await fit(page);
     assert.deepEqual(errors, []);
@@ -2736,7 +2736,7 @@ test('desktop hive task trash: cancel, failure, success, and card drop', async (
     await drag(true);
     assert.deepEqual(deleted,[]);
     await drag();
-    assert.match(await answer(page, 'Cancel'), /#74: Long path regression/);
+    assert.match(await answer(page, 'cancel'), /#74: Long path regression/);
     assert.deepEqual(deleted, []);
     fail = true;
     await drag();
@@ -2799,7 +2799,7 @@ test('reply to one agent message by button or right-click', async () => {
     assert.equal(sent[1].reply_to, 1);
 
     await page.locator('[data-message-id="2"]').click({ button: 'right' });
-    await page.getByRole('menuitem', { name: '↩ Reply' }).click();
+    await page.getByRole('menuitem', { name: '↩ reply' }).click();
     await page.locator('.compose-reply').waitFor();
     await box.press('Escape');
     await page.waitForFunction(() => !document.querySelector('.compose-reply'));
@@ -2945,7 +2945,7 @@ test('owner notes edit on the agent detail page, persist beside live status, and
     assert.equal(await page.locator('#agent-sidebar .owner-note').count(),0);
     await note.getByRole('button', {name:'Add owner note for stoat'}).click();
     await note.getByRole('textbox').fill('rhizome integration plan');
-    await note.getByRole('button', {name:'Save note'}).click();
+    await note.getByRole('button', {name:'save note'}).click();
     await note.getByText('📌 you: rhizome integration plan').waitFor();
     assert.match(await page.locator('.doing-box .now').textContent(), /Reviewing mobile/);
     await page.locator('.status-history summary').click();
@@ -2953,16 +2953,16 @@ test('owner notes edit on the agent detail page, persist beside live status, and
     await note.getByRole('button', {name:'Edit owner note for stoat'}).click();
     await note.getByRole('textbox').fill('review design');
     fail = true;
-    await note.getByRole('button', {name:'Save note'}).click();
+    await note.getByRole('button', {name:'save note'}).click();
     await note.getByRole('alert').filter({hasText:'owner only'}).waitFor();
     assert.equal(state.recipients[0].owner_note,'rhizome integration plan');
     fail = false;
-    await note.getByRole('button', {name:'Save note'}).click();
+    await note.getByRole('button', {name:'save note'}).click();
     await note.getByText('📌 you: review design').waitFor();
     await page.reload();
     await note.getByText('📌 you: review design').waitFor();
     await note.getByRole('button', {name:'Edit owner note for stoat'}).click();
-    await note.getByRole('button', {name:'Clear note'}).click();
+    await note.getByRole('button', {name:'clear note'}).click();
     await note.getByRole('button', {name:'Add owner note for stoat'}).waitFor();
     assert.equal(state.recipients[0].owner_note,null);
     await page.goto(base+'#/');
@@ -3066,7 +3066,7 @@ test('an owner chat scrolled up offers a jump to the newest message, counting ne
     assert.equal(await jump.count(), 0);  // at the bottom: nothing to jump to
     await box.evaluate(e => { e.scrollTop = 0; e.dispatchEvent(new Event('scroll')); });
     await jump.waitFor();
-    assert.equal((await jump.innerText()).trim(), '↓ Jump to bottom');
+    assert.equal((await jump.innerText()).trim(), '↓ jump to bottom');
     // New agent messages while away are counted on the button; the view stays put.
     state.messages.push({ id: 300, sender: 'stoat', recipient: 'owner', content: 'fresh news', ts: state.now,
       status: 'delivered', attachments: [] });
@@ -3182,7 +3182,7 @@ for (const stale of ['success', 'error']) {
       assert.equal(calls,2);
       await page.locator('.stage').getByRole('button',{name:'Add owner note for stoat'}).click();
       await page.locator('.stage .owner-note textarea').fill('refresh after mutation');
-      await page.locator('.stage .owner-note').getByRole('button',{name:'Save note'}).click();
+      await page.locator('.stage .owner-note').getByRole('button',{name:'save note'}).click();
       await page.locator('.stage .owner-note').getByRole('button',{name:'Add owner note for stoat'}).waitFor();
       assert.equal(calls,2); // mutation refresh coalesces, rather than overlaps
       releaseOld(); await newReady;
@@ -3241,7 +3241,7 @@ test('a refresh queued at poll completion gets its own fresh snapshot', async ()
     await page.locator('.doing-box .now').filter({hasText:'snapshot 1'}).waitFor();
     await page.locator('.stage').getByRole('button',{name:'Add owner note for stoat'}).click();
     await page.locator('.stage .owner-note textarea').fill('saved note');
-    await page.locator('.stage .owner-note').getByRole('button',{name:'Save note'}).click();
+    await page.locator('.stage .owner-note').getByRole('button',{name:'save note'}).click();
     await page.locator('.stage .owner-note textarea').waitFor({state:'detached'});
     // A queued refresh must complete now, without waiting for the next 2s tick.
     await page.locator('.stage .owner-note').getByText('📌 you: saved note').waitFor({timeout:1000});
@@ -3290,7 +3290,7 @@ test('hive stop corner appears only during bee drags and preserves registration'
     assert.match(await canvas.getAttribute('aria-label'),/drop a bee.*stop its agent.*resume agent/);
     assert.equal(await page.locator('.hive-trash-zone').isVisible(),false);
     await drag();
-    const prompt=await answer(page,'Cancel');
+    const prompt=await answer(page,'cancel');
     assert.match(prompt,/Stop stoat on karans-linux/);
     assert.match(prompt, /"resume agent" on its page brings it back/);
     assert.deepEqual(mutations,[]);
@@ -3772,7 +3772,7 @@ for (const width of [390, 1280]) {
       await more.click();
 
       const dialog = page.getByRole('dialog', { name: 'Restart stoat' });
-      const apply = dialog.getByRole('button', { name: 'Restart', exact: true });
+      const apply = dialog.getByRole('button', { name: 'restart', exact: true });
       const force = dialog.getByRole('checkbox', { name: 'Force restart' });
       await restart.click();
       assert.equal(await dialog.locator('pre').textContent(), launch);
@@ -3816,6 +3816,54 @@ for (const width of [390, 1280]) {
       await controls.getByRole('status').getByText(/Could not plan restart: cannot observe tmux/).waitFor();
       assert.equal(await dialog.count(), 0);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+  });
+}
+
+for (const width of [390, 1280]) {
+  test(`composer colors distinguish upload failure, unconfirmed send, and delivery at ${width}px`, async () => {
+    const { page, state, errors } = await setup(width, 800, width === 390);
+    let attempts = 0;
+    await page.route('**/attachments', route => route.fulfill({
+      status: 413, json: { detail: { error: 'fixture upload rejected' } },
+    }));
+    await page.route('**/owner/send', route => {
+      if (++attempts === 1) return route.fulfill({ status: 502, body: 'reply lost' });
+      const payload = route.request().postDataJSON();
+      state.messages.push({ id: 35, sender: 'owner', recipient: 'stoat', content: payload.content,
+        ts: state.now + 1, status: 'delivered', attachments: [] });
+      return route.fulfill({ json: { status: 'delivered', message_id: 35 } });
+    });
+    try {
+      await page.goto(base + '#/agent/stoat');
+      if (width === 390) await page.getByRole('button', { name: 'Focus conversation' }).first().click();
+      const composer = page.locator(width === 390 ? '.compact-composer' : '.thread .composer').first();
+      const feedback = composer.getByRole('status');
+      async function assertFeedback(text, tone, cssVariable) {
+        const status = feedback.filter({ hasText: text });
+        await status.waitFor();
+        const colors = await status.evaluate((el, token) => {
+          const sample = document.createElement('span');
+          sample.style.color = `var(${token})`;
+          el.append(sample);
+          const result = [getComputedStyle(el).color, getComputedStyle(sample).color];
+          sample.remove();
+          return result;
+        }, cssVariable);
+        assert.equal(colors[0], colors[1]);
+        assert.ok((await status.getAttribute('class')).split(' ').includes(tone));
+      }
+
+      await composer.locator('input[type=file]').setInputFiles({
+        name: 'sample.txt', mimeType: 'text/plain', buffer: Buffer.from('fixture'),
+      });
+      await assertFeedback('sample.txt not added: fixture upload rejected', 'error', '--alert');
+      await composer.getByRole('textbox', { name: 'Message stoat as owner' }).fill('Check receipt.');
+      await composer.getByRole('button', { name: 'send', exact: true }).click();
+      await assertFeedback('checking again', 'warning', '--honey');
+      await assertFeedback('delivered', 'sent', '--moss');
+      assert.equal(attempts, 2);
       assert.deepEqual(errors, []);
     } finally { await page.close(); }
   });

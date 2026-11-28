@@ -890,12 +890,12 @@ function OwnerNote({ agent, refresh }) {
 	}}>
       <label>Your note<textarea aria-label=${`Your note for ${agent.user_id}`} maxLength="1000" rows="2"
         value=${text} disabled=${busy} onInput=${(e) => setText(e.target.value)} /></label>
-      <div class="owner-note-actions"><button type="submit" disabled=${busy}>Save note</button>
+      <div class="owner-note-actions"><button type="submit" disabled=${busy}>save note</button>
         <button type="button" disabled=${busy} onClick=${() => {
 		setEditing(false);
 		setError("");
-	}}>Cancel</button>
-        ${agent.owner_note && m$1`<button type="button" disabled=${busy} onClick=${() => save("")}>Clear note</button>`}</div>
+	}}>cancel</button>
+        ${agent.owner_note && m$1`<button type="button" disabled=${busy} onClick=${() => save("")}>clear note</button>`}</div>
     </form>` : m$1`<button type="button" class="owner-note-edit" aria-label=${`${agent.owner_note ? "Edit" : "Add"} owner note for ${agent.user_id}`}
       onClick=${() => {
 		setText(agent.owner_note || "");
@@ -10196,8 +10196,8 @@ function ReplyPreview({ message, messages }) {
 	return m$1`<div class="reply-reference">
     <button type="button" class="reply-quote" onClick=${open} disabled=${busy}
       aria-label=${`Show original message ${id}`} aria-expanded=${show}>
-      <strong>${preview?.sender || `Message #${id}`}</strong>
-      <span>${busy ? "Loading original…" : preview ? replySnippet(preview) : "Show original message"}</span>
+      <strong>${preview?.sender || `message #${id}`}</strong>
+      <span>${busy ? "loading original…" : preview ? replySnippet(preview) : "show original message"}</span>
     </button>
     ${show && original && m$1`<div class="reply-original" tabindex="0">
       <strong>${original.sender} · message #${id}</strong>
@@ -10290,7 +10290,7 @@ function enqueue(open) {
 	return result;
 }
 /** Ask a yes/no question in the page. Resolves true only when confirmed. */
-function confirmDialog(message, { confirmLabel = "OK", cancelLabel = "Cancel" } = {}) {
+function confirmDialog(message, { confirmLabel = "OK", cancelLabel = "cancel" } = {}) {
 	return enqueue(() => openDialog(message, {
 		confirmLabel,
 		cancelLabel
@@ -10329,7 +10329,7 @@ function TaskTrash({ task, refresh, onDeleted }) {
 		}
 	};
 	return m$1`<span class="task-trash"><button type="button" class="mini danger" disabled=${busy}
-    title=${`Permanently trash task #${task.id}`} onClick=${remove}>${busy ? "Trashing…" : "⌫ Trash"}</button>
+    title=${`Permanently trash task #${task.id}`} onClick=${remove}>${busy ? "trashing…" : "⌫ trash"}</button>
     ${error && m$1`<span role="alert" class="tnote-err">${error}</span>`}</span>`;
 }
 //#endregion
@@ -10369,12 +10369,12 @@ function TaskStatusActions({ task, refresh }) {
 	};
 	return m$1`<div class=${`task-status-actions ${editing ? "editing" : ""}`}>
     ${task.status === "done" ? m$1`<button type="button" class="mini" disabled=${busy}
-          onClick=${() => change({ status: task.assignee || task.team_id ? "picked_up" : "open" })}>Reopen</button>` : m$1`${task.status === "open" && m$1`<button type="button" class="mini"
+          onClick=${() => change({ status: task.assignee || task.team_id ? "picked_up" : "open" })}>reopen</button>` : m$1`${task.status === "open" && m$1`<button type="button" class="mini"
           disabled=${busy || !(task.assignee || task.team_id)}
           title=${task.assignee || task.team_id ? "Start work on this task" : "Assign this task first"}
-          onClick=${() => change({ status: "picked_up" })}>Start work</button>`}
+          onClick=${() => change({ status: "picked_up" })}>start work</button>`}
         <button type="button" class="mini" disabled=${busy || editing && !note.trim()}
-          onClick=${complete}>${busy ? "Updating…" : "Complete task"}</button>`}
+          onClick=${complete}>${busy ? "updating…" : "complete task"}</button>`}
     ${editing && task.status !== "done" && m$1`<div class="task-verification">
       <label>Verification note <span aria-hidden="true">*</span>
         <textarea rows="3" value=${note} autofocus
@@ -10385,7 +10385,7 @@ function TaskStatusActions({ task, refresh }) {
         onClick=${() => {
 		setEditing(false);
 		setError("");
-	}}>Cancel</button>
+	}}>cancel</button>
     </div>`}
     ${error && m$1`<span class="task-action-error" role="alert">${error}</span>`}
   </div>`;
@@ -10450,8 +10450,8 @@ function RestartDialog({ user, initial, onClose }) {
         <pre aria-label="Launch command and working directory">${plan.launch}</pre>
       </div>`}
       <div class="page-dialog-actions">
-        <button type="submit" value="cancel" class="mini" autofocus>Cancel</button>
-        <button type="submit" value="restart" class="act" disabled=${checking || !hasPlan(plan) || forceable && !force}>Restart</button>
+        <button type="submit" value="cancel" class="mini" autofocus>cancel</button>
+        <button type="submit" value="restart" class="act" disabled=${checking || !hasPlan(plan) || forceable && !force}>restart</button>
       </div>
     </form>
   </dialog>`;
@@ -10466,7 +10466,7 @@ function RestartAgentButton({ r, refresh }) {
 		if (!r.pane_alive || inFlight.current || review) return;
 		event.currentTarget.focus();
 		inFlight.current = true;
-		setBusy("Checking…");
+		setBusy("checking…");
 		setMessage("");
 		try {
 			const result = await restartRequest(user, false, true);
@@ -10483,7 +10483,7 @@ function RestartAgentButton({ r, refresh }) {
 		setReview(null);
 		if (!approved || inFlight.current) return;
 		inFlight.current = true;
-		setBusy("Restarting…");
+		setBusy("restarting…");
 		try {
 			const result = await restartRequest(user, force, false);
 			if (result.ok === true && result.status === "restarted") setMessage(`Restarted on ${result.node} in pane ${result.pane}.`);
@@ -11208,7 +11208,7 @@ function HiveTaskDetail({ task, state, refresh, onClose }) {
 	const agents = [.../* @__PURE__ */ new Set([...(state.recipients || []).map((r) => r.user_id), ...task.assignee ? [task.assignee] : []])];
 	return m$1`<section class="hive-task-detail" aria-label=${`Task #${task.id} details`}>
     <header><h3>#${task.id} · ${task.title}</h3>
-      <button type="button" class="mini" onClick=${onClose}>Collapse</button></header>
+      <button type="button" class="mini" onClick=${onClose}>collapse</button></header>
     <p>${task.status.replaceAll("_", " ")} · ${task.assignee || "unassigned"}${queenSuffix(state.teams, task.assignee)}${task.team_id ? ` · team ${(state.teams || []).find((t) => t.id === task.team_id)?.name || task.team_id}` : ""}</p>
     ${task.description && m$1`<p class="task-description">${task.description}</p>`}
     ${task.depends_on?.length > 0 && m$1`<p>Depends on ${task.depends_on.map((id) => `#${id}`).join(", ")}</p>`}
@@ -12665,7 +12665,7 @@ function BoardComposer({ teamId, replyTo, onPosted }) {
       <textarea value=${body} rows="4" disabled=${busy} onInput=${(e) => setBody(e.target.value)}></textarea>
     </label>
     <div class="board-compose-actions">
-      <button type="submit" class="act" disabled=${busy || !valid}>${busy ? "Posting…" : replyTo === null ? "Post" : "Reply"}</button>
+      <button type="submit" class="act" disabled=${busy || !valid}>${busy ? "posting…" : replyTo === null ? "post" : "reply"}</button>
       ${tooLong && m$1`<span role="alert">Post exceeds the 16 KB limit.</span>`}
       ${error && m$1`<span role="alert">${error}</span>`}
     </div>
@@ -12674,7 +12674,7 @@ function BoardComposer({ teamId, replyTo, onPosted }) {
 function BoardFeed({ data, read, busy, teamId, members, now }) {
 	return m$1`<div class="board-feed">
     ${data.has_older && m$1`<button type="button" class="mini board-page-button" disabled=${busy}
-      onClick=${() => read("older")}>${busy ? "Loading…" : "Load older posts"}</button>`}
+      onClick=${() => read("older")}>${busy ? "loading…" : "load older posts"}</button>`}
     ${data.posts.length === 0 && m$1`<p class="board-status">No posts yet.</p>`}
     <ol class="board-posts">
       ${data.posts.map((post) => m$1`<li key=${post.id} class="board-preview">
@@ -12688,7 +12688,7 @@ function BoardFeed({ data, read, busy, teamId, members, now }) {
       </li>`)}
     </ol>
     ${data.has_newer && m$1`<button type="button" class="mini board-page-button" disabled=${busy}
-      onClick=${() => read("refresh")}>Load newer posts</button>`}
+      onClick=${() => read("refresh")}>load newer posts</button>`}
   </div>`;
 }
 function BoardPost({ post, teamId, now, members }) {
@@ -12726,7 +12726,7 @@ function BoardView({ teamId, postId, teams, now }) {
       ${archived && data && m$1`<span class="board-status">Archived · read-only</span>`}
     </header>
     ${error && m$1`<div class="board-error" role="alert">${error}
-      <button type="button" class="mini" onClick=${() => read("refresh")}>Retry</button>
+      <button type="button" class="mini" onClick=${() => read("refresh")}>retry</button>
     </div>`}
     ${!data && !error && m$1`<p class="board-status" role="status">Loading board…</p>`}
     ${data && (postId === null ? m$1`<${BoardFeed} data=${data} read=${read} busy=${busy} teamId=${teamId} members=${members} now=${now} />` : m$1`<div class="board-thread">
@@ -12894,8 +12894,8 @@ function TaskEdit({ task, refresh, done }) {
     <label>Description <textarea rows="5" value=${description}
       onInput=${(e) => setDescription(e.target.value)}></textarea></label>
     <div class="h-edit-actions">
-      <button type="submit" class="mini" disabled=${busy || !title.trim()}>${busy ? "Saving…" : "Save"}</button>
-      <button type="button" class="mini" disabled=${busy} onClick=${done}>Cancel</button>
+      <button type="submit" class="mini" disabled=${busy || !title.trim()}>${busy ? "saving…" : "save"}</button>
+      <button type="button" class="mini" disabled=${busy} onClick=${done}>cancel</button>
       ${error && m$1`<span class="task-action-error" role="alert">${error}</span>`}
     </div>
   </form>`;
@@ -12919,7 +12919,7 @@ function TaskDetails({ task: t, fields: f, re, now, close, agentLabel }) {
 	}}>
     <header class="task-details-header">
       <span>Task #${t.id}</span>
-      <button type="button" class="mini" autofocus onClick=${() => ref.current.close()}>Close</button>
+      <button type="button" class="mini" autofocus onClick=${() => ref.current.close()}>close</button>
     </header>
     <div class="task-details-body" tabindex="0">
       <h2 id=${`task-details-title-${t.id}`}>${hl(f.title, re)}</h2>
@@ -12965,9 +12965,9 @@ function TaskTile({ rec, re, now, teams, filterAgent, refresh, agentLabel }) {
         onClick=${(e) => {
 		e.currentTarget.focus();
 		setExpanded(true);
-	}}>Expand</button>
+	}}>expand</button>
       <button type="button" class="mini" onClick=${() => setEditing(true)}
-        aria-label=${`Edit task #${t.id}`}>Edit</button>
+        aria-label=${`Edit task #${t.id}`}>edit</button>
       <${TaskStatusActions} task=${t} refresh=${refresh} />
       <${TaskTrash} task=${t} refresh=${refresh} />
     </div>
@@ -13583,7 +13583,7 @@ function MachineBar({ state, machine, selectMachine }) {
     <div class="machine-heading"><span>Machines</span><small>Color identifies the machine</small></div>
     <div class="machine-choices">
       <button class=${`machine-choice all ${machine === null ? "active" : ""}`} aria-pressed=${machine === null}
-        onClick=${() => selectMachine(null)}><strong>All machines</strong><span>${machines.length} machines · ${state.recipients.filter((r) => r.pane_alive).length} live agents</span></button>
+        onClick=${() => selectMachine(null)}><strong>all machines</strong><span>${machines.length} machines · ${state.recipients.filter((r) => r.pane_alive).length} live agents</span></button>
       ${machines.map((n) => m$1`<button key=${n.name} class=${`machine-choice ${machine === n.name ? "active" : ""} ${n.connected ? "" : "disconnected"}`}
           style=${`--machine:${machineColor(n.name)}`} aria-pressed=${machine === n.name}
           onClick=${() => selectMachine(machine === n.name ? null : n.name)}>
@@ -13591,7 +13591,7 @@ function MachineBar({ state, machine, selectMachine }) {
         <span>${n.connected ? "Connected" : n.missing ? "Not enrolled" : "Disconnected"} · ${n.live} live${n.total > n.live ? ` / ${n.total} registered` : " agents"}</span>
       </button>`)}
     </div>
-    ${machine !== null && m$1`<div class="machine-filter-note">Highlighting bees and showing agents on <b>${machine}</b>. Task board shows all machines. <button onClick=${() => selectMachine(null)}>Clear filter ×</button></div>`}
+    ${machine !== null && m$1`<div class="machine-filter-note">Highlighting bees and showing agents on <b>${machine}</b>. Task board shows all machines. <button onClick=${() => selectMachine(null)}>clear filter ×</button></div>`}
   </section>`;
 }
 function TaskCard({ t, agentIds, teams, blockers, refresh }) {
@@ -14080,7 +14080,7 @@ function AgentsPanel({ state, refresh, machine, harness, setHarness, unreadFor, 
 	return m$1`<div class="agents-panel">
     ${onClose && m$1`<div class="roster-heading"><h2>agents ${live > 0 && m$1`<span class="count">· ${live}</span>`}</h2>
       ${filter}
-      <button type="button" class="mini" aria-label="Hide agents" onClick=${onClose}>Hide →</button></div>`}
+      <button type="button" class="mini" aria-label="Hide agents" onClick=${onClose}>hide →</button></div>`}
     <div class="agents-view-switch" role="group" aria-label="Agents view">
       <span>view</span>
       ${AGENTS_VIEWS.map(([v, label]) => m$1`<button key=${v} type="button" aria-pressed=${view === v} onClick=${() => pick(v)}>${label}</button>`)}
@@ -14263,7 +14263,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 	const [text, setText] = d("");
 	const [context, setContext] = d("");
 	const [images, setImages] = d([]);
-	const [status, setStatus] = d("");
+	const [status, setStatus] = d(null);
 	const [sending, setSending] = d(false);
 	const [retryOf, setRetryOf] = d(null);
 	const cancelReply = () => {
@@ -14272,7 +14272,10 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 	};
 	const composerRef = A(null);
 	const draftKey = `agent-swarm:draft:${recipient}:thread`;
-	const attachments = useAttachments(images, setImages, setStatus, draftKey);
+	const attachments = useAttachments(images, setImages, (message) => setStatus({
+		tone: "error",
+		message
+	}), draftKey);
 	const { uploading, dragging } = attachments;
 	h(() => {
 		const draft = readJSON(draftKey);
@@ -14280,7 +14283,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 		setContext(draft?.context || "");
 		setImages(Array.isArray(draft?.images) ? draft.images : []);
 		setRetryOf(draft?.retryOf || null);
-		setStatus("");
+		setStatus(null);
 	}, [draftKey]);
 	h(() => {
 		const el = composerRef.current;
@@ -14309,7 +14312,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 			}
 			setStatus(next);
 			clearTimeout(timer);
-			if (next === "delivered") timer = setTimeout(() => setStatus((s) => s === "delivered" ? "" : s), 2500);
+			if (next.tone === "sent") timer = setTimeout(() => setStatus((s) => s === next ? null : s), 2500);
 		};
 		pendingSends.addEventListener("outcome", onOutcome);
 		return () => {
@@ -14382,16 +14385,23 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 		};
 		setSending(true);
 		setOptionsOpen(false);
-		setStatus("sending…");
+		setStatus({
+			tone: "pending",
+			message: "sending…"
+		});
 		setText("");
 		setContext("");
 		setImages([]);
 		setRetryOf(null);
 		writeStored(draftKey, null);
 		pendingSends.dispatchEvent(new CustomEvent("add", { detail: pending }));
-		const report = (detail) => pendingSends.dispatchEvent(new CustomEvent("outcome", { detail: {
+		const report = (tone, message, restoredDraft) => pendingSends.dispatchEvent(new CustomEvent("outcome", { detail: {
 			draftKey,
-			...detail
+			status: {
+				tone,
+				message
+			},
+			draft: restoredDraft
 		} }));
 		const keepDraft = () => writeJSON(draftKey, draft);
 		const attempt = () => ownerSend({
@@ -14405,24 +14415,18 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 		let outcome = await attempt();
 		for (const delay of RESEND_DELAYS_MS) {
 			if (outcome.status !== "uncertain") break;
-			report({ status: `not confirmed (${outcome.reason}); checking again…` });
+			report("warning", `not confirmed (${outcome.reason}); checking again…`);
 			await new Promise((resolve) => setTimeout(resolve, delay));
 			outcome = await attempt();
 		}
-		if (outcome.status === "delivered") report({ status: "delivered" });
-		else if (outcome.status === "unknown") report({ status: `outcome unknown: ${outcome.reason}. The agent may have it; see the marked message.` });
+		if (outcome.status === "delivered") report("sent", "delivered");
+		else if (outcome.status === "unknown") report("warning", `outcome unknown: ${outcome.reason}. The agent may have it; see the marked message.`);
 		else if (outcome.status === "uncertain") {
 			keepDraft();
-			report({
-				status: `not confirmed: ${outcome.reason}. Draft kept. Sending it again unchanged will not duplicate it`,
-				draft
-			});
+			report("warning", `not confirmed: ${outcome.reason}. Draft kept. Sending it again unchanged will not duplicate it`, draft);
 		} else {
 			keepDraft();
-			report({
-				status: `delivery failed: ${outcome.reason}. Draft kept`,
-				draft
-			});
+			report("error", `delivery failed: ${outcome.reason}. Draft kept`, draft);
 		}
 		await refresh();
 		pendingSends.dispatchEvent(new CustomEvent("settle", { detail: pending.id }));
@@ -14432,12 +14436,13 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 		setText("");
 		setContext("");
 		setImages([]);
-		setStatus("");
+		setStatus(null);
 		composerRef.current?.focus();
 	};
 	const submit = m$1`<button class="act" type="submit" disabled=${!canSend}>
     ${sending ? "sending…" : uploading ? "uploading…" : "send"}
   </button>`;
+	const feedback = status && m$1`<span class=${`compose-status ${status.tone}`} role="status">${status.message}</span>`;
 	const optionsId = `compose-options-${encodeURIComponent(recipient)}`;
 	return m$1`<form class=${`composer ${compact ? "compact-composer" : ""} ${optionsOpen ? "options-open" : ""} ${dragging ? "dragging" : ""}`} onSubmit=${send} ...${sending ? {} : attachments.dropProps}>
     ${(replyTo || retryOf?.replyTo) && m$1`<div class="compose-reply">
@@ -14468,12 +14473,12 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
       <span class="count">${plural(text.length, "character")}${images.length > 0 ? ` · ${plural(images.length, "file")}` : ""}</span>
       ${!compact && m$1`<span class="hint">Enter to send · Shift + Enter for a new line</span>`}
       <div class="actions">
-        ${!compact && status && m$1`<span class=${status.startsWith("delivery failed") ? "error" : "sent"} role="status">${status}</span>`}
+        ${!compact && feedback}
         ${(text || context || images.length > 0) && m$1`<button type="button" class="mini" onClick=${clearDraft}>clear</button>`}
         ${!compact && submit}
       </div>
     </div>
-    ${compact && status && m$1`<div class="compose-status" role="status">${status}</div>`}
+    ${compact && feedback}
   </form>`;
 }
 var FOCUS_FONT = {
@@ -14834,7 +14839,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
     <div class="msgs" ref=${boxRef} onScroll=${onScroll}
       style=${historyHeight === null ? null : { height: `${historyHeight}px` }}>
       ${older?.more && m$1`<button type="button" key="older" class="mini older-history" disabled=${older.busy} onClick=${older.load}>
-        ${older.busy ? "Loading older messages…" : "Scroll up or click for older messages"}</button>`}
+        ${older.busy ? "loading older messages…" : "scroll up or click for older messages"}</button>`}
       ${msgs.map((m) => m$1`${gapAt.has(m.id) && m$1`<div key=${`gap-${m.id}`} class="msg-gap" role="note">
         <span>${gapLabel(gapAt.get(m.id))}</span>
         ${loadGap && m$1`<button type="button" class="mini" onClick=${() => loadGap(gapAt.get(m.id))}>load them</button>`}</div>`}
@@ -14846,7 +14851,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
             title="Reply to this message" aria-label=${`Reply to message ${m.id}`} onClick=${() => setReplyTo(m)}>↩<span class="msg-reply-label"> reply</span></button>`}
         </${ChatMessage}>`)}
       ${recipient && m$1`<div class="jump-dock">${awayFrom !== null && m$1`<button type="button" class="jump-bottom" onClick=${jumpToBottom}
-        title="Scroll to the newest message">↓ Jump to bottom${newSinceAway > 0 ? m$1` <span class="jump-new">· ${newSinceAway} new</span>` : ""}</button>`}</div>`}
+        title="Scroll to the newest message">↓ jump to bottom${newSinceAway > 0 ? m$1` <span class="jump-new">· ${newSinceAway} new</span>` : ""}</button>`}</div>`}
     </div>
     ${menu && m$1`<div class="msg-menu" role="menu" style=${{
 		left: `${menu.x}px`,
@@ -14856,16 +14861,16 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
       <button type="button" role="menuitem" autofocus onClick=${() => {
 		setReplyTo(menu.m);
 		setMenu(null);
-	}}>↩ Reply</button>
+	}}>↩ reply</button>
       <button type="button" role="menuitem" onClick=${() => {
 		navigator.clipboard?.writeText(menu.m.content || "");
 		setMenu(null);
-	}}>Copy text</button>
+	}}>copy text</button>
       <button type="button" role="menuitem" onClick=${() => {
 		setPinned(menu.m.id, !pinned.has(menu.m.id), refresh);
 		setMenu(null);
 	}}>
-        ${pinned.has(menu.m.id) ? "Unpin" : "📌 Pin"}</button>
+        ${pinned.has(menu.m.id) ? "unpin" : "📌 pin"}</button>
     </div>`}
     ${openPin && m$1`<${PinDialog} m=${pins.find((p) => p.id === openPin.id) || openPin} now=${now} refresh=${refresh}
       messages=${msgs} right=${sentByViewer(openPin.sender, a, b, page)}
@@ -15092,7 +15097,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       <button type="button" class="mini" disabled=${history.busy} onClick=${() => history.loadGap(gap)}>
         ${history.busy ? "loading…" : "load the missing messages"}</button></p>`)}
     ${!hasOwnerThread && history.more && m$1`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
-      ${history.busy ? "Loading older messages…" : "Load older messages"}</button>`}
+      ${history.busy ? "loading older messages…" : "load older messages"}</button>`}
     ${hasOwnerThread ? renderThread(groups.get(ownerThread)) : m$1`<div class="thread">
       <${ConversationSearchBar} search=${conversationSearch} />
       ${threads.length > 0 ? m$1`<div class="bar">${disp("owner")} <span class="swap">⇄</span> ${user}</div>` : history.loaded && m$1`<div class="empty">No conversation history.</div>`}

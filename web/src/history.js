@@ -172,8 +172,8 @@ function TaskEdit({ task, refresh, done }) {
     <label>Description <textarea rows="5" value=${description}
       onInput=${e => setDescription(e.target.value)}></textarea></label>
     <div class="h-edit-actions">
-      <button type="submit" class="mini" disabled=${busy || !title.trim()}>${busy ? "Saving…" : "Save"}</button>
-      <button type="button" class="mini" disabled=${busy} onClick=${done}>Cancel</button>
+      <button type="submit" class="mini" disabled=${busy || !title.trim()}>${busy ? "saving…" : "save"}</button>
+      <button type="button" class="mini" disabled=${busy} onClick=${done}>cancel</button>
       ${error && html`<span class="task-action-error" role="alert">${error}</span>`}
     </div>
   </form>`;
@@ -198,7 +198,7 @@ function TaskDetails({ task: t, fields: f, re, now, close, agentLabel }) {
       onClose=${close} onKeyDown=${e => { if (e.key === "Escape") e.stopPropagation(); }}>
     <header class="task-details-header">
       <span>Task #${t.id}</span>
-      <button type="button" class="mini" autofocus onClick=${() => ref.current.close()}>Close</button>
+      <button type="button" class="mini" autofocus onClick=${() => ref.current.close()}>close</button>
     </header>
     <div class="task-details-body" tabindex="0">
       <h2 id=${`task-details-title-${t.id}`}>${hl(f.title, re)}</h2>
@@ -246,9 +246,9 @@ function TaskTile({ rec, re, now, teams, filterAgent, refresh, agentLabel }) {
     <${TaskMeta} task=${t} fields=${f} re=${re} now=${now} />
     <div class="h-actions">
       <button type="button" class="mini" aria-haspopup="dialog" aria-label=${`Expand task #${t.id}`}
-        onClick=${e => { e.currentTarget.focus(); setExpanded(true); }}>Expand</button>
+        onClick=${e => { e.currentTarget.focus(); setExpanded(true); }}>expand</button>
       <button type="button" class="mini" onClick=${() => setEditing(true)}
-        aria-label=${`Edit task #${t.id}`}>Edit</button>
+        aria-label=${`Edit task #${t.id}`}>edit</button>
       <${TaskStatusActions} task=${t} refresh=${refresh} />
       <${TaskTrash} task=${t} refresh=${refresh} />
     </div>

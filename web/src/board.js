@@ -187,7 +187,7 @@ function BoardComposer({ teamId, replyTo, onPosted }) {
       <textarea value=${body} rows="4" disabled=${busy} onInput=${e => setBody(e.target.value)}></textarea>
     </label>
     <div class="board-compose-actions">
-      <button type="submit" class="act" disabled=${busy || !valid}>${busy ? "Posting…" : replyTo === null ? "Post" : "Reply"}</button>
+      <button type="submit" class="act" disabled=${busy || !valid}>${busy ? "posting…" : replyTo === null ? "post" : "reply"}</button>
       ${tooLong && html`<span role="alert">Post exceeds the 16 KB limit.</span>`}
       ${error && html`<span role="alert">${error}</span>`}
     </div>
@@ -197,7 +197,7 @@ function BoardComposer({ teamId, replyTo, onPosted }) {
 function BoardFeed({ data, read, busy, teamId, members, now }) {
   return html`<div class="board-feed">
     ${data.has_older && html`<button type="button" class="mini board-page-button" disabled=${busy}
-      onClick=${() => read("older")}>${busy ? "Loading…" : "Load older posts"}</button>`}
+      onClick=${() => read("older")}>${busy ? "loading…" : "load older posts"}</button>`}
     ${data.posts.length === 0 && html`<p class="board-status">No posts yet.</p>`}
     <ol class="board-posts">
       ${data.posts.map(post => html`<li key=${post.id} class="board-preview">
@@ -213,7 +213,7 @@ function BoardFeed({ data, read, busy, teamId, members, now }) {
       </li>`)}
     </ol>
     ${data.has_newer && html`<button type="button" class="mini board-page-button" disabled=${busy}
-      onClick=${() => read("refresh")}>Load newer posts</button>`}
+      onClick=${() => read("refresh")}>load newer posts</button>`}
   </div>`;
 }
 
@@ -251,7 +251,7 @@ export function BoardView({ teamId, postId, teams, now }) {
       ${archived && data && html`<span class="board-status">Archived · read-only</span>`}
     </header>
     ${error && html`<div class="board-error" role="alert">${error}
-      <button type="button" class="mini" onClick=${() => read("refresh")}>Retry</button>
+      <button type="button" class="mini" onClick=${() => read("refresh")}>retry</button>
     </div>`}
     ${!data && !error && html`<p class="board-status" role="status">Loading board…</p>`}
     ${data && (postId === null

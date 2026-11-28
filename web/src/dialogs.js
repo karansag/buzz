@@ -62,7 +62,7 @@ function enqueue(open) {
 }
 
 /** Ask a yes/no question in the page. Resolves true only when confirmed. */
-export function confirmDialog(message, { confirmLabel = "OK", cancelLabel = "Cancel" } = {}) {
+export function confirmDialog(message, { confirmLabel = "OK", cancelLabel = "cancel" } = {}) {
   return enqueue(() => openDialog(message, { confirmLabel, cancelLabel }));
 }
 
