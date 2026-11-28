@@ -311,7 +311,6 @@ def register(
     pane_label: str | None = None,
     node: str | None = None,
 ) -> None:
-    _ensure_columns(conn)
     # One agent per pane. A row holding the same id under an earlier tmux
     # server is a different pane, so it stays (offline) with its history.
     conn.execute(
@@ -365,7 +364,6 @@ def fill_missing_node(conn: sqlite3.Connection, node: str) -> int:
     Every such row was registered against this server's own tmux, so it
     belongs to this machine. Returns the number of rows updated.
     """
-    _ensure_columns(conn)
     cur = conn.execute("UPDATE recipients SET node=? WHERE node IS NULL", (node,))
     conn.commit()
     return cur.rowcount
@@ -386,7 +384,6 @@ def name_taken_by_other(
     under the tmux server that issued it, matching how `register` resolves
     an existing handle.
     """
-    _ensure_columns(conn)
     row = conn.execute(
         "SELECT agent_id, node, tmux_pane, tmux_server FROM recipients WHERE user_id=?",
         (user_id,),
@@ -411,7 +408,6 @@ def rename_recipient(conn: sqlite3.Connection, old_id: str, new_id: str) -> None
     """
     if old_id == new_id:
         return
-    _ensure_columns(conn)
     conn.execute(
         "UPDATE recipients SET user_id=? WHERE user_id=?", (new_id, old_id)
     )
@@ -442,7 +438,8 @@ def rename_recipient(conn: sqlite3.Connection, old_id: str, new_id: str) -> None
 
 @_writes
 def _ensure_columns(conn: sqlite3.Connection) -> None:
-    """Add new optional columns to pre-existing DBs."""
+    """Add columns that a database from an older version lacks. `connect`
+    runs this once per process, before anything else reads the file."""
     cols = {row[1] for row in conn.execute("PRAGMA table_info(recipients)")}
     for col in (
         "agent_id",
@@ -527,7 +524,6 @@ def lookup_user_by_pane(
     conn: sqlite3.Connection, node: str, tmux_pane: str, tmux_server: str | None = None
 ) -> str | None:
     """The agent bound to this pane id under this tmux server on this node."""
-    _ensure_columns(conn)
     row = conn.execute(
         "SELECT user_id FROM recipients WHERE node=? AND tmux_pane=? AND tmux_server IS ?",
         (node, tmux_pane, tmux_server),
@@ -566,7 +562,6 @@ UNBOUND = "unbound"
 @_writes
 def legacy_pane_rows(conn: sqlite3.Connection) -> list[dict]:
     """Rows still addressed the old way (no tmux server recorded)."""
-    _ensure_columns(conn)
     return [dict(r) for r in conn.execute(
         "SELECT user_id, tmux_pane, flavor, node, registered_at FROM recipients "
         "WHERE tmux_server IS NULL AND reserved=0"
@@ -599,7 +594,6 @@ def lookup_user_by_agent_id(
     so callers pass the node they are speaking for (a node token may only
     speak for its own); an id held on another node is not this agent.
     """
-    _ensure_columns(conn)
     if node is None:
         row = conn.execute(
             "SELECT user_id FROM recipients WHERE agent_id=?", (agent_id,)
@@ -635,7 +629,6 @@ def adopt_agent_id(
 
 @_writes
 def get_recipient(conn: sqlite3.Connection, user_id: str) -> dict | None:
-    _ensure_columns(conn)
     row = conn.execute(
         "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, owner_note, cwd, registered_at "
         "FROM recipients WHERE user_id=?",
@@ -646,7 +639,6 @@ def get_recipient(conn: sqlite3.Connection, user_id: str) -> dict | None:
 
 @_writes
 def list_recipients(conn: sqlite3.Connection) -> list[dict]:
-    _ensure_columns(conn)
     rows = conn.execute(
         "SELECT user_id, tmux_pane, tmux_server, pane_label, node, reserved, agent_id, model, flavor, instructions, message_prefix, submit_key, team_id, owner_note, cwd, registered_at "
         "FROM recipients ORDER BY user_id"
@@ -1165,7 +1157,6 @@ def set_agent_team(
     conn: sqlite3.Connection, user_id: str, team_id: int | None
 ) -> dict | None:
     """Move an agent between teams (or out of any). Clears a vacated queen seat."""
-    _ensure_columns(conn)
     recipient = get_recipient(conn, user_id)
     if recipient is None:
         return None
@@ -1775,7 +1766,6 @@ def _hub_state(conn: sqlite3.Connection) -> dict:
 @_writes
 def hub_state(conn: sqlite3.Connection) -> dict:
     """The same snapshot, for a dry run, which writes nothing."""
-    _ensure_columns(conn)
     return _hub_state(conn)
 
 
@@ -1817,7 +1807,6 @@ def apply_import(
     registration landing in between cannot take a handle the plan chose.
     Nothing is written when any part of it fails.
     """
-    _ensure_columns(conn)
     # IMMEDIATE, so the state the plan is made from and the writes it turns
     # into are one transaction against one snapshot.
     conn.execute("BEGIN IMMEDIATE")
