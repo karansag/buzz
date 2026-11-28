@@ -51,6 +51,12 @@ def listener_pid(port: int) -> int | None:
     return None
 
 
+# What a test pane runs: `cat`, with the terminal's own echo off. With echo
+# on, the terminal's echo of a multi-line paste races cat's output and the
+# screen differs from run to run. This way the screen is what cat received.
+CAT = "sh -c 'stty -echo; exec cat'"
+
+
 class Tmux:
     """One isolated tmux server, and a PATH entry that makes a hub use it."""
 
@@ -70,7 +76,7 @@ class Tmux:
             raise RuntimeError(f"tmux {args}: {done.stderr.strip()}")
         return done.stdout
 
-    def start(self, panes: int, command: str = "cat") -> list[str]:
+    def start(self, panes: int, command: str = CAT) -> list[str]:
         """A session with `panes` windows, each running `command`. Returns pane ids."""
         self.run("-f", "/dev/null", "new-session", "-d", "-s", "w", "-x", "200", "-y", "50", command)
         for _ in range(panes - 1):

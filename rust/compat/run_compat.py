@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hubs import SCRATCH, Hub, Tmux, copy_db  # noqa: E402
+from hubs import REPO, SCRATCH, Hub, Tmux, copy_db  # noqa: E402
 
 TIMES = {"ts", "registered_at", "created_at", "updated_at", "now", "pinned_at", "since", "retired_at", "last_seen"}
 TRUST_SCREEN = "Accessing workspace:\\n\\n/tmp/compat-folder\\n\\n1. Yes, I trust this folder\\n2. No, exit\\n"
@@ -80,21 +80,28 @@ def scenarios(r: Run) -> None:
     g = "register"
     _, a = r.http(g, "register A: pool handle, session id, claude model", "POST", "/register",
                   {"tmux_pane": a_pane, "agent_id": "sess-a", "model": "claude-opus-4-7"})
-    A = a["user_id"]
-    r.names[A] = "<A>"
-    r.step(g, "assigned handle is a pool name", {"assigned": a["assigned"], "in_pool": bool(re.fullmatch(r"[a-z-]+", A))})
+    picked = a["user_id"]
+    r.names[picked] = "<picked>"
+    pool = re.findall(r'^    "([a-z-]+)",$', (REPO / "agent_swarm/names.py").read_text(), re.M)
+    r.step(g, "assigned handle is a pool name", {"assigned": a["assigned"], "in_pool": picked in pool})
+    # The picked name is random, and lists are ordered by handle: move A to
+    # a fixed handle so every later answer is the same on both hubs. The fixed
+    # handles are not pool names, so the picked one never collides with them.
+    A = "agent-a"
+    r.http(g, "register A again asking for a fixed handle (rename)", "POST", "/register",
+           {"tmux_pane": a_pane, "agent_id": "sess-a", "requested_user": A})
     r.http(g, "register B: requested handle, codex model, positional target", "POST", "/register",
-           {"tmux_pane": "w:1.0", "requested_user": "Tapir", "model": "gpt-5-codex", "instructions": "be brief"})
+           {"tmux_pane": "w:1.0", "requested_user": "Agent-B", "model": "gpt-5-codex", "instructions": "be brief"})
     r.http(g, "register B again: same pane, no fields (keeps flavor)", "POST", "/register", {"tmux_pane": b_pane})
     r.http(g, "register: invalid handle", "POST", "/register", {"tmux_pane": c_pane, "requested_user": "Bad Name!"})
     r.http(g, "register: reserved handle owner", "POST", "/register", {"tmux_pane": c_pane, "requested_user": "owner"})
-    r.http(g, "register: handle held by a live agent", "POST", "/register", {"tmux_pane": c_pane, "requested_user": "tapir"})
+    r.http(g, "register: handle held by a live agent", "POST", "/register", {"tmux_pane": c_pane, "requested_user": "agent-b"})
     r.http(g, "register: pane does not resolve", "POST", "/register", {"tmux_pane": "%99"})
     r.http(g, "register: unknown node", "POST", "/register", {"tmux_pane": c_pane, "node": "elsewhere"})
     r.http(g, "register C: prefix and submit key", "POST", "/register",
-           {"tmux_pane": c_pane, "requested_user": "civet", "flavor": "generic", "message_prefix": ">> ", "submit_key": "Enter"})
-    r.http(g, "register: rename C to a free handle", "POST", "/register", {"tmux_pane": c_pane, "requested_user": "gecko"})
-    r.http(g, "register: pane already holds another handle", "POST", "/register", {"tmux_pane": c_pane, "requested_user": "tapir"})
+           {"tmux_pane": c_pane, "requested_user": "agent-c0", "flavor": "generic", "message_prefix": ">> ", "submit_key": "Enter"})
+    r.http(g, "register: rename C to a free handle", "POST", "/register", {"tmux_pane": c_pane, "requested_user": "agent-c"})
+    r.http(g, "register: pane already holds another handle", "POST", "/register", {"tmux_pane": c_pane, "requested_user": "agent-b"})
 
     g = "validation (422 bodies)"
     r.http(g, "register: missing tmux_pane", "POST", "/register", {"model": "x"})
@@ -102,7 +109,7 @@ def scenarios(r: Run) -> None:
     r.http(g, "register: empty tmux_pane", "POST", "/register", {"tmux_pane": ""})
     r.http(g, "register: wrong type", "POST", "/register", {"tmux_pane": 7})
     r.http(g, "register: body is a list", "POST", "/register", [1])
-    r.http(g, "send: empty content, reply_to 0", "POST", "/send", {"tmux_pane": a_pane, "recipient": "tapir", "content": "", "reply_to": 0})
+    r.http(g, "send: empty content, reply_to 0", "POST", "/send", {"tmux_pane": a_pane, "recipient": "agent-b", "content": "", "reply_to": 0})
     r.http(g, "send: reply_to as numeric string, bad bool", "POST", "/send",
            {"tmux_pane": a_pane, "recipient": "owner", "content": "x", "reply_to": "abc", "pane_verified": "maybe"})
     r.http(g, "status: text too long", "POST", "/status", {"tmux_pane": a_pane, "text": "x" * 201})
@@ -127,40 +134,40 @@ def scenarios(r: Run) -> None:
 
     g = "send and delivery"
     r.http(g, "send A to B with context", "POST", "/send",
-           {"tmux_pane": a_pane, "recipient": "tapir", "content": "hello from the compat run", "context": "compat"})
+           {"tmux_pane": a_pane, "recipient": "agent-b", "content": "hello from the compat run", "context": "compat"})
     r.screen(g, "pane B shows the pasted message", b_pane)
     r.http(g, "send B to A by session id, reply_to 1, multi-line", "POST", "/send",
            {"agent_id": "sess-b", "recipient": A, "content": "line one\nline two: ünïcödé ✓", "reply_to": 1})
     r.screen(g, "pane A shows the reply note and both lines", a_pane)
-    r.http(g, "send to C: prefix and Enter submit key", "POST", "/send", {"tmux_pane": a_pane, "recipient": "gecko", "content": "prefixed"})
+    r.http(g, "send to C: prefix and Enter submit key", "POST", "/send", {"tmux_pane": a_pane, "recipient": "agent-c", "content": "prefixed"})
     r.screen(g, "pane C shows the prefix", c_pane)
     r.http(g, "send to owner (recorded, no pane)", "POST", "/send", {"tmux_pane": a_pane, "recipient": "owner", "content": "for the human"})
     r.http(g, "send to an unregistered recipient", "POST", "/send", {"tmux_pane": a_pane, "recipient": "nobody", "content": "x"})
-    r.http(g, "send from an unregistered pane", "POST", "/send", {"tmux_pane": d_pane, "recipient": "tapir", "content": "x"})
-    r.http(g, "send with no pane and no session", "POST", "/send", {"recipient": "tapir", "content": "x"})
-    r.http(g, "send replying to a missing message", "POST", "/send", {"tmux_pane": a_pane, "recipient": "tapir", "content": "x", "reply_to": 999})
+    r.http(g, "send from an unregistered pane", "POST", "/send", {"tmux_pane": d_pane, "recipient": "agent-b", "content": "x"})
+    r.http(g, "send with no pane and no session", "POST", "/send", {"recipient": "agent-b", "content": "x"})
+    r.http(g, "send replying to a missing message", "POST", "/send", {"tmux_pane": a_pane, "recipient": "agent-b", "content": "x", "reply_to": 999})
     r.http(g, "send to queen: of an unknown team", "POST", "/send", {"tmux_pane": a_pane, "recipient": "queen:nope", "content": "x"})
 
     g = "recipient offline"
     shell = r.tmux.window("env PS1='$ ' bash --norc --noprofile")
-    r.http(g, "register D in a pane running a bare shell", "POST", "/register", {"tmux_pane": shell, "requested_user": "newt"})
-    r.http(g, "send to a bare shell is refused", "POST", "/send", {"tmux_pane": a_pane, "recipient": "newt", "content": "do not type this"})
+    r.http(g, "register D in a pane running a bare shell", "POST", "/register", {"tmux_pane": shell, "requested_user": "agent-d"})
+    r.http(g, "send to a bare shell is refused", "POST", "/send", {"tmux_pane": a_pane, "recipient": "agent-d", "content": "do not type this"})
     r.screen(g, "nothing was typed into the shell", shell)
     r.tmux.run("kill-pane", "-t", b_pane)
-    r.http(g, "send to a pane that is gone", "POST", "/send", {"tmux_pane": a_pane, "recipient": "tapir", "content": "anyone there"})
+    r.http(g, "send to a pane that is gone", "POST", "/send", {"tmux_pane": a_pane, "recipient": "agent-b", "content": "anyone there"})
     r.http(g, "GET /recipients shows why each is offline", "GET", "/recipients")
     r.http(g, "requesting an offline handle from a new pane reclaims it", "POST", "/register",
-           {"tmux_pane": d_pane, "requested_user": "tapir", "agent_id": "sess-b"})
-    r.http(g, "send to the reclaimed handle is delivered", "POST", "/send", {"tmux_pane": a_pane, "recipient": "tapir", "content": "welcome back"})
+           {"tmux_pane": d_pane, "requested_user": "agent-b", "agent_id": "sess-b"})
+    r.http(g, "send to the reclaimed handle is delivered", "POST", "/send", {"tmux_pane": a_pane, "recipient": "agent-b", "content": "welcome back"})
     r.screen(g, "the new pane shows it", d_pane)
-    prompt = r.tmux.window(f"sh -c 'printf \"{TRUST_SCREEN}\"; exec cat'")
-    r.http(g, "register E in a pane showing a trust prompt", "POST", "/register", {"tmux_pane": prompt, "requested_user": "ibis"})
-    r.http(g, "send to a pane at a trust prompt is not pasted", "POST", "/send", {"tmux_pane": a_pane, "recipient": "ibis", "content": "would answer the prompt"})
+    prompt = r.tmux.window(f"sh -c 'stty -echo; printf \"{TRUST_SCREEN}\"; exec cat'")
+    r.http(g, "register E in a pane showing a trust prompt", "POST", "/register", {"tmux_pane": prompt, "requested_user": "agent-e"})
+    r.http(g, "send to a pane at a trust prompt is not pasted", "POST", "/send", {"tmux_pane": a_pane, "recipient": "agent-e", "content": "would answer the prompt"})
     r.screen(g, "the prompt pane is unchanged", prompt)
 
     g = "messages"
     r.http(g, "GET /messages", "GET", "/messages")
-    r.http(g, "GET /messages?user=tapir&limit=2", "GET", "/messages?user=tapir&limit=2")
+    r.http(g, "GET /messages?user=agent-b&limit=2", "GET", "/messages?user=agent-b&limit=2")
     r.http(g, "GET /messages?id=2 (has reply preview)", "GET", "/messages?id=2")
     r.http(g, "GET /messages?id=999", "GET", "/messages?id=999")
 
@@ -174,7 +181,7 @@ def scenarios(r: Run) -> None:
     r.http(g, "create: assigned to A by B (notice is delivered)", "POST", "/tasks",
            {"tmux_pane": d_pane, "title": "second", "assignee": A, "depends_on": [1, 1]})
     r.screen(g, "pane A shows the task notice", a_pane)
-    r.http(g, "create: owner assigns an offline agent (task still made)", "POST", "/tasks", {"title": "third", "assignee": "newt"})
+    r.http(g, "create: owner assigns an offline agent (task still made)", "POST", "/tasks", {"title": "third", "assignee": "agent-d"})
     r.http(g, "create: unknown dependency", "POST", "/tasks", {"title": "x", "depends_on": [42]})
     r.http(g, "create: unregistered assignee", "POST", "/tasks", {"title": "x", "assignee": "nobody"})
     r.http(g, "create: unknown team", "POST", "/tasks", {"title": "x", "team_id": 5})
@@ -186,7 +193,7 @@ def scenarios(r: Run) -> None:
            {"tmux_pane": a_pane, "status": "picked_up", "worktree": "/tmp/wt"})
     r.http(g, "update: done without a note is refused", "PATCH", "/tasks/1", {"status": "done"})
     r.http(g, "update: done with a note", "PATCH", "/tasks/1", {"status": "done", "note": " ran the tests "})
-    r.http(g, "update: reassign (notice goes to the new assignee)", "PATCH", "/tasks/1", {"assignee": "tapir", "title": " renamed "})
+    r.http(g, "update: reassign (notice goes to the new assignee)", "PATCH", "/tasks/1", {"assignee": "agent-b", "title": " renamed "})
     r.screen(g, "pane of the new assignee shows the notice", d_pane)
     r.http(g, "update: clear description, worktree and assignee", "PATCH", "/tasks/1", {"description": "  ", "worktree": None, "assignee": None})
     r.http(g, "update: depend on itself", "PATCH", "/tasks/2", {"depends_on": [2]})
@@ -204,7 +211,7 @@ def scenarios(r: Run) -> None:
         "task": sorted(state["tasks"][0]), "node": sorted(state["nodes"][0]),
     })
     r.http(g, "GET /api/state?limit=2", "GET", "/api/state?limit=2")
-    r.http(g, f"GET /api/peek/{'{'}C{'}'} (extra feature)", "GET", "/api/peek/gecko")
+    r.http(g, f"GET /api/peek/{'{'}C{'}'} (extra feature)", "GET", "/api/peek/agent-c")
     r.http(g, "GET /api/peek of an unknown agent", "GET", "/api/peek/nobody")
 
     g = "static and errors"
@@ -239,6 +246,23 @@ def scenarios(r: Run) -> None:
     conn.close()
 
 
+def monitor_difference(work: Path, tmuxes: list[Tmux]) -> tuple[str, str, object, object]:
+    """A difference that is expected: the Python hub's monitor watches each
+    pane and reports what the agent is doing. The Rust hub has no monitor."""
+    sides = []
+    for kind, tmux in zip(("python", "rust"), tmuxes):
+        pane = tmux.start(1)[0]
+        hub = Hub(kind, work / kind / "monitor.sqlite", tmux, monitor=True)
+        try:
+            hub.call("POST", "/register", {"tmux_pane": pane, "requested_user": "agent-m"})
+            time.sleep(12)  # two monitor ticks at the default 5 s
+            sides.append(hub.call("GET", "/api/state")[1]["recipients"][0]["activity"]["status"])
+        finally:
+            hub.stop()
+            tmux.kill()
+    return ("known difference", "activity of a live agent after two monitor ticks", *sides)
+
+
 def real_db(py: Hub, rs: Hub) -> list[tuple[str, str, object, object]]:
     """Read-only routes on two copies of a real database. Counts only."""
     out = []
@@ -265,6 +289,8 @@ def differences(a, b, path="") -> list[str]:
         return [f"{path or '.'}: {type(a).__name__} vs {type(b).__name__}"]
     if isinstance(a, dict):
         found = [f"{path}.{k}: only in {'python' if k in a else 'rust'}" for k in sorted(set(a) ^ set(b))]
+        if not found and list(a) != list(b):
+            found = [f"{path or '.'}: same keys in another order"]
         return found + [d for k in sorted(set(a) & set(b)) for d in differences(a[k], b[k], f"{path}.{k}")]
     if isinstance(a, list):
         if len(a) != len(b):
@@ -294,6 +320,9 @@ def main() -> int:
                 run.hub.stop()
             runs[kind] = run
         rows = [(g, n, p, r) for (g, n, p), (_, _, r) in zip(runs["python"].normalized(), runs["rust"].normalized(), strict=True)]
+        for tmux in tmuxes:
+            tmux.kill()
+        rows.append(monitor_difference(work, tmuxes))
         if args.real_db:
             assert ".agent-swarm" not in str(args.real_db.resolve()), "give a copy, never the live database"
             hubs = []
@@ -334,7 +363,7 @@ def main() -> int:
     synthetic = [{"group": g, "step": n, "python": p, "rust": r} for g, n, p, r in rows if g != "real database copy"]
     (work / "steps.json").write_text(json.dumps(synthetic, indent=1, ensure_ascii=False))
     print(f"\nsteps: {work / 'steps.json'}")
-    return 1 if failed else 0
+    return 1 if any(group != "known difference" for group, _, _ in failed) else 0
 
 
 if __name__ == "__main__":
