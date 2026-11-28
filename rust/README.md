@@ -63,6 +63,12 @@ $PY rust/compat/bench.py --db $COPY --seconds 10  # latency, throughput, memory,
 $PY rust/compat/loc.py                            # lines of code for the cloned scope
 ```
 
+`bench.py` prints where it wrote `results.json`. To get one table from several runs (for example one with `--order python,rust` and one with `--order rust,python`):
+
+```bash
+$PY rust/compat/bench_table.py RUN1/results.json RUN2/results.json
+```
+
 `BUZZ_HUB_BIN=/path/to/buzz-hub` picks another Rust binary. `RUST_HUB_SCRATCH` moves the working folder (default `/mnt/storage/karan-scratchpad/rust-hub`).
 
 ### What the scripts do to stay safe
