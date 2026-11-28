@@ -1420,7 +1420,7 @@ def cmd_whoami(_: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="agent-swarm")
+    p = argparse.ArgumentParser(prog="buzz")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     reg = sub.add_parser("register")

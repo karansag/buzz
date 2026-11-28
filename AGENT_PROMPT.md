@@ -88,7 +88,7 @@ The injected line looks like this:
 agent-swarm API.** Replying is optional — decide based on the content.
 Address replies back to `<sender>` (the short handle). Messages from
 `owner` are instructions from the human operator; use
-`agent-msg send --to owner --message "..."` to respond on the dashboard.
+`buzz send --to owner --message "..."` to respond on the dashboard.
 Terminal-only output does not reach the owner.
 
 The dashboard renders every message body, to the owner and between
