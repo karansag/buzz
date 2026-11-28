@@ -467,7 +467,7 @@ impl Cx<'_> {
     }
 
     pub fn recipients(&self, q: &Body) -> Api<Value> {
-        let mut out = json!({"recipients": self.annotated_recipients()?});
+        let mut out = object([("recipients", list(self.annotated_recipients()?))]);
         if q.flag("include_retired_sessions") == Some(true) {
             let sessions: Vec<Value> = self
                 .db
@@ -688,11 +688,11 @@ impl Cx<'_> {
                 None => fail(404, json!({"error": format!("no message {id}")})),
             };
         }
-        Ok(json!({"messages": self.db.messages(q.str("user"), q.int("limit").unwrap_or(50))?}))
+        Ok(object([("messages", list(self.db.messages(q.str("user"), q.int("limit").unwrap_or(50))?))]))
     }
 
     pub fn tasks_list(&self) -> Api<Value> {
-        Ok(json!({"tasks": self.db.tasks()?}))
+        Ok(object([("tasks", list(self.db.tasks()?))]))
     }
 
     fn require_registered_assignee(&self, assignee: Option<&str>) -> Api<()> {
@@ -905,18 +905,18 @@ impl Cx<'_> {
                 json!({"archive_id": r["archive_id"], "original_id": r["original_id"], "retired_at": r["retired_at"], "summaries": lines})
             })
             .collect();
-        Ok(json!({
-            "now": db::now(),
-            "recipients": recipients,
-            "retired_agents": retired,
-            "nodes": nodes,
-            "messages": messages,
-            "pins": self.db.pins()?,
-            "tasks": self.db.tasks()?,
-            "teams": teams,
-            "supervisor": self.db.supervisor()?,
-            "tabs": [],
-        }))
+        Ok(object([
+            ("now", json!(db::now())),
+            ("recipients", list(recipients)),
+            ("retired_agents", Value::Array(retired)),
+            ("nodes", Value::Array(nodes)),
+            ("messages", list(messages)),
+            ("pins", list(self.db.pins()?)),
+            ("tasks", list(self.db.tasks()?)),
+            ("teams", list(teams)),
+            ("supervisor", self.db.supervisor()?),
+            ("tabs", json!([])),
+        ]))
     }
 
     /// The agent's visible screen, with colors, for the dashboard.
@@ -932,6 +932,17 @@ impl Cx<'_> {
         let label = text(&recipient, "pane_label").filter(|l| !l.is_empty()).unwrap_or(pane);
         Ok(json!({"user_id": user_id, "tmux_pane": pane, "pane_label": label, "text": screen, "error": err}))
     }
+}
+
+/// A JSON array of rows, moved in. `json!` would copy every row instead,
+/// which costs about a millisecond per megabyte.
+fn list(rows: Vec<Obj>) -> Value {
+    Value::Array(rows.into_iter().map(Value::Object).collect())
+}
+
+/// A JSON object with its keys in the order given, values moved in.
+fn object<const N: usize>(fields: [(&str, Value); N]) -> Value {
+    Value::Object(fields.into_iter().map(|(key, value)| (key.to_string(), value)).collect())
 }
 
 /// Python's `except HTTPException: pass`: a notice that cannot be delivered

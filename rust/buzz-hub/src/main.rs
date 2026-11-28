@@ -27,6 +27,14 @@ use sha2::{Digest, Sha256};
 use api::{Api, ApiError, Cx, Principal};
 use validate::{opt, req, validate, Body, Field, Kind, INT, STR};
 
+/// Optional (`--features mimalloc`): responses are megabytes of small
+/// strings built on many threads, and glibc's allocator contends there.
+/// It is off by default because it holds more memory; rust/REPORT.md has
+/// both measurements.
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub struct App {
     pool: db::Pool,
     db_path: String,
