@@ -74,6 +74,24 @@ function replySnippet(message, limit = 100) {
 	return text.length > limit ? `${text.slice(0, limit)}…` : text;
 }
 //#endregion
+//#region web/src/context.js
+function contextChip(context) {
+	if (!context) return null;
+	const { percent, window } = context;
+	const span = window ? ` of a ${window}-token window` : "";
+	if (typeof percent !== "number") return {
+		text: "context ?",
+		level: "normal",
+		title: `The harness shows no context figure right now${window ? ` (window ${window})` : ""}`
+	};
+	const shown = Number.isInteger(percent) ? String(percent) : percent.toFixed(1);
+	return {
+		text: `context ${shown}%`,
+		level: percent >= 90 ? "critical" : percent >= 70 ? "warn" : "normal",
+		title: `Context window ${shown}% full${span}, as the harness's own footer shows it`
+	};
+}
+//#endregion
 //#region ../agent-swarm/node_modules/preact/dist/preact.module.js
 var n$1;
 var l$1;
@@ -513,6 +531,1195 @@ function C(n, t) {
 }
 function D(n, t) {
 	return "function" == typeof t ? t(n) : t;
+}
+//#endregion
+//#region web/src/machines.js
+var COLORS = [
+	"#80bfff",
+	"#c4a0f5",
+	"#91a4ee",
+	"#ed9bc4",
+	"#adc87f",
+	"#edba83",
+	"#65d5c0",
+	"#d2bd79"
+];
+var machineName = (name) => name || "Unknown machine";
+function machineColor(name) {
+	let hash = 2166136261;
+	for (const c of machineName(name)) hash = Math.imul(hash ^ c.codePointAt(0), 16777619);
+	return COLORS[(hash >>> 0) % COLORS.length];
+}
+function machineList(nodes = [], recipients = []) {
+	const all = new Map(nodes.map((n) => [machineName(n.name), {
+		...n,
+		name: machineName(n.name)
+	}]));
+	for (const r of recipients) {
+		const name = machineName(r.node);
+		if (!all.has(name)) all.set(name, {
+			name,
+			connected: false,
+			missing: true
+		});
+	}
+	return [...all.values()].map((n) => {
+		const agents = recipients.filter((r) => machineName(r.node) === n.name);
+		return {
+			...n,
+			total: agents.length,
+			live: agents.filter((r) => r.pane_alive).length
+		};
+	}).sort((a, b) => Number(!!b.local) - Number(!!a.local) || a.name.localeCompare(b.name));
+}
+//#endregion
+//#region web/src/agent-route.js
+var AGENT_ROUTE = "#/agent/";
+function agentHash(user, messageId = null) {
+	const base = `${AGENT_ROUTE}${encodeURIComponent(user)}`;
+	return messageId ? `${base}?m=${messageId}` : base;
+}
+function messageParam(query) {
+	const value = new URLSearchParams(query).get("m");
+	return value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null;
+}
+function showAgentMessage(user, messageId) {
+	history.replaceState(null, "", agentHash(user, messageId));
+	const event = typeof HashChangeEvent === "function" ? new HashChangeEvent("hashchange") : new Event("hashchange");
+	dispatchEvent(event);
+}
+function parseAgentRoute(hash = "") {
+	if (!hash.startsWith("#/agent/")) return null;
+	const rest = hash.slice(8);
+	const cut = rest.indexOf("?");
+	const raw = cut < 0 ? rest : rest.slice(0, cut);
+	let user = raw;
+	try {
+		user = decodeURIComponent(raw);
+	} catch {}
+	if (!user) return null;
+	return {
+		user,
+		messageId: cut < 0 ? null : messageParam(rest.slice(cut + 1))
+	};
+}
+//#endregion
+//#region web/src/shared.js
+var POLL_MS$1 = 2e3;
+var PEEK_MS = 2e3;
+var TASK_DRAG_TYPE = "application/x-agent-swarm-task";
+var JSONH = { "content-type": "application/json" };
+var jsonInit = (method, body) => ({
+	method,
+	headers: JSONH,
+	body: JSON.stringify(body)
+});
+var errorText = (body) => [body?.detail?.error, body?.detail?.detail].filter(Boolean).join(" — ");
+async function controlRequest(url, init = { method: "POST" }) {
+	try {
+		const response = await fetch(url, init);
+		const body = await response.json().catch(() => null);
+		if (response.ok && body?.ok === true) return {
+			ok: true,
+			body
+		};
+		return {
+			ok: false,
+			error: body?.detail?.status === "unknown" || !body?.detail?.error ? null : errorText(body)
+		};
+	} catch {
+		return {
+			ok: false,
+			error: null
+		};
+	}
+}
+async function stopRequest(user) {
+	const result = await controlRequest(`/agents/${encodeURIComponent(user)}/stop`);
+	if (result.ok) return result;
+	return {
+		ok: false,
+		error: result.error === null ? "Stop not confirmed. Check the agent's status before retrying." : `Could not stop agent: ${result.error}`
+	};
+}
+async function setAgentTeam(user, teamId) {
+	return !!(await fetch(`/agents/${encodeURIComponent(user)}/team`, jsonInit("POST", { team_id: teamId })).catch(() => null))?.ok;
+}
+var IS_MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || "");
+var platformModifier = (e) => IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+function stopAgentPrompt(agent) {
+	return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`;
+}
+var HARNESSES = Object.freeze({
+	claude: {
+		key: "claude",
+		label: "Claude",
+		color: "#d8905f",
+		mark: "✳"
+	},
+	codex: {
+		key: "codex",
+		label: "Codex",
+		color: "#56b4e9",
+		mark: "◇"
+	},
+	pi: {
+		key: "pi",
+		label: "Pi",
+		color: "#3cb44b",
+		mark: "π"
+	},
+	agy: {
+		key: "agy",
+		label: "Antigravity",
+		color: "#a78bfa",
+		mark: "▲"
+	},
+	hermes: {
+		key: "hermes",
+		label: "Hermes",
+		color: "#e5c14f",
+		mark: "☿"
+	},
+	generic: {
+		key: "generic",
+		label: "Generic",
+		color: "#9aa1a8",
+		mark: "▪"
+	}
+});
+function harnessStyle(flavor) {
+	return HARNESSES[String(flavor || "generic").toLowerCase()] || HARNESSES.generic;
+}
+function harnessChoices(recipients = []) {
+	const generic = recipients.some((r) => r.pane_alive && harnessStyle(r.flavor).key === "generic");
+	return Object.values(HARNESSES).filter((h) => h.key !== "generic" || generic);
+}
+function agentShown(r, machine, harness) {
+	return (machine === null || machineName(r.node) === machine) && (harness === null || harnessStyle(r.flavor).key === harness);
+}
+function HarnessFilter({ recipients, harness, setHarness }) {
+	return m$1`<span class="harness-filter" role="group" aria-label="Filter agents by harness">
+    ${harnessChoices(recipients).map((h) => m$1`<button key=${h.key} type="button" class="harness-swatch"
+      style=${`--harness:${h.color}`} aria-pressed=${harness === h.key} aria-label=${`Only ${h.label} agents`}
+      title=${harness === h.key ? `Showing only ${h.label} agents. Click to show all.` : `Show only ${h.label} agents`}
+      onClick=${() => setHarness(harness === h.key ? null : h.key)}>${h.mark}</button>`)}
+  </span>`;
+}
+var WORKING_HALO = {
+	color: "#9be879",
+	fill: "rgba(155,232,121,.14)"
+};
+var STATE = {
+	working: {
+		cls: "working",
+		word: "working",
+		color: "var(--state-working)"
+	},
+	needs_attention: {
+		cls: "attention",
+		word: "needs attention",
+		color: "var(--state-attention)"
+	},
+	idle: {
+		cls: "idle",
+		word: "idle",
+		color: "var(--state-idle)"
+	},
+	unknown: {
+		cls: "unknown",
+		word: "unknown",
+		color: "var(--state-unknown)"
+	},
+	stopped: {
+		cls: "stopped",
+		word: "stopped",
+		color: "var(--state-stopped)"
+	}
+};
+function agentStatus(r) {
+	if (!r.pane_alive) return "stopped";
+	const s = r.activity && r.activity.status;
+	if (s && s !== "unknown") return s;
+	return "unknown";
+}
+var ANIMAL_EMOJI = {
+	otter: "🦦",
+	badger: "🦡",
+	panda: "🐼",
+	raccoon: "🦝",
+	hedgehog: "🦔",
+	viper: "🐍",
+	gecko: "🦎",
+	newt: "🦎",
+	salamander: "🦎",
+	capybara: "🦫",
+	manatee: "🦭",
+	lemur: "🐒",
+	kestrel: "🦅",
+	magpie: "🐦‍⬛",
+	ibis: "🦩",
+	heron: "🪿",
+	puffin: "🐧",
+	narwhal: "🐳",
+	axolotl: "🐟",
+	quokka: "🐨",
+	wombat: "🐨",
+	dormouse: "🐁",
+	shrew: "🐁",
+	fennec: "🦊",
+	mongoose: "🦦",
+	stoat: "🦦",
+	marten: "🦦",
+	ferret: "🦦",
+	ocelot: "🐆",
+	pangolin: "🦎",
+	tapir: "🐗",
+	civet: "🐱"
+};
+function hue(name) {
+	let h = 0;
+	for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
+	return h;
+}
+function rel(ts, now) {
+	const d = Math.max(0, now - ts);
+	if (d < 50) return "just now";
+	if (d < 3600) return `${Math.round(d / 60)}m ago`;
+	if (d < 86400) return `${Math.round(d / 3600)}h ago`;
+	return `${Math.round(d / 86400)}d ago`;
+}
+var SUMMARY_SOURCE = {
+	owner: "noted by you",
+	agent: "said by the agent",
+	title: "from its pane title"
+};
+function pairKey(a, b) {
+	return [a, b].sort().join(" ");
+}
+var disp = (u) => u === "owner" ? m$1`<span class="owner-name">owner</span>` : u;
+var focusHash = (u) => agentHash(u);
+async function patchTask(id, patch) {
+	try {
+		const r = await fetch(`/tasks/${id}`, jsonInit("PATCH", patch));
+		if (r.ok) return { ok: true };
+		return {
+			ok: false,
+			error: (await r.json().catch(() => null))?.detail?.error || `request failed (${r.status})`
+		};
+	} catch {
+		return {
+			ok: false,
+			error: "Update not confirmed. Refresh the board before retrying."
+		};
+	}
+}
+function Avatar({ name, size }) {
+	const base = name.replace(/-\d+$/, "");
+	const emoji = ANIMAL_EMOJI[base];
+	return m$1`<div class=${`hex ${size || ""}`} style=${`--hue: hsl(${hue(name)} 42% 58%)`}>
+    ${emoji || m$1`<span class="mono2">${base.slice(0, 2)}</span>`}
+  </div>`;
+}
+function MachineBadge({ node }) {
+	return m$1`<span class="machine-badge" style=${`--machine:${machineColor(node)}`} title=${`Machine: ${machineName(node)}`}><span class="machine-mark" aria-hidden="true"></span>${machineName(node)}</span>`;
+}
+var ERROR_RED = "#e5484d";
+function ErrorMark({ error }) {
+	return error ? m$1`<span class="agent-error-mark" title=${error} aria-label=${`error: ${error}`}>!</span>` : null;
+}
+function Bee({ node, flavor, size = "", working = false, error = null }) {
+	const harness = harnessStyle(flavor);
+	return m$1`<svg class=${`agent-bee ${size}`} style=${`--machine:${machineColor(node)}`} viewBox="0 0 56 42" role="img" aria-label=${`${machineName(node)} machine, ${harness.label} harness${working ? ", working" : ""}${error ? `, error: ${error}` : ""}`}>
+    <title>${harness.label} harness: ${harness.mark} and stripes · ${machineName(node)}: body and border</title>
+    ${working && m$1`<g class="bee-working-halo" style=${`--working:${WORKING_HALO.color}`}>
+      <circle cx="27" cy="21" r="28" fill=${WORKING_HALO.fill} stroke=${WORKING_HALO.color} stroke-width="2.5" />
+    </g>`}
+    <ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(25 23 10)" />
+    <ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(-25 23 32)" />
+    <ellipse cx="26" cy="21" rx="19" ry="10" fill=${machineColor(node)} />
+    <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7" />
+    <path d="M19 12v18M29 11v20" stroke=${harness.color} stroke-width="4" />
+    <circle cx="44" cy="21" r="6" fill="#16120c" /><circle cx="46" cy="19" r="1.3" fill="#f0e6d2" />
+    ${error && m$1`<g class="bee-error"><title>${error}</title>
+      <circle cx="46" cy="9" r="10" fill=${"#e5484d"} stroke="#16120c" stroke-width="2" />
+      <text x="46" y="14.5" text-anchor="middle" font-size="16" font-weight="800" fill="#fff">!</text>
+    </g>`}
+  </svg>`;
+}
+function retiredLabel(agent) {
+	const date = (/* @__PURE__ */ new Date(agent.retired_at * 1e3)).toLocaleDateString("en-US", {
+		month: "short",
+		day: "numeric",
+		timeZone: "UTC"
+	});
+	return `${agent.original_id} (retired ${date})`;
+}
+function newClientId() {
+	return Array.from(crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+//#endregion
+//#region web/src/owner-note.js
+function OwnerNote({ agent, refresh }) {
+	const [editing, setEditing] = d(false);
+	const [text, setText] = d("");
+	const [busy, setBusy] = d(false);
+	const [error, setError] = d("");
+	const save = async (value) => {
+		setBusy(true);
+		setError("");
+		try {
+			const response = await fetch(`/agents/${encodeURIComponent(agent.user_id)}/owner-note`, jsonInit("PUT", { text: value }));
+			if (!response.ok) {
+				const body = await response.json();
+				throw new Error(body.detail?.error || "Could not save note.");
+			}
+			setEditing(false);
+			refresh?.();
+		} catch (err) {
+			setError(err.message);
+		} finally {
+			setBusy(false);
+		}
+	};
+	return m$1`<div class="owner-note" aria-label=${`Owner note for ${agent.user_id}`}>
+    ${editing ? m$1`<form onSubmit=${(e) => {
+		e.preventDefault();
+		save(text);
+	}}>
+      <label>Your note<textarea aria-label=${`Your note for ${agent.user_id}`} maxLength="1000" rows="2"
+        value=${text} disabled=${busy} onInput=${(e) => setText(e.target.value)} /></label>
+      <div class="owner-note-actions"><button type="submit" disabled=${busy}>Save note</button>
+        <button type="button" disabled=${busy} onClick=${() => {
+		setEditing(false);
+		setError("");
+	}}>Cancel</button>
+        ${agent.owner_note && m$1`<button type="button" disabled=${busy} onClick=${() => save("")}>Clear note</button>`}</div>
+    </form>` : m$1`<button type="button" class="owner-note-edit" aria-label=${`${agent.owner_note ? "Edit" : "Add"} owner note for ${agent.user_id}`}
+      onClick=${() => {
+		setText(agent.owner_note || "");
+		setError("");
+		setEditing(true);
+	}}>
+      ${agent.owner_note ? `📌 you: ${agent.owner_note}` : "+ your note"}</button>`}
+    ${error && m$1`<span role="alert">${error}</span>`}
+  </div>`;
+}
+//#endregion
+//#region web/src/queen.js
+function queenTeam(teams, user) {
+	if (!user) return null;
+	return (Array.isArray(teams) ? teams : [teams]).find((t) => t && t.queen === user) || null;
+}
+function isQueen(teams, user) {
+	return queenTeam(teams, user) !== null;
+}
+function queenSuffix(teams, user) {
+	return isQueen(teams, user) ? " · ♛ queen" : "";
+}
+function teamOption(team) {
+	return `⬢ ${team.name} · team`;
+}
+function Crown({ teams, user, word = false, teamName = false }) {
+	const team = queenTeam(teams, user);
+	if (!team) return null;
+	const said = `queen of ${team.name}`;
+	const shown = teamName ? said : word ? "queen" : null;
+	return m$1`<span class="crown" title=${said}><span aria-hidden="true">♛</span>${shown && m$1`<span class="crown-word" aria-hidden="true">${shown}</span>`}<span class="sr-only">${said}</span></span>`;
+}
+//#endregion
+//#region web/src/storage.js
+function readStored(key) {
+	try {
+		return localStorage.getItem(key);
+	} catch {
+		return null;
+	}
+}
+function writeStored(key, value) {
+	try {
+		if (value === null) localStorage.removeItem(key);
+		else localStorage.setItem(key, value);
+	} catch {}
+}
+function readJSON(key, fallback = null) {
+	try {
+		return JSON.parse(localStorage.getItem(key) || "null") ?? fallback;
+	} catch {
+		return fallback;
+	}
+}
+function writeJSON(key, value) {
+	writeStored(key, value === null ? null : JSON.stringify(value));
+}
+//#endregion
+//#region web/src/highlight.js
+var searchWords = (query) => query.toLowerCase().split(/\s+/).filter(Boolean);
+var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var wordsRe = (words) => words.length ? new RegExp(`(${words.map(escapeRe).join("|")})`, "gi") : null;
+function hl(text, re) {
+	if (!re || !text) return text;
+	return text.split(re).map((part, i) => i % 2 ? m$1`<mark>${part}</mark>` : part);
+}
+//#endregion
+//#region web/src/quick-switch.js
+var OPENED_KEY = "agent-swarm:agent-opened";
+var OPENED_LIMIT = 200;
+function readOpened() {
+	const saved = readJSON(OPENED_KEY, {});
+	return typeof saved === "object" ? saved : {};
+}
+function noteOpened(user) {
+	const opened = {
+		...readOpened(),
+		[user]: Date.now()
+	};
+	const kept = Object.entries(opened).sort((a, b) => b[1] - a[1]).slice(0, OPENED_LIMIT);
+	writeJSON(OPENED_KEY, Object.fromEntries(kept));
+}
+function switchOptions(state, mode, query, opened = {}) {
+	if (!state) return [];
+	const teams = state.teams || [];
+	const agents = state.recipients;
+	let options;
+	if (mode === "teams") options = teams.map((team) => {
+		const members = agents.filter((a) => a.team_id === team.id).sort((a, b) => Number(b.pane_alive) - Number(a.pane_alive) || Number(b.user_id === team.queen) - Number(a.user_id === team.queen) || a.user_id.localeCompare(b.user_id));
+		const target = members[0];
+		return {
+			id: `team-${team.id}`,
+			name: team.name,
+			target,
+			detail: target ? `${members.filter((a) => a.pane_alive).length} live · opens ${target.user_id}${queenSuffix(teams, target.user_id)}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
+			search: [team.name, ...members.map((a) => a.user_id)].join(" ")
+		};
+	});
+	else options = agents.map((a) => {
+		const team = teams.find((t) => t.id === a.team_id)?.name || "no team";
+		const summary = agentPreview(a);
+		return {
+			id: `agent-${a.user_id}`,
+			name: a.user_id,
+			target: a,
+			summary,
+			detail: `${team} · ${a.node || "unknown machine"} · ${a.pane_alive ? (a.activity?.status || "online").replaceAll("_", " ") : "offline"}`,
+			search: [
+				a.user_id,
+				team,
+				a.node,
+				a.flavor,
+				a.model,
+				summary
+			].filter(Boolean).join(" ")
+		};
+	});
+	const words = searchWords(query);
+	return options.filter((o) => words.every((w) => o.search.toLowerCase().includes(w))).sort((a, b) => Number(!a.target) - Number(!b.target) || (mode === "agents" ? (opened[b.name] || 0) - (opened[a.name] || 0) : 0) || Number(!a.target?.pane_alive) - Number(!b.target?.pane_alive) || a.name.localeCompare(b.name));
+}
+function QuickSwitcher({ state, navigate }) {
+	const [mode, setMode] = d(null);
+	const [query, setQuery] = d("");
+	const [selected, setSelected] = d(null);
+	const dialog = A(null), input = A(null), previous = A(null);
+	const shortcut = IS_MAC ? "⌘" : "Ctrl+";
+	const open = (next) => {
+		if (!state) return;
+		if (!dialog.current?.open) previous.current = document.activeElement;
+		setQuery("");
+		setSelected(null);
+		setMode(next);
+	};
+	const close = () => {
+		dialog.current?.close();
+		setMode(null);
+	};
+	_(() => {
+		const onKey = (e) => {
+			if (e.isComposing || e.altKey || !platformModifier(e) || e.code !== "KeyK") return;
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			if (!e.repeat) open(e.shiftKey ? "teams" : "agents");
+		};
+		addEventListener("keydown", onKey, true);
+		return () => removeEventListener("keydown", onKey, true);
+	});
+	_(() => {
+		if (mode) {
+			if (!dialog.current.open) dialog.current.showModal();
+			input.current?.focus();
+		}
+	}, [mode]);
+	const options = switchOptions(state, mode, query, T(() => mode ? readOpened() : {}, [mode]));
+	const enabled = options.filter((o) => o.target);
+	const current = enabled.find((o) => o.id === selected) || enabled[0];
+	_(() => {
+		if (mode && current) document.getElementById(`switch-${current.id}`)?.scrollIntoView({ block: "nearest" });
+	}, [mode, current?.id]);
+	const choose = (option) => {
+		if (!option?.target) return;
+		close();
+		navigate(option.target.user_id, previous.current);
+	};
+	const onKey = (e) => {
+		e.stopPropagation();
+		if (e.isComposing) return;
+		if (e.key === "Escape") {
+			e.preventDefault();
+			close();
+		}
+		if (["ArrowDown", "ArrowUp"].includes(e.key)) {
+			e.preventDefault();
+			if (enabled.length) {
+				const index = enabled.findIndex((o) => o.id === current?.id);
+				setSelected(enabled[(index + (e.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length].id);
+			}
+		}
+		if (e.key === "Enter" && e.target === input.current) {
+			e.preventDefault();
+			choose(current);
+		}
+	};
+	return m$1`<div class="quick-switch-launchers">
+    <button type="button" class="mini" disabled=${!state} onClick=${() => open("teams")} title=${`Switch teams (${shortcut}Shift+K)`}>teams <kbd>${shortcut}⇧K</kbd></button>
+    <button type="button" class="mini" disabled=${!state} onClick=${() => open("agents")} title=${`Switch agents (${shortcut}K)`}>agents <kbd>${shortcut}K</kbd></button>
+    <dialog class="quick-switch" ref=${dialog} aria-labelledby="switch-title" onKeyDown=${onKey}
+      onCancel=${(e) => {
+		e.preventDefault();
+		close();
+	}}>
+      <div class="quick-switch-head"><h2 id="switch-title">${mode === "teams" ? "Switch team" : "Switch agent"}</h2>
+        <button type="button" class="mini" onClick=${close}>close</button></div>
+      <input ref=${input} type="search" aria-label=${mode === "teams" ? "Find team" : "Find agent"}
+        role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="switch-results"
+        aria-activedescendant=${current ? `switch-${current.id}` : void 0}
+        placeholder=${mode === "teams" ? "Search teams…" : "Search name, team, machine, harness, note, or status…"}
+        value=${query} onInput=${(e) => {
+		setQuery(e.target.value);
+		setSelected(null);
+	}} />
+      <div id="switch-results" role="listbox" aria-label="Matches" class="quick-switch-results">
+        ${options.map((o) => m$1`<div key=${o.id} id=${`switch-${o.id}`} role="option" aria-selected=${current?.id === o.id}
+          aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
+          onClick=${() => choose(o)}>
+          ${o.target && m$1`<${Bee} node=${o.target.node} flavor=${o.target.flavor} error=${o.target.activity?.error} size="small" working=${o.target.activity?.status === "working"} />`}
+          <span><b>${o.name}</b>${mode === "agents" && m$1`<${Crown} teams=${state.teams} user=${o.target?.user_id} word=${true} />`}<small>${o.detail}</small>
+            ${o.summary && m$1`<small class="quick-switch-summary" title=${o.summary}>${o.summary}</small>`}</span>
+        </div>`)}
+        ${!options.length && m$1`<p class="empty">No matches.</p>`}
+      </div>
+      <p class="quick-switch-help">↑ ↓ select · Enter open · Esc close</p>
+    </dialog>
+  </div>`;
+}
+//#endregion
+//#region web/src/history-spans.js
+function addSpan(spans, lo, hi) {
+	const merged = [];
+	for (const span of [...spans, {
+		lo,
+		hi
+	}].sort((a, b) => a.lo - b.lo)) {
+		const last = merged[merged.length - 1];
+		if (last && span.lo <= last.hi + 1) last.hi = Math.max(last.hi, span.hi);
+		else merged.push({ ...span });
+	}
+	return merged;
+}
+function spanOf(ids) {
+	return ids.length ? {
+		lo: Math.min(...ids),
+		hi: Math.max(...ids)
+	} : null;
+}
+function gapsOf(spans) {
+	return spans.slice(1).map((span, i) => ({
+		after: spans[i].hi,
+		before: span.lo
+	}));
+}
+//#endregion
+//#region web/src/agent-history.js
+var PAGE = 300;
+var FILL_PAGES = 10;
+function useAgentHistory(user, returnState = null) {
+	const [history, setHistory] = d(() => returnState?.history ?? {
+		messages: [],
+		loaded: false,
+		more: false,
+		busy: false,
+		error: "",
+		gaps: []
+	});
+	const [caughtUp, setCaughtUp] = d(false);
+	const [lookup, setLookup] = d({
+		id: null,
+		status: "idle"
+	});
+	const commands = A({
+		older: () => {},
+		around: () => {},
+		gap: () => {}
+	});
+	h(() => {
+		let active = true, polling = false, busy = false;
+		let spans = returnState?.spans ?? [];
+		let newest = returnState?.newest ?? null;
+		const abort = new AbortController();
+		const read = async (query) => {
+			const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages?${query}`, { signal: abort.signal });
+			if (!response.ok) throw Error("History unavailable");
+			const page = await response.json();
+			if (!Array.isArray(page.messages) || typeof page.has_more !== "boolean") throw Error("Invalid history");
+			return page;
+		};
+		const oldest = () => spans.length ? spans[0].lo : null;
+		const merge = (page, more) => {
+			if (!active) return;
+			const ids = page.messages.map((m) => m.id);
+			const span = spanOf(ids);
+			if (span) {
+				spans = addSpan(spans, span.lo, span.hi);
+				newest = Math.max(newest ?? 0, ...ids);
+			} else if (newest === null) newest = 0;
+			setHistory((prev) => ({
+				...prev,
+				loaded: true,
+				error: "",
+				more: more === void 0 ? prev.more : more,
+				messages: [...new Map([...prev.messages, ...page.messages].map((m) => [m.id, m])).values()]
+			}));
+			checkGaps();
+		};
+		const fail = (message) => {
+			if (active) setHistory((prev) => ({
+				...prev,
+				error: message
+			}));
+		};
+		const counts = /* @__PURE__ */ new Map();
+		const showGap = (gap, count) => setHistory((prev) => prev.gaps.some((g) => g.after === gap.after && g.before === gap.before) ? prev : {
+			...prev,
+			gaps: [...prev.gaps, {
+				...gap,
+				count
+			}].sort((a, b) => a.after - b.after)
+		});
+		const pruneGaps = (candidates) => setHistory((prev) => ({
+			...prev,
+			gaps: prev.gaps.filter((gap) => candidates.some((c) => c.after === gap.after && c.before === gap.before))
+		}));
+		const verify = async (gap) => {
+			const key = `${gap.after}:${gap.before}`;
+			if (counts.has(key)) {
+				const known = counts.get(key);
+				if (known) showGap(gap, known);
+				return;
+			}
+			counts.set(key, 0);
+			try {
+				const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages/count?after=${gap.after}&before=${gap.before}`, { signal: abort.signal });
+				if (!response.ok) throw Error("count unavailable");
+				const { count } = await response.json();
+				if (!active) return;
+				counts.set(key, count);
+				if (count) showGap(gap, count);
+			} catch {
+				counts.delete(key);
+			}
+		};
+		const checkGaps = () => {
+			const candidates = gapsOf(spans);
+			pruneGaps(candidates);
+			for (const gap of candidates) verify(gap);
+		};
+		const poll = async () => {
+			if (polling) return;
+			polling = true;
+			try {
+				const initial = newest === null;
+				let page = await read(initial ? `limit=${PAGE}` : `after=${newest}&limit=${PAGE}`);
+				merge(page, initial ? page.has_more : void 0);
+				while (active && !initial && page.has_more) {
+					page = await read(`after=${newest}&limit=${PAGE}`);
+					merge(page);
+				}
+				if (active) setCaughtUp(true);
+			} catch {
+				fail("Could not load conversation history. Retrying…");
+			} finally {
+				polling = false;
+			}
+		};
+		commands.current.older = async () => {
+			const before = oldest();
+			if (busy || before === null) return;
+			busy = true;
+			setHistory((prev) => ({
+				...prev,
+				busy: true
+			}));
+			try {
+				const page = await read(`before=${before}&limit=${PAGE}`);
+				merge(page, page.has_more);
+			} catch {
+				fail("Could not load older messages. Please try again.");
+			} finally {
+				busy = false;
+				if (active) setHistory((prev) => ({
+					...prev,
+					busy: false
+				}));
+			}
+		};
+		commands.current.around = async (mid) => {
+			if (busy) return;
+			busy = true;
+			setLookup({
+				id: mid,
+				status: "loading"
+			});
+			setHistory((prev) => ({
+				...prev,
+				busy: true
+			}));
+			try {
+				const page = await read(`around=${mid}&limit=${PAGE}`);
+				const found = page.messages.some((m) => m.id === mid);
+				const below = oldest();
+				const extendsBottom = page.messages.length > 0 && (below === null || Math.min(...page.messages.map((m) => m.id)) < below);
+				merge(page, extendsBottom ? page.has_more : void 0);
+				setLookup({
+					id: mid,
+					status: found ? "found" : "missing"
+				});
+			} catch {
+				setLookup({
+					id: mid,
+					status: "failed"
+				});
+			} finally {
+				busy = false;
+				if (active) setHistory((prev) => ({
+					...prev,
+					busy: false
+				}));
+			}
+		};
+		commands.current.gap = async (gap) => {
+			if (busy) return;
+			busy = true;
+			setHistory((prev) => ({
+				...prev,
+				busy: true
+			}));
+			try {
+				let from = gap.after;
+				for (let page = 0; page < FILL_PAGES && active && from < gap.before; page += 1) {
+					const body = await read(`after=${from}&limit=${PAGE}`);
+					const ids = body.messages.map((m) => m.id);
+					merge(body);
+					if (!ids.length) break;
+					from = Math.max(...ids);
+					if (!body.has_more) break;
+				}
+			} catch {
+				fail("Could not load the missing messages. Please try again.");
+			} finally {
+				busy = false;
+				if (active) setHistory((prev) => ({
+					...prev,
+					busy: false
+				}));
+			}
+		};
+		poll();
+		const timer = setInterval(poll, POLL_MS$1);
+		return () => {
+			active = false;
+			abort.abort();
+			clearInterval(timer);
+			if (returnState) Object.assign(returnState, {
+				spans,
+				newest
+			});
+		};
+	}, [user]);
+	if (returnState) returnState.history = {
+		...history,
+		busy: false
+	};
+	return {
+		...history,
+		caughtUp,
+		lookup,
+		loadOlder: () => commands.current.older(),
+		loadAround: (mid) => commands.current.around(mid),
+		loadGap: (gap) => commands.current.gap(gap)
+	};
+}
+//#endregion
+//#region web/src/conversation-search.js
+var PAGE_SIZE = 100;
+function useConversationSearch(user, returnState = null) {
+	const [open, setOpen] = d(() => returnState?.searchOpen ?? false);
+	const [query, setQuery] = d(() => returnState?.searchQuery ?? "");
+	const restoredQuery = A(returnState?.searchOpen ? returnState.searchQuery?.trim() : null);
+	if (returnState) Object.assign(returnState, {
+		searchOpen: open,
+		searchQuery: query
+	});
+	const [result, setResult] = d({
+		total: 0,
+		index: 0,
+		busy: false,
+		error: "",
+		current: null
+	});
+	const [terms, setTerms] = d(null);
+	const input = A(null), previousFocus = A(null), session = A(null);
+	const show = () => {
+		if (!open) previousFocus.current = document.activeElement;
+		setOpen(true);
+		requestAnimationFrame(() => {
+			input.current?.focus();
+			input.current?.select();
+		});
+	};
+	const close = () => {
+		session.current?.abort.abort();
+		setOpen(false);
+		if (previousFocus.current?.isConnected) previousFocus.current.focus({ preventScroll: true });
+	};
+	_(() => {
+		const key = (event) => {
+			if (event.isComposing || document.querySelector(".quick-switch[open], dialog.page-dialog[open]")) return;
+			if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "f") {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				show();
+			} else if (open && event.key === "Escape") {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				close();
+			}
+		};
+		addEventListener("keydown", key, true);
+		return () => removeEventListener("keydown", key, true);
+	}, [open, user]);
+	const read = async (s, index) => {
+		const offset = Math.floor(index / PAGE_SIZE) * PAGE_SIZE;
+		if (!s.pages.has(offset)) {
+			const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages/search?${new URLSearchParams({
+				q: s.query,
+				limit: PAGE_SIZE,
+				offset
+			})}`, { signal: s.abort.signal });
+			if (!response.ok) throw Error("Could not search this conversation. Please try again.");
+			const page = await response.json();
+			if (!Array.isArray(page.matches) || !Number.isInteger(page.total)) throw Error("Invalid search response.");
+			s.total = page.total;
+			if (Array.isArray(page.terms) && session.current === s) setTerms(page.terms);
+			s.pages.set(offset, page.matches);
+		}
+		return s.pages.get(offset)[index - offset] || null;
+	};
+	h(() => {
+		const s = {
+			query: query.trim(),
+			pages: /* @__PURE__ */ new Map(),
+			abort: new AbortController(),
+			index: 0,
+			total: 0,
+			sequence: 0
+		};
+		session.current = s;
+		if (!open || restoredQuery.current !== s.query) restoredQuery.current = null;
+		setTerms(null);
+		setResult({
+			total: 0,
+			index: 0,
+			busy: open && !!s.query,
+			error: "",
+			current: null
+		});
+		if (!open || !s.query) return () => {
+			s.abort.abort();
+		};
+		const timer = setTimeout(async () => {
+			try {
+				const current = await read(s, 0);
+				if (session.current !== s || s.abort.signal.aborted) return;
+				setResult({
+					total: s.total,
+					index: 0,
+					busy: false,
+					error: "",
+					current
+				});
+				if (current && restoredQuery.current !== s.query) showAgentMessage(user, current.id);
+				restoredQuery.current = null;
+			} catch (error) {
+				if (!s.abort.signal.aborted) setResult({
+					total: 0,
+					index: 0,
+					busy: false,
+					error: error.message,
+					current: null
+				});
+			}
+		}, 200);
+		return () => {
+			clearTimeout(timer);
+			s.abort.abort();
+		};
+	}, [
+		user,
+		query,
+		open
+	]);
+	const move = async (delta) => {
+		const s = session.current;
+		if (!s?.total || s.abort.signal.aborted) return;
+		const index = (s.index + delta + s.total) % s.total;
+		s.index = index;
+		const sequence = ++s.sequence;
+		setResult((prev) => ({
+			...prev,
+			index,
+			busy: true,
+			error: ""
+		}));
+		try {
+			const current = await read(s, index);
+			if (session.current !== s || sequence !== s.sequence || s.abort.signal.aborted) return;
+			setResult({
+				total: s.total,
+				index,
+				busy: false,
+				error: "",
+				current
+			});
+			if (current) showAgentMessage(user, current.id);
+		} catch (error) {
+			if (!s.abort.signal.aborted && sequence === s.sequence) setResult((prev) => ({
+				...prev,
+				busy: false,
+				error: error.message
+			}));
+		}
+	};
+	return {
+		open,
+		query,
+		setQuery,
+		input,
+		show,
+		close,
+		...result,
+		move,
+		words: open ? terms ?? query.trim().split(/\s+/).filter(Boolean) : []
+	};
+}
+function ConversationSearchBar({ search }) {
+	if (!search.open) return null;
+	return m$1`<div class="conversation-search" role="search" aria-label="Search this conversation">
+    <div class="conversation-search-controls">
+      <input ref=${search.input} type="search" value=${search.query} aria-label="Search conversation history"
+        placeholder='Search… "phrase" -word a OR b from:me'
+        title='Words: all must match. "exact phrase". -word or -"phrase" leaves out. a OR b: either. from:me / from:agent. after:2026-11-01, before:2026-11-10.' onInput=${(e) => search.setQuery(e.target.value)}
+        onKeyDown=${(e) => {
+		if (e.key === "Enter" && !e.isComposing) {
+			e.preventDefault();
+			e.stopPropagation();
+			search.move(e.shiftKey ? -1 : 1);
+		}
+	}} />
+      <span class="conversation-search-count" role="status">${search.busy ? "Searching…" : search.error ? "Search unavailable" : search.total ? `${search.index + 1} of ${search.total}` : search.query.trim() ? "No matches" : "Full history"}</span>
+      <button type="button" aria-label="Previous match" title="Previous match (Shift+Enter)" disabled=${!search.total || search.busy} onClick=${() => search.move(-1)}>↑</button>
+      <button type="button" aria-label="Next match" title="Next match (Enter)" disabled=${!search.total || search.busy} onClick=${() => search.move(1)}>↓</button>
+      <button type="button" aria-label="Close conversation search" title="Close search (Esc)" onClick=${search.close}>✕</button>
+    </div>
+    ${search.error && m$1`<div role="alert">${search.error}</div>`}
+  </div>`;
+}
+var highlights = /* @__PURE__ */ new Map();
+function highlightSearch(html, words) {
+	if (!words.length) return html;
+	const key = JSON.stringify([html, words]);
+	if (highlights.has(key)) return highlights.get(key);
+	const expression = new RegExp(words.slice().sort((a, b) => b.length - a.length).map(escapeRe).join("|"), "giu");
+	const root = document.createElement("div");
+	root.innerHTML = html;
+	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+	const nodes = [];
+	while (walker.nextNode()) nodes.push(walker.currentNode);
+	for (const node of nodes) {
+		const text = node.textContent;
+		expression.lastIndex = 0;
+		const matches = [...text.matchAll(expression)];
+		if (!matches.length) continue;
+		const fragment = document.createDocumentFragment();
+		let offset = 0;
+		for (const match of matches) {
+			fragment.append(document.createTextNode(text.slice(offset, match.index)));
+			const mark = document.createElement("mark");
+			mark.className = "conversation-match";
+			mark.textContent = match[0];
+			fragment.append(mark);
+			offset = match.index + match[0].length;
+		}
+		fragment.append(document.createTextNode(text.slice(offset)));
+		node.replaceWith(fragment);
+	}
+	const out = root.innerHTML;
+	if (highlights.size >= 500) highlights.delete(highlights.keys().next().value);
+	highlights.set(key, out);
+	return out;
+}
+//#endregion
+//#region web/src/board-mentions.js
+var MENTION = /(?<![A-Za-z0-9_@.-])(@[A-Za-z0-9][A-Za-z0-9-]{0,47})(?![A-Za-z0-9_-])/g;
+function mentionParts(text, members) {
+	return text.split(MENTION).map((part, i) => ({
+		text: part,
+		mention: i % 2 === 1 && members.has(part.slice(1).toLowerCase())
+	}));
+}
+function highlightBoardMentions(markup, members) {
+	if (!members?.size || !markup.includes("@")) return markup;
+	const root = document.createElement("template");
+	root.innerHTML = markup;
+	const walker = document.createTreeWalker(root.content, NodeFilter.SHOW_TEXT);
+	const matches = [];
+	while (walker.nextNode()) {
+		const node = walker.currentNode;
+		if (!node.data.includes("@")) continue;
+		const parts = mentionParts(node.data, members);
+		if (parts.some((part) => part.mention)) matches.push([node, parts]);
+	}
+	for (const [node, parts] of matches) node.replaceWith(...parts.map(({ text, mention }) => {
+		if (!mention) return document.createTextNode(text);
+		const mark = document.createElement("mark");
+		mark.className = "board-mention";
+		mark.textContent = text;
+		return mark;
+	}));
+	return root.innerHTML;
+}
+//#endregion
+//#region web/src/attachments.js
+var attachmentLabel = (name) => name.includes(".file.") ? name.slice(name.indexOf(".file.") + 6) : "Image";
+var isImage = (name) => /^[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(name);
+var MAX_FILES = 10;
+var MAX_BYTES = 10 * 1024 * 1024;
+var hasFiles = (e) => [...e.dataTransfer?.types || []].includes("Files");
+function useAttachments(files, setFiles, setStatus, scope) {
+	const [uploading, setUploading] = d(0);
+	const [dragging, setDragging] = d(false);
+	const session = A(null);
+	const filesRef = A(files);
+	filesRef.current = files;
+	h(() => {
+		const current = {
+			active: true,
+			pending: 0
+		};
+		session.current = current;
+		setUploading(0);
+		return () => {
+			current.active = false;
+		};
+	}, [scope]);
+	const addFiles = async (incoming) => {
+		const current = session.current;
+		if (!current?.active) return;
+		const batch = [...incoming || []];
+		if (filesRef.current.length + current.pending + batch.length > MAX_FILES) {
+			setStatus(`Up to ${MAX_FILES} attachments per task or message.`);
+			return;
+		}
+		current.pending += batch.length;
+		setUploading(current.pending);
+		for (const file of batch) {
+			if (!current.active) break;
+			try {
+				if (file.size > MAX_BYTES) throw Error("larger than 10 MB");
+				const response = await fetch("/attachments", {
+					method: "POST",
+					headers: {
+						"content-type": file.type || "application/octet-stream",
+						"x-attachment-filename": encodeURIComponent(file.name || "attachment")
+					},
+					body: file
+				});
+				const body = await response.json();
+				if (!response.ok || !body.name) throw Error(body.detail?.error || `upload failed (${response.status})`);
+				if (current.active) {
+					const next = [.../* @__PURE__ */ new Set([...filesRef.current, body.name])];
+					filesRef.current = next;
+					setFiles(next);
+				}
+			} catch (error) {
+				if (current.active) setStatus(`${file.name || "File"} not added: ${error.message}`);
+			} finally {
+				current.pending--;
+				if (current.active) setUploading(current.pending);
+			}
+		}
+	};
+	return {
+		uploading,
+		dragging,
+		addFiles,
+		remove: (name) => setFiles((prev) => prev.filter((x) => x !== name)),
+		onPaste: (e) => {
+			const pasted = [...e.clipboardData?.files || []];
+			if (pasted.length) {
+				e.preventDefault();
+				addFiles(pasted);
+			}
+		},
+		dropProps: {
+			onDragOver: (e) => {
+				if (hasFiles(e)) {
+					e.preventDefault();
+					setDragging(true);
+				}
+			},
+			onDragLeave: (e) => {
+				if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false);
+			},
+			onDrop: (e) => {
+				if (hasFiles(e)) {
+					e.preventDefault();
+					setDragging(false);
+					addFiles(e.dataTransfer.files);
+				}
+			}
+		}
+	};
+}
+function AttachmentLink({ name }) {
+	const [missing, setMissing] = d(false);
+	if (missing) return m$1`<span class="image-expired">Attachment unavailable</span>`;
+	return m$1`<a class=${isImage(name) ? "image-link" : "file-link"} href=${`/attachments/${name}`} target="_blank" rel="noopener" title=${isImage(name) ? "Open image" : `Download ${attachmentLabel(name)}`}>
+    ${isImage(name) ? m$1`<img src=${`/attachments/${name}`} alt="Attached image" loading="lazy" onError=${() => setMissing(true)} />` : m$1`<span aria-hidden="true">▤</span> ${attachmentLabel(name)} <span aria-hidden="true">↓</span>`}
+  </a>`;
+}
+function AttachmentList({ files = [] }) {
+	return files.length > 0 && m$1`<div class="attachment-list">${files.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}</div>`;
+}
+function AttachmentPicker({ files, controls, disabled = false }) {
+	const input = A(null);
+	return m$1`<div class="attachment-picker">
+    <div class="attachment-tools"><button type="button" class="mini" disabled=${disabled} onClick=${() => input.current?.click()}>+ attach files</button><span>Paste or drop files · 10 MB each · up to 10</span></div>
+    <input ref=${input} type="file" multiple hidden disabled=${disabled} onChange=${(e) => {
+		controls.addFiles(e.target.files);
+		e.target.value = "";
+	}} />
+    ${(files.length > 0 || controls.uploading > 0) && m$1`<div class="compose-images">${files.map((name) => m$1`<figure key=${name} class="compose-image">
+      <${AttachmentLink} name=${name} /><button type="button" class="remove" disabled=${disabled} onClick=${() => controls.remove(name)} aria-label=${`Remove ${attachmentLabel(name)}`}>×</button>
+    </figure>`)}${controls.uploading > 0 && m$1`<span role="status">Uploading ${controls.uploading}…</span>`}</div>`}
+  </div>`;
 }
 //#endregion
 //#region ../agent-swarm/node_modules/mdurl/lib/decode.mjs
@@ -8931,122 +10138,6 @@ function renderMarkdown(text) {
 	return out;
 }
 //#endregion
-//#region web/src/attachments.js
-var attachmentLabel = (name) => name.includes(".file.") ? name.slice(name.indexOf(".file.") + 6) : "Image";
-var isImage = (name) => /^[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(name);
-var MAX_FILES = 10;
-var MAX_BYTES = 10 * 1024 * 1024;
-var hasFiles = (e) => [...e.dataTransfer?.types || []].includes("Files");
-function useAttachments(files, setFiles, setStatus, scope) {
-	const [uploading, setUploading] = d(0);
-	const [dragging, setDragging] = d(false);
-	const session = A(null);
-	const filesRef = A(files);
-	filesRef.current = files;
-	h(() => {
-		const current = {
-			active: true,
-			pending: 0
-		};
-		session.current = current;
-		setUploading(0);
-		return () => {
-			current.active = false;
-		};
-	}, [scope]);
-	const addFiles = async (incoming) => {
-		const current = session.current;
-		if (!current?.active) return;
-		const batch = [...incoming || []];
-		if (filesRef.current.length + current.pending + batch.length > MAX_FILES) {
-			setStatus(`Up to ${MAX_FILES} attachments per task or message.`);
-			return;
-		}
-		current.pending += batch.length;
-		setUploading(current.pending);
-		for (const file of batch) {
-			if (!current.active) break;
-			try {
-				if (file.size > MAX_BYTES) throw Error("larger than 10 MB");
-				const response = await fetch("/attachments", {
-					method: "POST",
-					headers: {
-						"content-type": file.type || "application/octet-stream",
-						"x-attachment-filename": encodeURIComponent(file.name || "attachment")
-					},
-					body: file
-				});
-				const body = await response.json();
-				if (!response.ok || !body.name) throw Error(body.detail?.error || `upload failed (${response.status})`);
-				if (current.active) {
-					const next = [.../* @__PURE__ */ new Set([...filesRef.current, body.name])];
-					filesRef.current = next;
-					setFiles(next);
-				}
-			} catch (error) {
-				if (current.active) setStatus(`${file.name || "File"} not added: ${error.message}`);
-			} finally {
-				current.pending--;
-				if (current.active) setUploading(current.pending);
-			}
-		}
-	};
-	return {
-		uploading,
-		dragging,
-		addFiles,
-		remove: (name) => setFiles((prev) => prev.filter((x) => x !== name)),
-		onPaste: (e) => {
-			const pasted = [...e.clipboardData?.files || []];
-			if (pasted.length) {
-				e.preventDefault();
-				addFiles(pasted);
-			}
-		},
-		dropProps: {
-			onDragOver: (e) => {
-				if (hasFiles(e)) {
-					e.preventDefault();
-					setDragging(true);
-				}
-			},
-			onDragLeave: (e) => {
-				if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false);
-			},
-			onDrop: (e) => {
-				if (hasFiles(e)) {
-					e.preventDefault();
-					setDragging(false);
-					addFiles(e.dataTransfer.files);
-				}
-			}
-		}
-	};
-}
-function AttachmentLink({ name }) {
-	const [missing, setMissing] = d(false);
-	if (missing) return m$1`<span class="image-expired">Attachment unavailable</span>`;
-	return m$1`<a class=${isImage(name) ? "image-link" : "file-link"} href=${`/attachments/${name}`} target="_blank" rel="noopener" title=${isImage(name) ? "Open image" : `Download ${attachmentLabel(name)}`}>
-    ${isImage(name) ? m$1`<img src=${`/attachments/${name}`} alt="Attached image" loading="lazy" onError=${() => setMissing(true)} />` : m$1`<span aria-hidden="true">▤</span> ${attachmentLabel(name)} <span aria-hidden="true">↓</span>`}
-  </a>`;
-}
-function AttachmentList({ files = [] }) {
-	return files.length > 0 && m$1`<div class="attachment-list">${files.map((name) => m$1`<${AttachmentLink} key=${name} name=${name} />`)}</div>`;
-}
-function AttachmentPicker({ files, controls, disabled = false }) {
-	const input = A(null);
-	return m$1`<div class="attachment-picker">
-    <div class="attachment-tools"><button type="button" class="mini" disabled=${disabled} onClick=${() => input.current?.click()}>+ attach files</button><span>Paste or drop files · 10 MB each · up to 10</span></div>
-    <input ref=${input} type="file" multiple hidden disabled=${disabled} onChange=${(e) => {
-		controls.addFiles(e.target.files);
-		e.target.value = "";
-	}} />
-    ${(files.length > 0 || controls.uploading > 0) && m$1`<div class="compose-images">${files.map((name) => m$1`<figure key=${name} class="compose-image">
-      <${AttachmentLink} name=${name} /><button type="button" class="remove" disabled=${disabled} onClick=${() => controls.remove(name)} aria-label=${`Remove ${attachmentLabel(name)}`}>×</button>
-    </figure>`)}${controls.uploading > 0 && m$1`<span role="status">Uploading ${controls.uploading}…</span>`}</div>`}
-  </div>`;
-}
-//#endregion
 //#region web/src/newlines.js
 function shellNewlines(text) {
 	if (!text || text.includes("\n") || !text.includes("\\n")) return text;
@@ -9114,1097 +10205,6 @@ function ReplyPreview({ message, messages }) {
     </div>`}
     ${error && m$1`<span class="reply-error" role="alert">${error}</span>`}
   </div>`;
-}
-//#endregion
-//#region web/src/context.js
-function contextChip(context) {
-	if (!context) return null;
-	const { percent, window } = context;
-	const span = window ? ` of a ${window}-token window` : "";
-	if (typeof percent !== "number") return {
-		text: "context ?",
-		level: "normal",
-		title: `The harness shows no context figure right now${window ? ` (window ${window})` : ""}`
-	};
-	const shown = Number.isInteger(percent) ? String(percent) : percent.toFixed(1);
-	return {
-		text: `context ${shown}%`,
-		level: percent >= 90 ? "critical" : percent >= 70 ? "warn" : "normal",
-		title: `Context window ${shown}% full${span}, as the harness's own footer shows it`
-	};
-}
-//#endregion
-//#region web/src/machines.js
-var COLORS = [
-	"#80bfff",
-	"#c4a0f5",
-	"#91a4ee",
-	"#ed9bc4",
-	"#adc87f",
-	"#edba83",
-	"#65d5c0",
-	"#d2bd79"
-];
-var machineName = (name) => name || "Unknown machine";
-function machineColor(name) {
-	let hash = 2166136261;
-	for (const c of machineName(name)) hash = Math.imul(hash ^ c.codePointAt(0), 16777619);
-	return COLORS[(hash >>> 0) % COLORS.length];
-}
-function machineList(nodes = [], recipients = []) {
-	const all = new Map(nodes.map((n) => [machineName(n.name), {
-		...n,
-		name: machineName(n.name)
-	}]));
-	for (const r of recipients) {
-		const name = machineName(r.node);
-		if (!all.has(name)) all.set(name, {
-			name,
-			connected: false,
-			missing: true
-		});
-	}
-	return [...all.values()].map((n) => {
-		const agents = recipients.filter((r) => machineName(r.node) === n.name);
-		return {
-			...n,
-			total: agents.length,
-			live: agents.filter((r) => r.pane_alive).length
-		};
-	}).sort((a, b) => Number(!!b.local) - Number(!!a.local) || a.name.localeCompare(b.name));
-}
-//#endregion
-//#region web/src/agent-route.js
-var AGENT_ROUTE = "#/agent/";
-function agentHash(user, messageId = null) {
-	const base = `${AGENT_ROUTE}${encodeURIComponent(user)}`;
-	return messageId ? `${base}?m=${messageId}` : base;
-}
-function messageParam(query) {
-	const value = new URLSearchParams(query).get("m");
-	return value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null;
-}
-function showAgentMessage(user, messageId) {
-	history.replaceState(null, "", agentHash(user, messageId));
-	const event = typeof HashChangeEvent === "function" ? new HashChangeEvent("hashchange") : new Event("hashchange");
-	dispatchEvent(event);
-}
-function parseAgentRoute(hash = "") {
-	if (!hash.startsWith("#/agent/")) return null;
-	const rest = hash.slice(8);
-	const cut = rest.indexOf("?");
-	const raw = cut < 0 ? rest : rest.slice(0, cut);
-	let user = raw;
-	try {
-		user = decodeURIComponent(raw);
-	} catch {}
-	if (!user) return null;
-	return {
-		user,
-		messageId: cut < 0 ? null : messageParam(rest.slice(cut + 1))
-	};
-}
-//#endregion
-//#region web/src/shared.js
-var POLL_MS$1 = 2e3;
-var PEEK_MS = 2e3;
-var TASK_DRAG_TYPE = "application/x-agent-swarm-task";
-var JSONH = { "content-type": "application/json" };
-var jsonInit = (method, body) => ({
-	method,
-	headers: JSONH,
-	body: JSON.stringify(body)
-});
-var errorText = (body) => [body?.detail?.error, body?.detail?.detail].filter(Boolean).join(" — ");
-async function controlRequest(url, init = { method: "POST" }) {
-	try {
-		const response = await fetch(url, init);
-		const body = await response.json().catch(() => null);
-		if (response.ok && body?.ok === true) return {
-			ok: true,
-			body
-		};
-		return {
-			ok: false,
-			error: body?.detail?.status === "unknown" || !body?.detail?.error ? null : errorText(body)
-		};
-	} catch {
-		return {
-			ok: false,
-			error: null
-		};
-	}
-}
-async function stopRequest(user) {
-	const result = await controlRequest(`/agents/${encodeURIComponent(user)}/stop`);
-	if (result.ok) return result;
-	return {
-		ok: false,
-		error: result.error === null ? "Stop not confirmed. Check the agent's status before retrying." : `Could not stop agent: ${result.error}`
-	};
-}
-async function setAgentTeam(user, teamId) {
-	return !!(await fetch(`/agents/${encodeURIComponent(user)}/team`, jsonInit("POST", { team_id: teamId })).catch(() => null))?.ok;
-}
-var IS_MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || "");
-var platformModifier = (e) => IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-function stopAgentPrompt(agent) {
-	return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`;
-}
-var HARNESSES = Object.freeze({
-	claude: {
-		key: "claude",
-		label: "Claude",
-		color: "#d8905f",
-		mark: "✳"
-	},
-	codex: {
-		key: "codex",
-		label: "Codex",
-		color: "#56b4e9",
-		mark: "◇"
-	},
-	pi: {
-		key: "pi",
-		label: "Pi",
-		color: "#3cb44b",
-		mark: "π"
-	},
-	agy: {
-		key: "agy",
-		label: "Antigravity",
-		color: "#a78bfa",
-		mark: "▲"
-	},
-	hermes: {
-		key: "hermes",
-		label: "Hermes",
-		color: "#e5c14f",
-		mark: "☿"
-	},
-	generic: {
-		key: "generic",
-		label: "Generic",
-		color: "#9aa1a8",
-		mark: "▪"
-	}
-});
-function harnessStyle(flavor) {
-	return HARNESSES[String(flavor || "generic").toLowerCase()] || HARNESSES.generic;
-}
-function harnessChoices(recipients = []) {
-	const generic = recipients.some((r) => r.pane_alive && harnessStyle(r.flavor).key === "generic");
-	return Object.values(HARNESSES).filter((h) => h.key !== "generic" || generic);
-}
-function agentShown(r, machine, harness) {
-	return (machine === null || machineName(r.node) === machine) && (harness === null || harnessStyle(r.flavor).key === harness);
-}
-function HarnessFilter({ recipients, harness, setHarness }) {
-	return m$1`<span class="harness-filter" role="group" aria-label="Filter agents by harness">
-    ${harnessChoices(recipients).map((h) => m$1`<button key=${h.key} type="button" class="harness-swatch"
-      style=${`--harness:${h.color}`} aria-pressed=${harness === h.key} aria-label=${`Only ${h.label} agents`}
-      title=${harness === h.key ? `Showing only ${h.label} agents. Click to show all.` : `Show only ${h.label} agents`}
-      onClick=${() => setHarness(harness === h.key ? null : h.key)}>${h.mark}</button>`)}
-  </span>`;
-}
-var WORKING_HALO = {
-	color: "#9be879",
-	fill: "rgba(155,232,121,.14)"
-};
-var STATE = {
-	working: {
-		cls: "working",
-		word: "working",
-		color: "var(--state-working)"
-	},
-	needs_attention: {
-		cls: "attention",
-		word: "needs attention",
-		color: "var(--state-attention)"
-	},
-	idle: {
-		cls: "idle",
-		word: "idle",
-		color: "var(--state-idle)"
-	},
-	unknown: {
-		cls: "unknown",
-		word: "unknown",
-		color: "var(--state-unknown)"
-	},
-	stopped: {
-		cls: "stopped",
-		word: "stopped",
-		color: "var(--state-stopped)"
-	}
-};
-function agentStatus(r) {
-	if (!r.pane_alive) return "stopped";
-	const s = r.activity && r.activity.status;
-	if (s && s !== "unknown") return s;
-	return "unknown";
-}
-var ANIMAL_EMOJI = {
-	otter: "🦦",
-	badger: "🦡",
-	panda: "🐼",
-	raccoon: "🦝",
-	hedgehog: "🦔",
-	viper: "🐍",
-	gecko: "🦎",
-	newt: "🦎",
-	salamander: "🦎",
-	capybara: "🦫",
-	manatee: "🦭",
-	lemur: "🐒",
-	kestrel: "🦅",
-	magpie: "🐦‍⬛",
-	ibis: "🦩",
-	heron: "🪿",
-	puffin: "🐧",
-	narwhal: "🐳",
-	axolotl: "🐟",
-	quokka: "🐨",
-	wombat: "🐨",
-	dormouse: "🐁",
-	shrew: "🐁",
-	fennec: "🦊",
-	mongoose: "🦦",
-	stoat: "🦦",
-	marten: "🦦",
-	ferret: "🦦",
-	ocelot: "🐆",
-	pangolin: "🦎",
-	tapir: "🐗",
-	civet: "🐱"
-};
-function hue(name) {
-	let h = 0;
-	for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
-	return h;
-}
-function rel(ts, now) {
-	const d = Math.max(0, now - ts);
-	if (d < 50) return "just now";
-	if (d < 3600) return `${Math.round(d / 60)}m ago`;
-	if (d < 86400) return `${Math.round(d / 3600)}h ago`;
-	return `${Math.round(d / 86400)}d ago`;
-}
-var SUMMARY_SOURCE = {
-	owner: "noted by you",
-	agent: "said by the agent",
-	title: "from its pane title"
-};
-function pairKey(a, b) {
-	return [a, b].sort().join(" ");
-}
-var disp = (u) => u === "owner" ? m$1`<span class="owner-name">owner</span>` : u;
-var focusHash = (u) => agentHash(u);
-async function patchTask(id, patch) {
-	try {
-		const r = await fetch(`/tasks/${id}`, jsonInit("PATCH", patch));
-		if (r.ok) return { ok: true };
-		return {
-			ok: false,
-			error: (await r.json().catch(() => null))?.detail?.error || `request failed (${r.status})`
-		};
-	} catch {
-		return {
-			ok: false,
-			error: "Update not confirmed. Refresh the board before retrying."
-		};
-	}
-}
-function Avatar({ name, size }) {
-	const base = name.replace(/-\d+$/, "");
-	const emoji = ANIMAL_EMOJI[base];
-	return m$1`<div class=${`hex ${size || ""}`} style=${`--hue: hsl(${hue(name)} 42% 58%)`}>
-    ${emoji || m$1`<span class="mono2">${base.slice(0, 2)}</span>`}
-  </div>`;
-}
-function MachineBadge({ node }) {
-	return m$1`<span class="machine-badge" style=${`--machine:${machineColor(node)}`} title=${`Machine: ${machineName(node)}`}><span class="machine-mark" aria-hidden="true"></span>${machineName(node)}</span>`;
-}
-var ERROR_RED = "#e5484d";
-function ErrorMark({ error }) {
-	return error ? m$1`<span class="agent-error-mark" title=${error} aria-label=${`error: ${error}`}>!</span>` : null;
-}
-function Bee({ node, flavor, size = "", working = false, error = null }) {
-	const harness = harnessStyle(flavor);
-	return m$1`<svg class=${`agent-bee ${size}`} style=${`--machine:${machineColor(node)}`} viewBox="0 0 56 42" role="img" aria-label=${`${machineName(node)} machine, ${harness.label} harness${working ? ", working" : ""}${error ? `, error: ${error}` : ""}`}>
-    <title>${harness.label} harness: ${harness.mark} and stripes · ${machineName(node)}: body and border</title>
-    ${working && m$1`<g class="bee-working-halo" style=${`--working:${WORKING_HALO.color}`}>
-      <circle cx="27" cy="21" r="28" fill=${WORKING_HALO.fill} stroke=${WORKING_HALO.color} stroke-width="2.5" />
-    </g>`}
-    <ellipse cx="23" cy="10" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(25 23 10)" />
-    <ellipse cx="23" cy="32" rx="11" ry="6" fill="#f0e6d2" opacity=".65" transform="rotate(-25 23 32)" />
-    <ellipse cx="26" cy="21" rx="19" ry="10" fill=${machineColor(node)} />
-    <path d="M19 12v18M29 11v20" stroke="#16120c" stroke-width="7" />
-    <path d="M19 12v18M29 11v20" stroke=${harness.color} stroke-width="4" />
-    <circle cx="44" cy="21" r="6" fill="#16120c" /><circle cx="46" cy="19" r="1.3" fill="#f0e6d2" />
-    ${error && m$1`<g class="bee-error"><title>${error}</title>
-      <circle cx="46" cy="9" r="10" fill=${"#e5484d"} stroke="#16120c" stroke-width="2" />
-      <text x="46" y="14.5" text-anchor="middle" font-size="16" font-weight="800" fill="#fff">!</text>
-    </g>`}
-  </svg>`;
-}
-function retiredLabel(agent) {
-	const date = (/* @__PURE__ */ new Date(agent.retired_at * 1e3)).toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		timeZone: "UTC"
-	});
-	return `${agent.original_id} (retired ${date})`;
-}
-function newClientId() {
-	return Array.from(crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-}
-//#endregion
-//#region web/src/owner-note.js
-function OwnerNote({ agent, refresh }) {
-	const [editing, setEditing] = d(false);
-	const [text, setText] = d("");
-	const [busy, setBusy] = d(false);
-	const [error, setError] = d("");
-	const save = async (value) => {
-		setBusy(true);
-		setError("");
-		try {
-			const response = await fetch(`/agents/${encodeURIComponent(agent.user_id)}/owner-note`, jsonInit("PUT", { text: value }));
-			if (!response.ok) {
-				const body = await response.json();
-				throw new Error(body.detail?.error || "Could not save note.");
-			}
-			setEditing(false);
-			refresh?.();
-		} catch (err) {
-			setError(err.message);
-		} finally {
-			setBusy(false);
-		}
-	};
-	return m$1`<div class="owner-note" aria-label=${`Owner note for ${agent.user_id}`}>
-    ${editing ? m$1`<form onSubmit=${(e) => {
-		e.preventDefault();
-		save(text);
-	}}>
-      <label>Your note<textarea aria-label=${`Your note for ${agent.user_id}`} maxLength="1000" rows="2"
-        value=${text} disabled=${busy} onInput=${(e) => setText(e.target.value)} /></label>
-      <div class="owner-note-actions"><button type="submit" disabled=${busy}>Save note</button>
-        <button type="button" disabled=${busy} onClick=${() => {
-		setEditing(false);
-		setError("");
-	}}>Cancel</button>
-        ${agent.owner_note && m$1`<button type="button" disabled=${busy} onClick=${() => save("")}>Clear note</button>`}</div>
-    </form>` : m$1`<button type="button" class="owner-note-edit" aria-label=${`${agent.owner_note ? "Edit" : "Add"} owner note for ${agent.user_id}`}
-      onClick=${() => {
-		setText(agent.owner_note || "");
-		setError("");
-		setEditing(true);
-	}}>
-      ${agent.owner_note ? `📌 you: ${agent.owner_note}` : "+ your note"}</button>`}
-    ${error && m$1`<span role="alert">${error}</span>`}
-  </div>`;
-}
-//#endregion
-//#region web/src/queen.js
-function queenTeam(teams, user) {
-	if (!user) return null;
-	return (Array.isArray(teams) ? teams : [teams]).find((t) => t && t.queen === user) || null;
-}
-function isQueen(teams, user) {
-	return queenTeam(teams, user) !== null;
-}
-function queenSuffix(teams, user) {
-	return isQueen(teams, user) ? " · ♛ queen" : "";
-}
-function teamOption(team) {
-	return `⬢ ${team.name} · team`;
-}
-function Crown({ teams, user, word = false, teamName = false }) {
-	const team = queenTeam(teams, user);
-	if (!team) return null;
-	const said = `queen of ${team.name}`;
-	const shown = teamName ? said : word ? "queen" : null;
-	return m$1`<span class="crown" title=${said}><span aria-hidden="true">♛</span>${shown && m$1`<span class="crown-word" aria-hidden="true">${shown}</span>`}<span class="sr-only">${said}</span></span>`;
-}
-//#endregion
-//#region web/src/storage.js
-function readStored(key) {
-	try {
-		return localStorage.getItem(key);
-	} catch {
-		return null;
-	}
-}
-function writeStored(key, value) {
-	try {
-		if (value === null) localStorage.removeItem(key);
-		else localStorage.setItem(key, value);
-	} catch {}
-}
-function readJSON(key, fallback = null) {
-	try {
-		return JSON.parse(localStorage.getItem(key) || "null") ?? fallback;
-	} catch {
-		return fallback;
-	}
-}
-function writeJSON(key, value) {
-	writeStored(key, value === null ? null : JSON.stringify(value));
-}
-//#endregion
-//#region web/src/highlight.js
-var searchWords = (query) => query.toLowerCase().split(/\s+/).filter(Boolean);
-var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-var wordsRe = (words) => words.length ? new RegExp(`(${words.map(escapeRe).join("|")})`, "gi") : null;
-function hl(text, re) {
-	if (!re || !text) return text;
-	return text.split(re).map((part, i) => i % 2 ? m$1`<mark>${part}</mark>` : part);
-}
-//#endregion
-//#region web/src/quick-switch.js
-var OPENED_KEY = "agent-swarm:agent-opened";
-var OPENED_LIMIT = 200;
-function readOpened() {
-	const saved = readJSON(OPENED_KEY, {});
-	return typeof saved === "object" ? saved : {};
-}
-function noteOpened(user) {
-	const opened = {
-		...readOpened(),
-		[user]: Date.now()
-	};
-	const kept = Object.entries(opened).sort((a, b) => b[1] - a[1]).slice(0, OPENED_LIMIT);
-	writeJSON(OPENED_KEY, Object.fromEntries(kept));
-}
-function switchOptions(state, mode, query, opened = {}) {
-	if (!state) return [];
-	const teams = state.teams || [];
-	const agents = state.recipients;
-	let options;
-	if (mode === "teams") options = teams.map((team) => {
-		const members = agents.filter((a) => a.team_id === team.id).sort((a, b) => Number(b.pane_alive) - Number(a.pane_alive) || Number(b.user_id === team.queen) - Number(a.user_id === team.queen) || a.user_id.localeCompare(b.user_id));
-		const target = members[0];
-		return {
-			id: `team-${team.id}`,
-			name: team.name,
-			target,
-			detail: target ? `${members.filter((a) => a.pane_alive).length} live · opens ${target.user_id}${queenSuffix(teams, target.user_id)}${target.pane_alive ? "" : " (offline)"}` : "No registered agents",
-			search: [team.name, ...members.map((a) => a.user_id)].join(" ")
-		};
-	});
-	else options = agents.map((a) => {
-		const team = teams.find((t) => t.id === a.team_id)?.name || "no team";
-		const summary = agentPreview(a);
-		return {
-			id: `agent-${a.user_id}`,
-			name: a.user_id,
-			target: a,
-			summary,
-			detail: `${team} · ${a.node || "unknown machine"} · ${a.pane_alive ? (a.activity?.status || "online").replaceAll("_", " ") : "offline"}`,
-			search: [
-				a.user_id,
-				team,
-				a.node,
-				a.flavor,
-				a.model,
-				summary
-			].filter(Boolean).join(" ")
-		};
-	});
-	const words = searchWords(query);
-	return options.filter((o) => words.every((w) => o.search.toLowerCase().includes(w))).sort((a, b) => Number(!a.target) - Number(!b.target) || (mode === "agents" ? (opened[b.name] || 0) - (opened[a.name] || 0) : 0) || Number(!a.target?.pane_alive) - Number(!b.target?.pane_alive) || a.name.localeCompare(b.name));
-}
-function QuickSwitcher({ state, navigate }) {
-	const [mode, setMode] = d(null);
-	const [query, setQuery] = d("");
-	const [selected, setSelected] = d(null);
-	const dialog = A(null), input = A(null), previous = A(null);
-	const shortcut = IS_MAC ? "⌘" : "Ctrl+";
-	const open = (next) => {
-		if (!state) return;
-		if (!dialog.current?.open) previous.current = document.activeElement;
-		setQuery("");
-		setSelected(null);
-		setMode(next);
-	};
-	const close = () => {
-		dialog.current?.close();
-		setMode(null);
-	};
-	_(() => {
-		const onKey = (e) => {
-			if (e.isComposing || e.altKey || !platformModifier(e) || e.code !== "KeyK") return;
-			e.preventDefault();
-			e.stopImmediatePropagation();
-			if (!e.repeat) open(e.shiftKey ? "teams" : "agents");
-		};
-		addEventListener("keydown", onKey, true);
-		return () => removeEventListener("keydown", onKey, true);
-	});
-	_(() => {
-		if (mode) {
-			if (!dialog.current.open) dialog.current.showModal();
-			input.current?.focus();
-		}
-	}, [mode]);
-	const options = switchOptions(state, mode, query, T(() => mode ? readOpened() : {}, [mode]));
-	const enabled = options.filter((o) => o.target);
-	const current = enabled.find((o) => o.id === selected) || enabled[0];
-	_(() => {
-		if (mode && current) document.getElementById(`switch-${current.id}`)?.scrollIntoView({ block: "nearest" });
-	}, [mode, current?.id]);
-	const choose = (option) => {
-		if (!option?.target) return;
-		close();
-		navigate(option.target.user_id, previous.current);
-	};
-	const onKey = (e) => {
-		e.stopPropagation();
-		if (e.isComposing) return;
-		if (e.key === "Escape") {
-			e.preventDefault();
-			close();
-		}
-		if (["ArrowDown", "ArrowUp"].includes(e.key)) {
-			e.preventDefault();
-			if (enabled.length) {
-				const index = enabled.findIndex((o) => o.id === current?.id);
-				setSelected(enabled[(index + (e.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length].id);
-			}
-		}
-		if (e.key === "Enter" && e.target === input.current) {
-			e.preventDefault();
-			choose(current);
-		}
-	};
-	return m$1`<div class="quick-switch-launchers">
-    <button type="button" class="mini" disabled=${!state} onClick=${() => open("teams")} title=${`Switch teams (${shortcut}Shift+K)`}>teams <kbd>${shortcut}⇧K</kbd></button>
-    <button type="button" class="mini" disabled=${!state} onClick=${() => open("agents")} title=${`Switch agents (${shortcut}K)`}>agents <kbd>${shortcut}K</kbd></button>
-    <dialog class="quick-switch" ref=${dialog} aria-labelledby="switch-title" onKeyDown=${onKey}
-      onCancel=${(e) => {
-		e.preventDefault();
-		close();
-	}}>
-      <div class="quick-switch-head"><h2 id="switch-title">${mode === "teams" ? "Switch team" : "Switch agent"}</h2>
-        <button type="button" class="mini" onClick=${close}>close</button></div>
-      <input ref=${input} type="search" aria-label=${mode === "teams" ? "Find team" : "Find agent"}
-        role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="switch-results"
-        aria-activedescendant=${current ? `switch-${current.id}` : void 0}
-        placeholder=${mode === "teams" ? "Search teams…" : "Search name, team, machine, harness, note, or status…"}
-        value=${query} onInput=${(e) => {
-		setQuery(e.target.value);
-		setSelected(null);
-	}} />
-      <div id="switch-results" role="listbox" aria-label="Matches" class="quick-switch-results">
-        ${options.map((o) => m$1`<div key=${o.id} id=${`switch-${o.id}`} role="option" aria-selected=${current?.id === o.id}
-          aria-disabled=${!o.target} class=${`quick-switch-option ${current?.id === o.id ? "selected" : ""}`}
-          onClick=${() => choose(o)}>
-          ${o.target && m$1`<${Bee} node=${o.target.node} flavor=${o.target.flavor} error=${o.target.activity?.error} size="small" working=${o.target.activity?.status === "working"} />`}
-          <span><b>${o.name}</b>${mode === "agents" && m$1`<${Crown} teams=${state.teams} user=${o.target?.user_id} word=${true} />`}<small>${o.detail}</small>
-            ${o.summary && m$1`<small class="quick-switch-summary" title=${o.summary}>${o.summary}</small>`}</span>
-        </div>`)}
-        ${!options.length && m$1`<p class="empty">No matches.</p>`}
-      </div>
-      <p class="quick-switch-help">↑ ↓ select · Enter open · Esc close</p>
-    </dialog>
-  </div>`;
-}
-//#endregion
-//#region web/src/history-spans.js
-function addSpan(spans, lo, hi) {
-	const merged = [];
-	for (const span of [...spans, {
-		lo,
-		hi
-	}].sort((a, b) => a.lo - b.lo)) {
-		const last = merged[merged.length - 1];
-		if (last && span.lo <= last.hi + 1) last.hi = Math.max(last.hi, span.hi);
-		else merged.push({ ...span });
-	}
-	return merged;
-}
-function spanOf(ids) {
-	return ids.length ? {
-		lo: Math.min(...ids),
-		hi: Math.max(...ids)
-	} : null;
-}
-function gapsOf(spans) {
-	return spans.slice(1).map((span, i) => ({
-		after: spans[i].hi,
-		before: span.lo
-	}));
-}
-//#endregion
-//#region web/src/agent-history.js
-var PAGE = 300;
-var FILL_PAGES = 10;
-function useAgentHistory(user, returnState = null) {
-	const [history, setHistory] = d(() => returnState?.history ?? {
-		messages: [],
-		loaded: false,
-		more: false,
-		busy: false,
-		error: "",
-		gaps: []
-	});
-	const [caughtUp, setCaughtUp] = d(false);
-	const [lookup, setLookup] = d({
-		id: null,
-		status: "idle"
-	});
-	const commands = A({
-		older: () => {},
-		around: () => {},
-		gap: () => {}
-	});
-	h(() => {
-		let active = true, polling = false, busy = false;
-		let spans = returnState?.spans ?? [];
-		let newest = returnState?.newest ?? null;
-		const abort = new AbortController();
-		const read = async (query) => {
-			const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages?${query}`, { signal: abort.signal });
-			if (!response.ok) throw Error("History unavailable");
-			const page = await response.json();
-			if (!Array.isArray(page.messages) || typeof page.has_more !== "boolean") throw Error("Invalid history");
-			return page;
-		};
-		const oldest = () => spans.length ? spans[0].lo : null;
-		const merge = (page, more) => {
-			if (!active) return;
-			const ids = page.messages.map((m) => m.id);
-			const span = spanOf(ids);
-			if (span) {
-				spans = addSpan(spans, span.lo, span.hi);
-				newest = Math.max(newest ?? 0, ...ids);
-			} else if (newest === null) newest = 0;
-			setHistory((prev) => ({
-				...prev,
-				loaded: true,
-				error: "",
-				more: more === void 0 ? prev.more : more,
-				messages: [...new Map([...prev.messages, ...page.messages].map((m) => [m.id, m])).values()]
-			}));
-			checkGaps();
-		};
-		const fail = (message) => {
-			if (active) setHistory((prev) => ({
-				...prev,
-				error: message
-			}));
-		};
-		const counts = /* @__PURE__ */ new Map();
-		const showGap = (gap, count) => setHistory((prev) => prev.gaps.some((g) => g.after === gap.after && g.before === gap.before) ? prev : {
-			...prev,
-			gaps: [...prev.gaps, {
-				...gap,
-				count
-			}].sort((a, b) => a.after - b.after)
-		});
-		const pruneGaps = (candidates) => setHistory((prev) => ({
-			...prev,
-			gaps: prev.gaps.filter((gap) => candidates.some((c) => c.after === gap.after && c.before === gap.before))
-		}));
-		const verify = async (gap) => {
-			const key = `${gap.after}:${gap.before}`;
-			if (counts.has(key)) {
-				const known = counts.get(key);
-				if (known) showGap(gap, known);
-				return;
-			}
-			counts.set(key, 0);
-			try {
-				const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages/count?after=${gap.after}&before=${gap.before}`, { signal: abort.signal });
-				if (!response.ok) throw Error("count unavailable");
-				const { count } = await response.json();
-				if (!active) return;
-				counts.set(key, count);
-				if (count) showGap(gap, count);
-			} catch {
-				counts.delete(key);
-			}
-		};
-		const checkGaps = () => {
-			const candidates = gapsOf(spans);
-			pruneGaps(candidates);
-			for (const gap of candidates) verify(gap);
-		};
-		const poll = async () => {
-			if (polling) return;
-			polling = true;
-			try {
-				const initial = newest === null;
-				let page = await read(initial ? `limit=${PAGE}` : `after=${newest}&limit=${PAGE}`);
-				merge(page, initial ? page.has_more : void 0);
-				while (active && !initial && page.has_more) {
-					page = await read(`after=${newest}&limit=${PAGE}`);
-					merge(page);
-				}
-				if (active) setCaughtUp(true);
-			} catch {
-				fail("Could not load conversation history. Retrying…");
-			} finally {
-				polling = false;
-			}
-		};
-		commands.current.older = async () => {
-			const before = oldest();
-			if (busy || before === null) return;
-			busy = true;
-			setHistory((prev) => ({
-				...prev,
-				busy: true
-			}));
-			try {
-				const page = await read(`before=${before}&limit=${PAGE}`);
-				merge(page, page.has_more);
-			} catch {
-				fail("Could not load older messages. Please try again.");
-			} finally {
-				busy = false;
-				if (active) setHistory((prev) => ({
-					...prev,
-					busy: false
-				}));
-			}
-		};
-		commands.current.around = async (mid) => {
-			if (busy) return;
-			busy = true;
-			setLookup({
-				id: mid,
-				status: "loading"
-			});
-			setHistory((prev) => ({
-				...prev,
-				busy: true
-			}));
-			try {
-				const page = await read(`around=${mid}&limit=${PAGE}`);
-				const found = page.messages.some((m) => m.id === mid);
-				const below = oldest();
-				const extendsBottom = page.messages.length > 0 && (below === null || Math.min(...page.messages.map((m) => m.id)) < below);
-				merge(page, extendsBottom ? page.has_more : void 0);
-				setLookup({
-					id: mid,
-					status: found ? "found" : "missing"
-				});
-			} catch {
-				setLookup({
-					id: mid,
-					status: "failed"
-				});
-			} finally {
-				busy = false;
-				if (active) setHistory((prev) => ({
-					...prev,
-					busy: false
-				}));
-			}
-		};
-		commands.current.gap = async (gap) => {
-			if (busy) return;
-			busy = true;
-			setHistory((prev) => ({
-				...prev,
-				busy: true
-			}));
-			try {
-				let from = gap.after;
-				for (let page = 0; page < FILL_PAGES && active && from < gap.before; page += 1) {
-					const body = await read(`after=${from}&limit=${PAGE}`);
-					const ids = body.messages.map((m) => m.id);
-					merge(body);
-					if (!ids.length) break;
-					from = Math.max(...ids);
-					if (!body.has_more) break;
-				}
-			} catch {
-				fail("Could not load the missing messages. Please try again.");
-			} finally {
-				busy = false;
-				if (active) setHistory((prev) => ({
-					...prev,
-					busy: false
-				}));
-			}
-		};
-		poll();
-		const timer = setInterval(poll, POLL_MS$1);
-		return () => {
-			active = false;
-			abort.abort();
-			clearInterval(timer);
-			if (returnState) Object.assign(returnState, {
-				spans,
-				newest
-			});
-		};
-	}, [user]);
-	if (returnState) returnState.history = {
-		...history,
-		busy: false
-	};
-	return {
-		...history,
-		caughtUp,
-		lookup,
-		loadOlder: () => commands.current.older(),
-		loadAround: (mid) => commands.current.around(mid),
-		loadGap: (gap) => commands.current.gap(gap)
-	};
-}
-//#endregion
-//#region web/src/conversation-search.js
-var PAGE_SIZE = 100;
-function useConversationSearch(user, returnState = null) {
-	const [open, setOpen] = d(() => returnState?.searchOpen ?? false);
-	const [query, setQuery] = d(() => returnState?.searchQuery ?? "");
-	const restoredQuery = A(returnState?.searchOpen ? returnState.searchQuery?.trim() : null);
-	if (returnState) Object.assign(returnState, {
-		searchOpen: open,
-		searchQuery: query
-	});
-	const [result, setResult] = d({
-		total: 0,
-		index: 0,
-		busy: false,
-		error: "",
-		current: null
-	});
-	const [terms, setTerms] = d(null);
-	const input = A(null), previousFocus = A(null), session = A(null);
-	const show = () => {
-		if (!open) previousFocus.current = document.activeElement;
-		setOpen(true);
-		requestAnimationFrame(() => {
-			input.current?.focus();
-			input.current?.select();
-		});
-	};
-	const close = () => {
-		session.current?.abort.abort();
-		setOpen(false);
-		if (previousFocus.current?.isConnected) previousFocus.current.focus({ preventScroll: true });
-	};
-	_(() => {
-		const key = (event) => {
-			if (event.isComposing || document.querySelector(".quick-switch[open], dialog.page-dialog[open]")) return;
-			if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "f") {
-				event.preventDefault();
-				event.stopImmediatePropagation();
-				show();
-			} else if (open && event.key === "Escape") {
-				event.preventDefault();
-				event.stopImmediatePropagation();
-				close();
-			}
-		};
-		addEventListener("keydown", key, true);
-		return () => removeEventListener("keydown", key, true);
-	}, [open, user]);
-	const read = async (s, index) => {
-		const offset = Math.floor(index / PAGE_SIZE) * PAGE_SIZE;
-		if (!s.pages.has(offset)) {
-			const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages/search?${new URLSearchParams({
-				q: s.query,
-				limit: PAGE_SIZE,
-				offset
-			})}`, { signal: s.abort.signal });
-			if (!response.ok) throw Error("Could not search this conversation. Please try again.");
-			const page = await response.json();
-			if (!Array.isArray(page.matches) || !Number.isInteger(page.total)) throw Error("Invalid search response.");
-			s.total = page.total;
-			if (Array.isArray(page.terms) && session.current === s) setTerms(page.terms);
-			s.pages.set(offset, page.matches);
-		}
-		return s.pages.get(offset)[index - offset] || null;
-	};
-	h(() => {
-		const s = {
-			query: query.trim(),
-			pages: /* @__PURE__ */ new Map(),
-			abort: new AbortController(),
-			index: 0,
-			total: 0,
-			sequence: 0
-		};
-		session.current = s;
-		if (!open || restoredQuery.current !== s.query) restoredQuery.current = null;
-		setTerms(null);
-		setResult({
-			total: 0,
-			index: 0,
-			busy: open && !!s.query,
-			error: "",
-			current: null
-		});
-		if (!open || !s.query) return () => {
-			s.abort.abort();
-		};
-		const timer = setTimeout(async () => {
-			try {
-				const current = await read(s, 0);
-				if (session.current !== s || s.abort.signal.aborted) return;
-				setResult({
-					total: s.total,
-					index: 0,
-					busy: false,
-					error: "",
-					current
-				});
-				if (current && restoredQuery.current !== s.query) showAgentMessage(user, current.id);
-				restoredQuery.current = null;
-			} catch (error) {
-				if (!s.abort.signal.aborted) setResult({
-					total: 0,
-					index: 0,
-					busy: false,
-					error: error.message,
-					current: null
-				});
-			}
-		}, 200);
-		return () => {
-			clearTimeout(timer);
-			s.abort.abort();
-		};
-	}, [
-		user,
-		query,
-		open
-	]);
-	const move = async (delta) => {
-		const s = session.current;
-		if (!s?.total || s.abort.signal.aborted) return;
-		const index = (s.index + delta + s.total) % s.total;
-		s.index = index;
-		const sequence = ++s.sequence;
-		setResult((prev) => ({
-			...prev,
-			index,
-			busy: true,
-			error: ""
-		}));
-		try {
-			const current = await read(s, index);
-			if (session.current !== s || sequence !== s.sequence || s.abort.signal.aborted) return;
-			setResult({
-				total: s.total,
-				index,
-				busy: false,
-				error: "",
-				current
-			});
-			if (current) showAgentMessage(user, current.id);
-		} catch (error) {
-			if (!s.abort.signal.aborted && sequence === s.sequence) setResult((prev) => ({
-				...prev,
-				busy: false,
-				error: error.message
-			}));
-		}
-	};
-	return {
-		open,
-		query,
-		setQuery,
-		input,
-		show,
-		close,
-		...result,
-		move,
-		words: open ? terms ?? query.trim().split(/\s+/).filter(Boolean) : []
-	};
-}
-function ConversationSearchBar({ search }) {
-	if (!search.open) return null;
-	return m$1`<div class="conversation-search" role="search" aria-label="Search this conversation">
-    <div class="conversation-search-controls">
-      <input ref=${search.input} type="search" value=${search.query} aria-label="Search conversation history"
-        placeholder='Search… "phrase" -word a OR b from:me'
-        title='Words: all must match. "exact phrase". -word or -"phrase" leaves out. a OR b: either. from:me / from:agent. after:2026-11-01, before:2026-11-10.' onInput=${(e) => search.setQuery(e.target.value)}
-        onKeyDown=${(e) => {
-		if (e.key === "Enter" && !e.isComposing) {
-			e.preventDefault();
-			e.stopPropagation();
-			search.move(e.shiftKey ? -1 : 1);
-		}
-	}} />
-      <span class="conversation-search-count" role="status">${search.busy ? "Searching…" : search.error ? "Search unavailable" : search.total ? `${search.index + 1} of ${search.total}` : search.query.trim() ? "No matches" : "Full history"}</span>
-      <button type="button" aria-label="Previous match" title="Previous match (Shift+Enter)" disabled=${!search.total || search.busy} onClick=${() => search.move(-1)}>↑</button>
-      <button type="button" aria-label="Next match" title="Next match (Enter)" disabled=${!search.total || search.busy} onClick=${() => search.move(1)}>↓</button>
-      <button type="button" aria-label="Close conversation search" title="Close search (Esc)" onClick=${search.close}>✕</button>
-    </div>
-    ${search.error && m$1`<div role="alert">${search.error}</div>`}
-  </div>`;
-}
-var highlights = /* @__PURE__ */ new Map();
-function highlightSearch(html, words) {
-	if (!words.length) return html;
-	const key = JSON.stringify([html, words]);
-	if (highlights.has(key)) return highlights.get(key);
-	const expression = new RegExp(words.slice().sort((a, b) => b.length - a.length).map(escapeRe).join("|"), "giu");
-	const root = document.createElement("div");
-	root.innerHTML = html;
-	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-	const nodes = [];
-	while (walker.nextNode()) nodes.push(walker.currentNode);
-	for (const node of nodes) {
-		const text = node.textContent;
-		expression.lastIndex = 0;
-		const matches = [...text.matchAll(expression)];
-		if (!matches.length) continue;
-		const fragment = document.createDocumentFragment();
-		let offset = 0;
-		for (const match of matches) {
-			fragment.append(document.createTextNode(text.slice(offset, match.index)));
-			const mark = document.createElement("mark");
-			mark.className = "conversation-match";
-			mark.textContent = match[0];
-			fragment.append(mark);
-			offset = match.index + match[0].length;
-		}
-		fragment.append(document.createTextNode(text.slice(offset)));
-		node.replaceWith(fragment);
-	}
-	const out = root.innerHTML;
-	if (highlights.size >= 500) highlights.delete(highlights.keys().next().value);
-	highlights.set(key, out);
-	return out;
-}
-//#endregion
-//#region web/src/board-mentions.js
-var MENTION = /(?<![A-Za-z0-9_@.-])(@[A-Za-z0-9][A-Za-z0-9-]{0,47})(?![A-Za-z0-9_-])/g;
-function mentionParts(text, members) {
-	return text.split(MENTION).map((part, i) => ({
-		text: part,
-		mention: i % 2 === 1 && members.has(part.slice(1).toLowerCase())
-	}));
-}
-function highlightBoardMentions(markup, members) {
-	if (!members?.size || !markup.includes("@")) return markup;
-	const root = document.createElement("template");
-	root.innerHTML = markup;
-	const walker = document.createTreeWalker(root.content, NodeFilter.SHOW_TEXT);
-	const matches = [];
-	while (walker.nextNode()) {
-		const node = walker.currentNode;
-		if (!node.data.includes("@")) continue;
-		const parts = mentionParts(node.data, members);
-		if (parts.some((part) => part.mention)) matches.push([node, parts]);
-	}
-	for (const [node, parts] of matches) node.replaceWith(...parts.map(({ text, mention }) => {
-		if (!mention) return document.createTextNode(text);
-		const mark = document.createElement("mark");
-		mark.className = "board-mention";
-		mark.textContent = text;
-		return mark;
-	}));
-	return root.innerHTML;
 }
 //#endregion
 //#region web/src/chat-message.js
@@ -10503,6 +10503,81 @@ function RestartAgentButton({ r, refresh }) {
     ${review && m$1`<${RestartDialog} user=${user} initial=${review} onClose=${confirm} />`}`;
 }
 //#endregion
+//#region web/src/model-label.js
+var SWITCHABLE = [
+	"claude",
+	"codex",
+	"pi",
+	"agy"
+];
+var OTHER_MODEL = "\0other";
+function ModelLabel({ r, refresh }) {
+	const [editing, setEditing] = d(false);
+	const [value, setValue] = d("");
+	const [known, setKnown] = d([]);
+	const [busy, setBusy] = d(false);
+	const [other, setOther] = d(false);
+	const inputRef = A(null);
+	h(() => {
+		if (editing) inputRef.current?.focus();
+	}, [editing, other]);
+	const flavor = (r.flavor || "generic").toLowerCase();
+	const start = () => {
+		setValue(r.model || "");
+		setOther(false);
+		setEditing(true);
+		fetch("/api/spawn-options").then((res) => res.json()).then((d) => setKnown(((d.harnesses || []).find((h) => h.flavor === flavor) || {}).models || [])).catch(() => {});
+	};
+	const switchable = SWITCHABLE.includes(flavor);
+	const save = async () => {
+		if (busy) return;
+		if (value.trim() === (r.model || "")) {
+			setEditing(false);
+			return;
+		}
+		if (switchable && !value.trim()) return;
+		setBusy(true);
+		const path = switchable ? "switch-model" : "model";
+		const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/${path}`, jsonInit("POST", { model: value.trim() })).catch(() => null);
+		setBusy(false);
+		if (!res || !res.ok) {
+			const body = res ? await res.json().catch(() => ({})) : {};
+			const why = body.detail?.error || (res ? `error ${res.status}` : "no answer from the hub");
+			const screen = body.detail?.screen ? `\n\nLast screen:\n${body.detail.screen}` : "";
+			await showNotice(switchable ? `Could not switch ${r.user_id} to ${value.trim()}: ${why}${screen}` : `Could not update the model label for ${r.user_id}: ${why}`);
+			return;
+		}
+		setEditing(false);
+		refresh();
+	};
+	if (!editing) return m$1`<button type="button" class="model-label" onClick=${start}
+      title=${switchable ? "Switch this agent's model for its current session (drives /model in its pane)." : "Edit the model label. Display only: switch the real model in the agent's pane, then update it here."}>
+      ${r.model ? m$1`<b>${r.model}</b>` : m$1`<span class="unset">set model</span>`} <span class="pen">✎</span>
+    </button>`;
+	const options = [.../* @__PURE__ */ new Set([...r.model ? [r.model] : [], ...known])];
+	const typing = other || options.length === 0;
+	const keys = (e) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			save();
+		}
+		if (e.key === "Escape") setEditing(false);
+	};
+	return m$1`<span class="model-edit">
+    ${typing ? m$1`<input type="text" value=${value} placeholder="e.g. claude-opus-4-7"
+          aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
+          onInput=${(e) => setValue(e.target.value)} onKeyDown=${keys} />` : m$1`<select value=${value} aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
+          onChange=${(e) => e.target.value === OTHER_MODEL ? (setOther(true), setValue("")) : setValue(e.target.value)}
+          onKeyDown=${keys}>
+          ${!value && m$1`<option value="" disabled>pick a model</option>`}
+          ${options.map((m) => m$1`<option key=${m} value=${m}>${m}</option>`)}
+          <option value=${OTHER_MODEL}>other…</option>
+        </select>`}
+    <button type="button" class="mini" disabled=${busy} onClick=${save}>${busy ? switchable ? "switching…" : "saving…" : switchable ? "switch" : "save"}</button>
+    <button type="button" class="mini" disabled=${busy} onClick=${() => setEditing(false)}>cancel</button>
+  </span>`;
+}
+//#endregion
 //#region web/src/outcome.js
 function structured(body) {
 	return body !== null && typeof body === "object" && !Array.isArray(body);
@@ -10612,6 +10687,429 @@ function spawnOutcome(httpOk, body) {
 		status: "uncertain",
 		reason: "the server's answer was not recognised"
 	};
+}
+//#endregion
+//#region web/src/spawn-control.js
+var DEFAULT_MODEL = "default";
+function SpawnControl({ refresh, nodes }) {
+	const [harnesses, setHarnesses] = d([]);
+	const [node, setNode] = d("");
+	const [flavor, setFlavor] = d("claude");
+	const [model, setModel] = d(DEFAULT_MODEL);
+	const [dir, setDir] = d("");
+	const [busy, setBusy] = d(false);
+	const [err, setErr] = d("");
+	h(() => {
+		let live = true;
+		fetch("/api/spawn-options").then((r) => r.json()).then((d) => {
+			if (live && d.harnesses) setHarnesses(d.harnesses);
+		}).catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, []);
+	const target = spawnTarget(nodes, node, harnesses);
+	const offered = target.harnesses || [];
+	const models = (offered.find((h) => h.flavor === flavor) || {}).models || [];
+	const dirs = target.dirs || [];
+	const cwd = dirs.includes(dir) ? dir : dirs[0] || "";
+	const pickFlavor = (f) => {
+		setFlavor(f);
+		setModel(DEFAULT_MODEL);
+	};
+	const pickNode = (n) => {
+		setNode(n);
+		const next = spawnTarget(nodes, n, harnesses);
+		if (next.ok && next.harnesses.length && !next.harnesses.some((h) => h.flavor === flavor)) pickFlavor(next.harnesses[0].flavor);
+	};
+	const enrolled = nodes || [];
+	const choices = enrolled.some((n) => n.name === node) || !node ? enrolled : enrolled.concat([{
+		name: node,
+		connected: false,
+		gone: true
+	}]);
+	const spawn = async (e) => {
+		e.preventDefault();
+		if (!target.ok) {
+			setErr(target.reason);
+			return;
+		}
+		setBusy(true);
+		setErr("");
+		const body = {
+			flavor,
+			model: model === DEFAULT_MODEL ? null : model
+		};
+		if (target.remote) body.node = target.node;
+		if (cwd) body.cwd = cwd;
+		try {
+			const r = await fetch("/agents/spawn", jsonInit("POST", body));
+			const payload = await r.json().catch(() => null);
+			const outcome = spawnOutcome(r.ok, payload);
+			if (outcome.status === "failed") setErr(`spawn failed: ${outcome.reason}`);
+			else if (outcome.status === "unknown") setErr(`spawn outcome unknown: ${outcome.reason}${outcome.user ? ` (registered as ${outcome.user})` : ""}`);
+			else if (outcome.status === "uncertain") setErr(`spawn not confirmed: ${outcome.reason}; check the agents list`);
+		} catch (err) {
+			setErr(`not confirmed: ${unansweredOutcome(err).reason}`);
+		} finally {
+			setBusy(false);
+			refresh();
+		}
+	};
+	const flavors = offered.length ? offered.map((h) => h.flavor) : [];
+	return m$1`<form class="spawn" onSubmit=${spawn}>
+    <div class="spawn-heading">Spawn agent · choose destination</div>
+    ${(enrolled.length > 1 || node) && m$1`<select title="machine" value=${node} onChange=${(e) => pickNode(e.target.value)}>
+      ${choices.map((n) => m$1`<option key=${n.name} value=${n.local ? "" : n.name} disabled=${!n.local && !n.connected}>${n.local ? `${n.name} (hub)` : n.gone ? `${n.name} (no longer enrolled)` : n.connected ? n.name : `${n.name} (not connected)`}</option>`)}
+    </select>`}
+    ${!target.ok && m$1`<span class="spawn-note">${target.reason}. Pick a connected machine.</span>`}
+    <select title="harness" value=${flavor} onChange=${(e) => pickFlavor(e.target.value)} disabled=${!target.ok}>
+      ${flavors.map((f) => m$1`<option key=${f} value=${f}>${f}</option>`)}
+    </select>
+    <select title="model" value=${model} onChange=${(e) => setModel(e.target.value)}
+      disabled=${models.length === 0}>
+      <option value=${DEFAULT_MODEL}>default model</option>
+      ${models.map((m) => m$1`<option key=${m} value=${m}>${m}</option>`)}
+    </select>
+    ${dirs.length > 0 && m$1`<select title="start folder" aria-label="start folder" value=${cwd} onChange=${(e) => setDir(e.target.value)}>
+      ${dirs.map((d) => m$1`<option key=${d} value=${d}>${d}</option>`)}
+    </select>`}
+    <button class="act" type="submit" disabled=${busy || !target.ok}>${busy ? "spawning…" : "spawn agent"}</button>
+    ${err && m$1`<span style="color:var(--alert); font-size:11px">${err}</span>`}
+  </form>`;
+}
+//#endregion
+//#region web/src/chats.js
+function agentThreads(messages, { query = "", members = null, gap = 900, fanout = 120 } = {}) {
+	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+	const seen = /* @__PURE__ */ new Set();
+	const own = [];
+	let selfNotes = 0;
+	for (const m of messages) {
+		if (seen.has(m.id)) continue;
+		seen.add(m.id);
+		if (m.sender === "owner" || m.recipient === "owner") continue;
+		if (m.sender === m.recipient) {
+			selfNotes += 1;
+			continue;
+		}
+		own.push(m);
+	}
+	own.sort((a, b) => a.ts - b.ts || a.id - b.id);
+	const items = [];
+	const lastCopy = /* @__PURE__ */ new Map();
+	for (const m of own) {
+		const key = `${m.sender}\u0000${m.content}`;
+		const prev = lastCopy.get(key);
+		if (prev && m.ts - prev.m.ts <= fanout && !prev.to.includes(m.recipient)) {
+			prev.to.push(m.recipient);
+			prev.ids.push(m.id);
+			continue;
+		}
+		const item = {
+			m,
+			to: [m.recipient],
+			ids: [m.id]
+		};
+		lastCopy.set(key, item);
+		items.push(item);
+	}
+	const open = /* @__PURE__ */ new Map();
+	const threads = [];
+	for (const item of items) {
+		const { m } = item;
+		const broadcast = item.to.length > 1;
+		const key = broadcast ? `${m.sender}\u0000*` : [m.sender, m.recipient].sort().join("\0");
+		let t = open.get(key);
+		if (!t || m.ts - t.end > gap) {
+			t = {
+				key: `${key}\u0000${m.id}`,
+				broadcast,
+				people: broadcast ? [m.sender] : [m.sender, m.recipient].sort(),
+				to: /* @__PURE__ */ new Set(),
+				start: m.ts,
+				end: m.ts,
+				items: [],
+				count: 0
+			};
+			open.set(key, t);
+			threads.push(t);
+		}
+		item.to.forEach((r) => t.to.add(r));
+		t.items.push(item);
+		t.end = m.ts;
+		t.count += item.ids.length;
+	}
+	const kept = threads.filter((t) => {
+		const names = [...t.people, ...t.to];
+		if (members && !names.some((n) => members.has(n))) return false;
+		if (!words.length) return true;
+		const text = `${names.join(" ")} ${t.items.map((i) => `${i.m.context || ""} ${i.m.content || ""}`).join(" ")}`.toLowerCase();
+		return words.every((w) => text.includes(w));
+	});
+	kept.sort((a, b) => b.end - a.end);
+	kept.forEach((t) => {
+		t.to = [...t.to].sort();
+	});
+	return {
+		threads: kept,
+		selfNotes
+	};
+}
+//#endregion
+//#region web/src/pins.js
+async function setPinned(id, pinned, refresh) {
+	try {
+		const r = await fetch(`/api/messages/${id}/pin`, jsonInit("POST", { pinned }));
+		if (!r.ok) throw new Error(String(r.status));
+	} catch {
+		showNotice(pinned ? "Could not pin the message. Please try again." : "Could not unpin the message. Please try again.");
+		return;
+	}
+	refresh?.();
+}
+var flat = (text, width) => {
+	const one = (text || "").replace(/[*`~]+|^#+\s|^>\s?/gm, "").replace(/\s+/g, " ").trim();
+	return one.length > width ? `${one.slice(0, width)}…` : one;
+};
+var pinPage = (m) => m.sender === "owner" ? m.recipient : m.recipient === "owner" ? m.sender : m.recipient;
+var pinHref = (m) => agentHash(pinPage(m), m.id);
+var pinsOf = (pins, a, b) => (pins || []).filter((m) => pairKey(m.sender, m.recipient) === pairKey(a, b));
+function PinStrip({ pins, open }) {
+	if (!pins.length) return null;
+	return m$1`<div class="pin-strip" role="list" aria-label="Pinned messages">
+    ${pins.map((m) => m$1`<button type="button" role="listitem" key=${m.id} class="pin-chip" onClick=${() => open(m)}
+        title="Open the pinned message">
+      <span aria-hidden="true">📌</span> <b>${disp(m.sender)}</b> <span class="pin-text">${flat(m.content, 140) || "(attachment)"}</span>
+    </button>`)}
+  </div>`;
+}
+function PinDialog({ m, now, close, refresh, messages, right, inChat = null }) {
+	const ref = A(null);
+	h(() => {
+		const dialog = ref.current;
+		const previous = document.activeElement;
+		dialog.showModal();
+		return () => {
+			if (previous?.isConnected) previous.focus();
+		};
+	}, []);
+	const onKey = (e) => {
+		if (e.key === "Escape") e.stopPropagation();
+	};
+	return m$1`<dialog ref=${ref} class="page-dialog pin-dialog" aria-label="Pinned message"
+      onClose=${close} onKeyDown=${onKey} onClick=${(e) => {
+		if (e.target === ref.current) ref.current.close();
+	}}>
+    <div class="pin-dialog-body" tabindex="0">
+      <${ChatMessage} m=${m} now=${now} messages=${messages} right=${right} pinned=${true} />
+    </div>
+    <div class="page-dialog-actions pin-dialog-actions">
+      <button type="button" class="mini" onClick=${() => {
+		setPinned(m.id, false, refresh);
+		ref.current.close();
+	}}>unpin</button>
+      ${inChat && m$1`<button type="button" class="mini" onClick=${() => {
+		ref.current.close();
+		inChat(m);
+	}}>show in chat</button>`}
+      <button type="button" class="act" autofocus onClick=${() => ref.current.close()}>close</button>
+    </div>
+  </dialog>`;
+}
+function PinnedList({ pins, now, refresh }) {
+	if (!pins?.length) return null;
+	return m$1`<section class="pinned-list" aria-label="Pinned messages">
+    <h2>pinned <span class="count">· ${pins.length}</span></h2>
+    <ul>
+      ${pins.map((m) => m$1`<li key=${m.id}>
+        <a href=${pinHref(m)} title="Go to this message in its chat">
+          <span class="pin-who"><span aria-hidden="true">📌</span> ${disp(m.sender)} <span class="swap">→</span> ${disp(m.recipient)} <span class="age">· ${rel(m.ts, now)}</span></span>
+          <span class="pin-text">${flat(m.content, 240) || "(attachment)"}</span>
+        </a>
+        <button type="button" class="mini" aria-label=${`Unpin message ${m.id}`} onClick=${() => setPinned(m.id, false, refresh)}>unpin</button>
+      </li>`)}
+    </ul>
+  </section>`;
+}
+//#endregion
+//#region web/src/chats-view.js
+var CHATS_ROUTE = "#/chats";
+var chatsParams = () => new URLSearchParams(location.hash.split("?")[1] || "");
+var chatsQuery = () => chatsParams().get("q") || "";
+var AGENT_TALK_LIMIT = 4e3;
+function snippet(text, words, width = 240) {
+	const flat = (text || "").replace(/\s+/g, " ").trim();
+	const at = words.length ? flat.toLowerCase().indexOf(words[0]) : -1;
+	const start = at > 80 ? at - 60 : 0;
+	const cut = flat.slice(start, start + width);
+	return `${start ? "…" : ""}${cut}${start + width < flat.length ? "…" : ""}`;
+}
+function ChatsView({ state, unreadFor, refresh }) {
+	const [view, setView] = d(() => {
+		const selected = chatsParams().get("view");
+		return ["agents", "queens"].includes(selected) ? selected : "you";
+	});
+	const pick = (v) => {
+		setView(v);
+		history.replaceState(null, "", v === "you" ? CHATS_ROUTE : `${CHATS_ROUTE}?view=${v}`);
+	};
+	return m$1`<div class="chats">
+    <${PinnedList} pins=${state.pins} now=${state.now} refresh=${refresh} />
+    <div class="agents-view-switch chats-switch" role="group" aria-label="Which chats">
+      <button type="button" aria-pressed=${view === "you"} onClick=${() => pick("you")}>with you</button>
+      <button type="button" aria-pressed=${view === "queens"} onClick=${() => pick("queens")}>you and queens</button>
+      <button type="button" aria-pressed=${view === "agents"} onClick=${() => pick("agents")}>between agents</button>
+    </div>
+    ${view === "agents" ? m$1`<${AgentTalk} state=${state} />` : m$1`<${OwnerChats} key=${view} state=${state} unreadFor=${unreadFor} queensOnly=${view === "queens"} />`}
+  </div>`;
+}
+var clock = (ts) => (/* @__PURE__ */ new Date(ts * 1e3)).toLocaleTimeString([], {
+	hour: "2-digit",
+	minute: "2-digit"
+});
+var dayOf = (ts) => (/* @__PURE__ */ new Date(ts * 1e3)).toLocaleDateString([], {
+	weekday: "short",
+	month: "short",
+	day: "numeric"
+});
+function AgentTalk({ state }) {
+	const [full, setFull] = d(null);
+	const [query, setQuery] = d(chatsQuery);
+	const [team, setTeam] = d("");
+	h(() => {
+		let live = true;
+		fetch(`/messages?limit=${AGENT_TALK_LIMIT}`).then((r) => r.json()).then((d) => {
+			if (live) setFull(d.messages || []);
+		}).catch(() => {
+			if (live) setFull([]);
+		});
+		return () => {
+			live = false;
+		};
+	}, []);
+	const update = (q) => {
+		setQuery(q);
+		history.replaceState(null, "", `${CHATS_ROUTE}?view=agents${q ? `&q=${encodeURIComponent(q)}` : ""}`);
+	};
+	const teams = state.teams || [];
+	const members = T(() => team ? new Set(state.recipients.filter((r) => String(r.team_id) === team).map((r) => r.user_id)) : null, [team, state.recipients]);
+	const { threads, selfNotes } = T(() => agentThreads([...state.messages, ...full || []], {
+		query,
+		members
+	}), [
+		state.messages,
+		full,
+		query,
+		members
+	]);
+	const words = searchWords(query);
+	const oldest = full && full.length >= AGENT_TALK_LIMIT ? full[full.length - 1].ts : null;
+	let day = null;
+	return m$1`
+    <h2>between agents <span class="count">· ${threads.length} conversation${threads.length === 1 ? "" : "s"}${full === null ? " · loading…" : ""}</span></h2>
+    <div class="agent-talk-filters">
+      <input type="text" class="h-search chats-search" value=${query} autofocus
+        placeholder="search agent talk: a name, a task, a word…"
+        aria-label="Search agent talk" onInput=${(e) => update(e.target.value)}
+        onKeyDown=${(e) => {
+		if (e.key === "Escape" && query) {
+			e.stopPropagation();
+			update("");
+		}
+	}} />
+      ${teams.length > 0 && m$1`<select aria-label="Team" value=${team} onChange=${(e) => setTeam(e.target.value)}>
+        <option value="">all teams</option>
+        ${teams.map((t) => m$1`<option key=${t.id} value=${String(t.id)}>${t.name}</option>`)}
+      </select>`}
+    </div>
+    <p class="agent-talk-note">Grouped by pair: a quiet gap of 15 min starts a new conversation. The same text sent to several agents shows once.
+      ${selfNotes > 0 && ` ${selfNotes} notes agents left themselves are hidden.`}
+      ${oldest && ` Showing talk since ${dayOf(oldest)} ${clock(oldest)}.`}</p>
+    ${threads.length === 0 ? m$1`<div class="empty">${full === null ? "Loading…" : query || team ? "No agent talk matches." : "No agent talk yet."}</div>` : m$1`<div class="agent-talk">${threads.map((t) => {
+		const d = dayOf(t.end);
+		return m$1`${d !== day ? (day = d, m$1`<h3 class="agent-talk-day">${d}</h3>`) : null}<${TalkThread} key=${t.key} t=${t} words=${words} />`;
+	})}</div>`}`;
+}
+function TalkThread({ t, words }) {
+	const [open, setOpen] = d(false);
+	const last = t.items[t.items.length - 1];
+	return m$1`<details class="agent-talk-thread" onToggle=${(e) => setOpen(e.currentTarget.open)}>
+    <summary>
+      <span class="chat-who">${t.broadcast ? m$1`${t.people[0]} <span class="agent-talk-arrow">→</span> ${t.to.join(", ")}` : m$1`${t.people[0]} <span class="agent-talk-arrow">↔</span> ${t.people[1]}`}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
+      <span class="chat-line"><b>${last.m.sender}:</b> ${hl(snippet(last.m.content, words, 200), wordsRe(words))}</span>
+    </summary>
+    ${open && m$1`<div class="agent-talk-msgs">${t.items.map((i) => m$1`<div key=${i.ids[0]} class="agent-talk-msg" data-message-id=${i.m.id} tabindex="-1" onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")}>
+      <div class="agent-talk-hdr"><b>${i.m.sender}</b> → ${i.to.join(", ")} · ${clock(i.m.ts)}${i.m.context ? ` · ${i.m.context}` : ""}</div>
+      <${ReplyPreview} message=${i.m} messages=${t.items.map((item) => item.m)} />
+      <div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(i.m.content)) }} />
+    </div>`)}</div>`}
+  </details>`;
+}
+function OwnerChats({ state, unreadFor, queensOnly = false }) {
+	const [chats, setChats] = d(null);
+	const [query, setQuery] = d(chatsQuery);
+	const newest = state.messages.reduce((n, m) => Math.max(n, m.id), 0);
+	const queens = (state.teams || []).map((t) => t.queen || "").join(",");
+	const archives = new Map((state.retired_agents || []).map((r) => [r.archive_id, retiredLabel(r)]));
+	h(() => {
+		let live = true;
+		const params = new URLSearchParams({ q: query });
+		if (queensOnly) params.set("queens", "true");
+		const timer = setTimeout(() => {
+			fetch(`/api/chats?${params}`).then((r) => r.json()).then((d) => {
+				if (live) setChats(d.chats || []);
+			}).catch(() => {
+				if (live) setChats((c) => c || []);
+			});
+		}, query ? 150 : 0);
+		return () => {
+			live = false;
+			clearTimeout(timer);
+		};
+	}, [
+		query,
+		queensOnly,
+		newest,
+		queens,
+		[...archives.keys()].join(",")
+	]);
+	const update = (q) => {
+		setQuery(q);
+		const params = new URLSearchParams();
+		if (queensOnly) params.set("view", "queens");
+		if (q) params.set("q", q);
+		history.replaceState(null, "", params.size ? `${CHATS_ROUTE}?${params}` : CHATS_ROUTE);
+	};
+	const words = searchWords(query);
+	if (chats === null) return m$1`<h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· loading…</span></h2>`;
+	const byId = new Map(state.recipients.map((r) => [r.user_id, r]));
+	return m$1`
+    <h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· ${chats.length}</span></h2>
+    <input type="text" class="h-search chats-search" value=${query} autofocus
+      placeholder=${queensOnly ? "search your conversations with queens…" : "search your conversations: who did I ask about…"}
+      aria-label=${queensOnly ? "Search your conversations with queens" : "Search your conversations"} onInput=${(e) => update(e.target.value)}
+      onKeyDown=${(e) => {
+		if (e.key === "Escape" && query) {
+			e.stopPropagation();
+			update("");
+		}
+	}} />
+    ${chats.length === 0 ? m$1`<div class="empty">${query ? m$1`No conversation mentions "<b>${query}</b>".` : queensOnly ? "No conversations with current team queens yet." : "No conversations yet."}</div>` : m$1`<div class="chat-list">${chats.map((c) => {
+		const r = byId.get(c.agent);
+		const st = STATE[r ? agentStatus(r) : "unknown"] || STATE.unknown;
+		const m = c.match || c.last;
+		const matchId = c.match?.id ?? null;
+		return m$1`<a key=${c.agent} class="chat-row" href=${agentHash(c.agent, matchId)}>
+            ${r ? m$1`<${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />` : m$1`<span class="chat-gone" aria-hidden="true">◌</span>`}
+            <span class="chat-main">
+              <span class="chat-who">${archives.get(c.agent) || c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
+                ${unreadFor(c.agent) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
+                <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
+              <span class="chat-line">${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${hl(snippet(m.content, words), wordsRe(words))}</span>
+            </span>
+          </a>`;
+	})}</div>`}`;
 }
 //#endregion
 //#region web/src/use-media.js
@@ -12832,160 +13330,6 @@ function stepTeammate(members, user, by) {
 	return ids[(Math.max(0, ids.indexOf(user)) + by + ids.length) % ids.length];
 }
 //#endregion
-//#region web/src/pins.js
-async function setPinned(id, pinned, refresh) {
-	try {
-		const r = await fetch(`/api/messages/${id}/pin`, jsonInit("POST", { pinned }));
-		if (!r.ok) throw new Error(String(r.status));
-	} catch {
-		showNotice(pinned ? "Could not pin the message. Please try again." : "Could not unpin the message. Please try again.");
-		return;
-	}
-	refresh?.();
-}
-var flat = (text, width) => {
-	const one = (text || "").replace(/[*`~]+|^#+\s|^>\s?/gm, "").replace(/\s+/g, " ").trim();
-	return one.length > width ? `${one.slice(0, width)}…` : one;
-};
-var pinPage = (m) => m.sender === "owner" ? m.recipient : m.recipient === "owner" ? m.sender : m.recipient;
-var pinHref = (m) => agentHash(pinPage(m), m.id);
-var pinsOf = (pins, a, b) => (pins || []).filter((m) => pairKey(m.sender, m.recipient) === pairKey(a, b));
-function PinStrip({ pins, open }) {
-	if (!pins.length) return null;
-	return m$1`<div class="pin-strip" role="list" aria-label="Pinned messages">
-    ${pins.map((m) => m$1`<button type="button" role="listitem" key=${m.id} class="pin-chip" onClick=${() => open(m)}
-        title="Open the pinned message">
-      <span aria-hidden="true">📌</span> <b>${disp(m.sender)}</b> <span class="pin-text">${flat(m.content, 140) || "(attachment)"}</span>
-    </button>`)}
-  </div>`;
-}
-function PinDialog({ m, now, close, refresh, messages, right, inChat = null }) {
-	const ref = A(null);
-	h(() => {
-		const dialog = ref.current;
-		const previous = document.activeElement;
-		dialog.showModal();
-		return () => {
-			if (previous?.isConnected) previous.focus();
-		};
-	}, []);
-	const onKey = (e) => {
-		if (e.key === "Escape") e.stopPropagation();
-	};
-	return m$1`<dialog ref=${ref} class="page-dialog pin-dialog" aria-label="Pinned message"
-      onClose=${close} onKeyDown=${onKey} onClick=${(e) => {
-		if (e.target === ref.current) ref.current.close();
-	}}>
-    <div class="pin-dialog-body" tabindex="0">
-      <${ChatMessage} m=${m} now=${now} messages=${messages} right=${right} pinned=${true} />
-    </div>
-    <div class="page-dialog-actions pin-dialog-actions">
-      <button type="button" class="mini" onClick=${() => {
-		setPinned(m.id, false, refresh);
-		ref.current.close();
-	}}>unpin</button>
-      ${inChat && m$1`<button type="button" class="mini" onClick=${() => {
-		ref.current.close();
-		inChat(m);
-	}}>show in chat</button>`}
-      <button type="button" class="act" autofocus onClick=${() => ref.current.close()}>close</button>
-    </div>
-  </dialog>`;
-}
-function PinnedList({ pins, now, refresh }) {
-	if (!pins?.length) return null;
-	return m$1`<section class="pinned-list" aria-label="Pinned messages">
-    <h2>pinned <span class="count">· ${pins.length}</span></h2>
-    <ul>
-      ${pins.map((m) => m$1`<li key=${m.id}>
-        <a href=${pinHref(m)} title="Go to this message in its chat">
-          <span class="pin-who"><span aria-hidden="true">📌</span> ${disp(m.sender)} <span class="swap">→</span> ${disp(m.recipient)} <span class="age">· ${rel(m.ts, now)}</span></span>
-          <span class="pin-text">${flat(m.content, 240) || "(attachment)"}</span>
-        </a>
-        <button type="button" class="mini" aria-label=${`Unpin message ${m.id}`} onClick=${() => setPinned(m.id, false, refresh)}>unpin</button>
-      </li>`)}
-    </ul>
-  </section>`;
-}
-//#endregion
-//#region web/src/chats.js
-function agentThreads(messages, { query = "", members = null, gap = 900, fanout = 120 } = {}) {
-	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-	const seen = /* @__PURE__ */ new Set();
-	const own = [];
-	let selfNotes = 0;
-	for (const m of messages) {
-		if (seen.has(m.id)) continue;
-		seen.add(m.id);
-		if (m.sender === "owner" || m.recipient === "owner") continue;
-		if (m.sender === m.recipient) {
-			selfNotes += 1;
-			continue;
-		}
-		own.push(m);
-	}
-	own.sort((a, b) => a.ts - b.ts || a.id - b.id);
-	const items = [];
-	const lastCopy = /* @__PURE__ */ new Map();
-	for (const m of own) {
-		const key = `${m.sender}\u0000${m.content}`;
-		const prev = lastCopy.get(key);
-		if (prev && m.ts - prev.m.ts <= fanout && !prev.to.includes(m.recipient)) {
-			prev.to.push(m.recipient);
-			prev.ids.push(m.id);
-			continue;
-		}
-		const item = {
-			m,
-			to: [m.recipient],
-			ids: [m.id]
-		};
-		lastCopy.set(key, item);
-		items.push(item);
-	}
-	const open = /* @__PURE__ */ new Map();
-	const threads = [];
-	for (const item of items) {
-		const { m } = item;
-		const broadcast = item.to.length > 1;
-		const key = broadcast ? `${m.sender}\u0000*` : [m.sender, m.recipient].sort().join("\0");
-		let t = open.get(key);
-		if (!t || m.ts - t.end > gap) {
-			t = {
-				key: `${key}\u0000${m.id}`,
-				broadcast,
-				people: broadcast ? [m.sender] : [m.sender, m.recipient].sort(),
-				to: /* @__PURE__ */ new Set(),
-				start: m.ts,
-				end: m.ts,
-				items: [],
-				count: 0
-			};
-			open.set(key, t);
-			threads.push(t);
-		}
-		item.to.forEach((r) => t.to.add(r));
-		t.items.push(item);
-		t.end = m.ts;
-		t.count += item.ids.length;
-	}
-	const kept = threads.filter((t) => {
-		const names = [...t.people, ...t.to];
-		if (members && !names.some((n) => members.has(n))) return false;
-		if (!words.length) return true;
-		const text = `${names.join(" ")} ${t.items.map((i) => `${i.m.context || ""} ${i.m.content || ""}`).join(" ")}`.toLowerCase();
-		return words.every((w) => text.includes(w));
-	});
-	kept.sort((a, b) => b.end - a.end);
-	kept.forEach((t) => {
-		t.to = [...t.to].sort();
-	});
-	return {
-		threads: kept,
-		selfNotes
-	};
-}
-//#endregion
 //#region web/src/main.js
 function CopyPaneCommand({ command, paneLabel }) {
 	const [copied, setCopied] = d(false);
@@ -13148,167 +13492,6 @@ function ResumeAgentButton({ r, refresh }) {
 	};
 	return m$1`<button type="button" class="mini resume-agent" disabled=${busy} onClick=${resume}>
     ${busy ? "resuming…" : "resume agent"}</button>${message && m$1`<span role="status"> ${message}</span>`} `;
-}
-var SWITCHABLE = [
-	"claude",
-	"codex",
-	"pi",
-	"agy"
-];
-var OTHER_MODEL = "\0other";
-function ModelLabel({ r, refresh }) {
-	const [editing, setEditing] = d(false);
-	const [value, setValue] = d("");
-	const [known, setKnown] = d([]);
-	const [busy, setBusy] = d(false);
-	const [other, setOther] = d(false);
-	const inputRef = A(null);
-	h(() => {
-		if (editing) inputRef.current?.focus();
-	}, [editing, other]);
-	const flavor = (r.flavor || "generic").toLowerCase();
-	const start = () => {
-		setValue(r.model || "");
-		setOther(false);
-		setEditing(true);
-		fetch("/api/spawn-options").then((res) => res.json()).then((d) => setKnown(((d.harnesses || []).find((h) => h.flavor === flavor) || {}).models || [])).catch(() => {});
-	};
-	const switchable = SWITCHABLE.includes(flavor);
-	const save = async () => {
-		if (busy) return;
-		if (value.trim() === (r.model || "")) {
-			setEditing(false);
-			return;
-		}
-		if (switchable && !value.trim()) return;
-		setBusy(true);
-		const path = switchable ? "switch-model" : "model";
-		const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/${path}`, jsonInit("POST", { model: value.trim() })).catch(() => null);
-		setBusy(false);
-		if (!res || !res.ok) {
-			const body = res ? await res.json().catch(() => ({})) : {};
-			const why = body.detail?.error || (res ? `error ${res.status}` : "no answer from the hub");
-			const screen = body.detail?.screen ? `\n\nLast screen:\n${body.detail.screen}` : "";
-			await showNotice(switchable ? `Could not switch ${r.user_id} to ${value.trim()}: ${why}${screen}` : `Could not update the model label for ${r.user_id}: ${why}`);
-			return;
-		}
-		setEditing(false);
-		refresh();
-	};
-	if (!editing) return m$1`<button type="button" class="model-label" onClick=${start}
-      title=${switchable ? "Switch this agent's model for its current session (drives /model in its pane)." : "Edit the model label. Display only: switch the real model in the agent's pane, then update it here."}>
-      ${r.model ? m$1`<b>${r.model}</b>` : m$1`<span class="unset">set model</span>`} <span class="pen">✎</span>
-    </button>`;
-	const options = [.../* @__PURE__ */ new Set([...r.model ? [r.model] : [], ...known])];
-	const typing = other || options.length === 0;
-	const keys = (e) => {
-		if (e.key === "Enter") {
-			e.preventDefault();
-			save();
-		}
-		if (e.key === "Escape") setEditing(false);
-	};
-	return m$1`<span class="model-edit">
-    ${typing ? m$1`<input type="text" value=${value} placeholder="e.g. claude-opus-4-7"
-          aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
-          onInput=${(e) => setValue(e.target.value)} onKeyDown=${keys} />` : m$1`<select value=${value} aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
-          onChange=${(e) => e.target.value === OTHER_MODEL ? (setOther(true), setValue("")) : setValue(e.target.value)}
-          onKeyDown=${keys}>
-          ${!value && m$1`<option value="" disabled>pick a model</option>`}
-          ${options.map((m) => m$1`<option key=${m} value=${m}>${m}</option>`)}
-          <option value=${OTHER_MODEL}>other…</option>
-        </select>`}
-    <button type="button" class="mini" disabled=${busy} onClick=${save}>${busy ? switchable ? "switching…" : "saving…" : switchable ? "switch" : "save"}</button>
-    <button type="button" class="mini" disabled=${busy} onClick=${() => setEditing(false)}>cancel</button>
-  </span>`;
-}
-var DEFAULT_MODEL = "default";
-function SpawnControl({ refresh, nodes }) {
-	const [harnesses, setHarnesses] = d([]);
-	const [node, setNode] = d("");
-	const [flavor, setFlavor] = d("claude");
-	const [model, setModel] = d(DEFAULT_MODEL);
-	const [dir, setDir] = d("");
-	const [busy, setBusy] = d(false);
-	const [err, setErr] = d("");
-	h(() => {
-		let live = true;
-		fetch("/api/spawn-options").then((r) => r.json()).then((d) => {
-			if (live && d.harnesses) setHarnesses(d.harnesses);
-		}).catch(() => {});
-		return () => {
-			live = false;
-		};
-	}, []);
-	const target = spawnTarget(nodes, node, harnesses);
-	const offered = target.harnesses || [];
-	const models = (offered.find((h) => h.flavor === flavor) || {}).models || [];
-	const dirs = target.dirs || [];
-	const cwd = dirs.includes(dir) ? dir : dirs[0] || "";
-	const pickFlavor = (f) => {
-		setFlavor(f);
-		setModel(DEFAULT_MODEL);
-	};
-	const pickNode = (n) => {
-		setNode(n);
-		const next = spawnTarget(nodes, n, harnesses);
-		if (next.ok && next.harnesses.length && !next.harnesses.some((h) => h.flavor === flavor)) pickFlavor(next.harnesses[0].flavor);
-	};
-	const enrolled = nodes || [];
-	const choices = enrolled.some((n) => n.name === node) || !node ? enrolled : enrolled.concat([{
-		name: node,
-		connected: false,
-		gone: true
-	}]);
-	const spawn = async (e) => {
-		e.preventDefault();
-		if (!target.ok) {
-			setErr(target.reason);
-			return;
-		}
-		setBusy(true);
-		setErr("");
-		const body = {
-			flavor,
-			model: model === DEFAULT_MODEL ? null : model
-		};
-		if (target.remote) body.node = target.node;
-		if (cwd) body.cwd = cwd;
-		try {
-			const r = await fetch("/agents/spawn", jsonInit("POST", body));
-			const payload = await r.json().catch(() => null);
-			const outcome = spawnOutcome(r.ok, payload);
-			if (outcome.status === "failed") setErr(`spawn failed: ${outcome.reason}`);
-			else if (outcome.status === "unknown") setErr(`spawn outcome unknown: ${outcome.reason}${outcome.user ? ` (registered as ${outcome.user})` : ""}`);
-			else if (outcome.status === "uncertain") setErr(`spawn not confirmed: ${outcome.reason}; check the agents list`);
-		} catch (err) {
-			setErr(`not confirmed: ${unansweredOutcome(err).reason}`);
-		} finally {
-			setBusy(false);
-			refresh();
-		}
-	};
-	const flavors = offered.length ? offered.map((h) => h.flavor) : [];
-	return m$1`<form class="spawn" onSubmit=${spawn}>
-    <div class="spawn-heading">Spawn agent · choose destination</div>
-    ${(enrolled.length > 1 || node) && m$1`<select title="machine" value=${node} onChange=${(e) => pickNode(e.target.value)}>
-      ${choices.map((n) => m$1`<option key=${n.name} value=${n.local ? "" : n.name} disabled=${!n.local && !n.connected}>${n.local ? `${n.name} (hub)` : n.gone ? `${n.name} (no longer enrolled)` : n.connected ? n.name : `${n.name} (not connected)`}</option>`)}
-    </select>`}
-    ${!target.ok && m$1`<span class="spawn-note">${target.reason}. Pick a connected machine.</span>`}
-    <select title="harness" value=${flavor} onChange=${(e) => pickFlavor(e.target.value)} disabled=${!target.ok}>
-      ${flavors.map((f) => m$1`<option key=${f} value=${f}>${f}</option>`)}
-    </select>
-    <select title="model" value=${model} onChange=${(e) => setModel(e.target.value)}
-      disabled=${models.length === 0}>
-      <option value=${DEFAULT_MODEL}>default model</option>
-      ${models.map((m) => m$1`<option key=${m} value=${m}>${m}</option>`)}
-    </select>
-    ${dirs.length > 0 && m$1`<select title="start folder" aria-label="start folder" value=${cwd} onChange=${(e) => setDir(e.target.value)}>
-      ${dirs.map((d) => m$1`<option key=${d} value=${d}>${d}</option>`)}
-    </select>`}
-    <button class="act" type="submit" disabled=${busy || !target.ok}>${busy ? "spawning…" : "spawn agent"}</button>
-    ${err && m$1`<span style="color:var(--alert); font-size:11px">${err}</span>`}
-  </form>`;
 }
 var AGENT_DRAG_TYPE = "application/x-agent-swarm-agent";
 async function persistTeamOrder(teamIds, refresh) {
@@ -14780,183 +14963,6 @@ function TeamStrip({ crew, user, unreadFor }) {
 	})}
     ${crew.members.length > 1 && m$1`<span class="team-strip-hint">Alt+[ / Alt+]</span>`}
   </nav>`;
-}
-var CHATS_ROUTE = "#/chats";
-var chatsParams = () => new URLSearchParams(location.hash.split("?")[1] || "");
-var chatsQuery = () => chatsParams().get("q") || "";
-var AGENT_TALK_LIMIT = 4e3;
-function snippet(text, words, width = 240) {
-	const flat = (text || "").replace(/\s+/g, " ").trim();
-	const at = words.length ? flat.toLowerCase().indexOf(words[0]) : -1;
-	const start = at > 80 ? at - 60 : 0;
-	const cut = flat.slice(start, start + width);
-	return `${start ? "…" : ""}${cut}${start + width < flat.length ? "…" : ""}`;
-}
-function ChatsView({ state, unreadFor, refresh }) {
-	const [view, setView] = d(() => {
-		const selected = chatsParams().get("view");
-		return ["agents", "queens"].includes(selected) ? selected : "you";
-	});
-	const pick = (v) => {
-		setView(v);
-		history.replaceState(null, "", v === "you" ? CHATS_ROUTE : `${CHATS_ROUTE}?view=${v}`);
-	};
-	return m$1`<div class="chats">
-    <${PinnedList} pins=${state.pins} now=${state.now} refresh=${refresh} />
-    <div class="agents-view-switch chats-switch" role="group" aria-label="Which chats">
-      <button type="button" aria-pressed=${view === "you"} onClick=${() => pick("you")}>with you</button>
-      <button type="button" aria-pressed=${view === "queens"} onClick=${() => pick("queens")}>you and queens</button>
-      <button type="button" aria-pressed=${view === "agents"} onClick=${() => pick("agents")}>between agents</button>
-    </div>
-    ${view === "agents" ? m$1`<${AgentTalk} state=${state} />` : m$1`<${OwnerChats} key=${view} state=${state} unreadFor=${unreadFor} queensOnly=${view === "queens"} />`}
-  </div>`;
-}
-var clock = (ts) => (/* @__PURE__ */ new Date(ts * 1e3)).toLocaleTimeString([], {
-	hour: "2-digit",
-	minute: "2-digit"
-});
-var dayOf = (ts) => (/* @__PURE__ */ new Date(ts * 1e3)).toLocaleDateString([], {
-	weekday: "short",
-	month: "short",
-	day: "numeric"
-});
-function AgentTalk({ state }) {
-	const [full, setFull] = d(null);
-	const [query, setQuery] = d(chatsQuery);
-	const [team, setTeam] = d("");
-	h(() => {
-		let live = true;
-		fetch(`/messages?limit=${AGENT_TALK_LIMIT}`).then((r) => r.json()).then((d) => {
-			if (live) setFull(d.messages || []);
-		}).catch(() => {
-			if (live) setFull([]);
-		});
-		return () => {
-			live = false;
-		};
-	}, []);
-	const update = (q) => {
-		setQuery(q);
-		history.replaceState(null, "", `${CHATS_ROUTE}?view=agents${q ? `&q=${encodeURIComponent(q)}` : ""}`);
-	};
-	const teams = state.teams || [];
-	const members = T(() => team ? new Set(state.recipients.filter((r) => String(r.team_id) === team).map((r) => r.user_id)) : null, [team, state.recipients]);
-	const { threads, selfNotes } = T(() => agentThreads([...state.messages, ...full || []], {
-		query,
-		members
-	}), [
-		state.messages,
-		full,
-		query,
-		members
-	]);
-	const words = searchWords(query);
-	const oldest = full && full.length >= AGENT_TALK_LIMIT ? full[full.length - 1].ts : null;
-	let day = null;
-	return m$1`
-    <h2>between agents <span class="count">· ${threads.length} conversation${threads.length === 1 ? "" : "s"}${full === null ? " · loading…" : ""}</span></h2>
-    <div class="agent-talk-filters">
-      <input type="text" class="h-search chats-search" value=${query} autofocus
-        placeholder="search agent talk: a name, a task, a word…"
-        aria-label="Search agent talk" onInput=${(e) => update(e.target.value)}
-        onKeyDown=${(e) => {
-		if (e.key === "Escape" && query) {
-			e.stopPropagation();
-			update("");
-		}
-	}} />
-      ${teams.length > 0 && m$1`<select aria-label="Team" value=${team} onChange=${(e) => setTeam(e.target.value)}>
-        <option value="">all teams</option>
-        ${teams.map((t) => m$1`<option key=${t.id} value=${String(t.id)}>${t.name}</option>`)}
-      </select>`}
-    </div>
-    <p class="agent-talk-note">Grouped by pair: a quiet gap of 15 min starts a new conversation. The same text sent to several agents shows once.
-      ${selfNotes > 0 && ` ${selfNotes} notes agents left themselves are hidden.`}
-      ${oldest && ` Showing talk since ${dayOf(oldest)} ${clock(oldest)}.`}</p>
-    ${threads.length === 0 ? m$1`<div class="empty">${full === null ? "Loading…" : query || team ? "No agent talk matches." : "No agent talk yet."}</div>` : m$1`<div class="agent-talk">${threads.map((t) => {
-		const d = dayOf(t.end);
-		return m$1`${d !== day ? (day = d, m$1`<h3 class="agent-talk-day">${d}</h3>`) : null}<${TalkThread} key=${t.key} t=${t} words=${words} />`;
-	})}</div>`}`;
-}
-function TalkThread({ t, words }) {
-	const [open, setOpen] = d(false);
-	const last = t.items[t.items.length - 1];
-	return m$1`<details class="agent-talk-thread" onToggle=${(e) => setOpen(e.currentTarget.open)}>
-    <summary>
-      <span class="chat-who">${t.broadcast ? m$1`${t.people[0]} <span class="agent-talk-arrow">→</span> ${t.to.join(", ")}` : m$1`${t.people[0]} <span class="agent-talk-arrow">↔</span> ${t.people[1]}`}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
-      <span class="chat-line"><b>${last.m.sender}:</b> ${hl(snippet(last.m.content, words, 200), wordsRe(words))}</span>
-    </summary>
-    ${open && m$1`<div class="agent-talk-msgs">${t.items.map((i) => m$1`<div key=${i.ids[0]} class="agent-talk-msg" data-message-id=${i.m.id} tabindex="-1" onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")}>
-      <div class="agent-talk-hdr"><b>${i.m.sender}</b> → ${i.to.join(", ")} · ${clock(i.m.ts)}${i.m.context ? ` · ${i.m.context}` : ""}</div>
-      <${ReplyPreview} message=${i.m} messages=${t.items.map((item) => item.m)} />
-      <div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(i.m.content)) }} />
-    </div>`)}</div>`}
-  </details>`;
-}
-function OwnerChats({ state, unreadFor, queensOnly = false }) {
-	const [chats, setChats] = d(null);
-	const [query, setQuery] = d(chatsQuery);
-	const newest = state.messages.reduce((n, m) => Math.max(n, m.id), 0);
-	const queens = (state.teams || []).map((t) => t.queen || "").join(",");
-	const archives = new Map((state.retired_agents || []).map((r) => [r.archive_id, retiredLabel(r)]));
-	h(() => {
-		let live = true;
-		const params = new URLSearchParams({ q: query });
-		if (queensOnly) params.set("queens", "true");
-		const timer = setTimeout(() => {
-			fetch(`/api/chats?${params}`).then((r) => r.json()).then((d) => {
-				if (live) setChats(d.chats || []);
-			}).catch(() => {
-				if (live) setChats((c) => c || []);
-			});
-		}, query ? 150 : 0);
-		return () => {
-			live = false;
-			clearTimeout(timer);
-		};
-	}, [
-		query,
-		queensOnly,
-		newest,
-		queens,
-		[...archives.keys()].join(",")
-	]);
-	const update = (q) => {
-		setQuery(q);
-		const params = new URLSearchParams();
-		if (queensOnly) params.set("view", "queens");
-		if (q) params.set("q", q);
-		history.replaceState(null, "", params.size ? `${CHATS_ROUTE}?${params}` : CHATS_ROUTE);
-	};
-	const words = searchWords(query);
-	if (chats === null) return m$1`<h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· loading…</span></h2>`;
-	const byId = new Map(state.recipients.map((r) => [r.user_id, r]));
-	return m$1`
-    <h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· ${chats.length}</span></h2>
-    <input type="text" class="h-search chats-search" value=${query} autofocus
-      placeholder=${queensOnly ? "search your conversations with queens…" : "search your conversations: who did I ask about…"}
-      aria-label=${queensOnly ? "Search your conversations with queens" : "Search your conversations"} onInput=${(e) => update(e.target.value)}
-      onKeyDown=${(e) => {
-		if (e.key === "Escape" && query) {
-			e.stopPropagation();
-			update("");
-		}
-	}} />
-    ${chats.length === 0 ? m$1`<div class="empty">${query ? m$1`No conversation mentions "<b>${query}</b>".` : queensOnly ? "No conversations with current team queens yet." : "No conversations yet."}</div>` : m$1`<div class="chat-list">${chats.map((c) => {
-		const r = byId.get(c.agent);
-		const st = STATE[r ? agentStatus(r) : "unknown"] || STATE.unknown;
-		const m = c.match || c.last;
-		const matchId = c.match?.id ?? null;
-		return m$1`<a key=${c.agent} class="chat-row" href=${agentHash(c.agent, matchId)}>
-            ${r ? m$1`<${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />` : m$1`<span class="chat-gone" aria-hidden="true">◌</span>`}
-            <span class="chat-main">
-              <span class="chat-who">${archives.get(c.agent) || c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
-                ${unreadFor(c.agent) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
-                <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
-              <span class="chat-line">${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${hl(snippet(m.content, words), wordsRe(words))}</span>
-            </span>
-          </a>`;
-	})}</div>`}`;
 }
 function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor, returnState }) {
 	const history = useAgentHistory(user, returnState);

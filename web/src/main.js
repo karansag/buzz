@@ -1,6 +1,5 @@
 import { agentPreview } from "./agent-preview.js";
 import { replySnippet } from "./replies.js";
-import { ReplyPreview } from "./reply-preview.js";
 import { contextChip } from "./context.js";
 import { OwnerNote } from "./owner-note.js";
 import { QuickSwitcher, noteOpened } from "./quick-switch.js";
@@ -11,6 +10,9 @@ import { TaskTrash } from "./task-trash.js";
 import { confirmDialog, showNotice } from "./dialogs.js";
 import { TaskStatusActions } from "./task-status.js";
 import { RestartAgentButton } from "./restart-agent.js";
+import { ModelLabel } from "./model-label.js";
+import { SpawnControl } from "./spawn-control.js";
+import { CHATS_ROUTE, ChatsView } from "./chats-view.js";
 import { html, render } from "htm/preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 
@@ -35,7 +37,7 @@ import {
   HarnessFilter,
   retiredLabel,
 } from "./shared.js";
-import { deliveryOutcome, draftClientId, spawnOutcome, spawnTarget, unansweredOutcome } from "./outcome.js";
+import { deliveryOutcome, draftClientId, unansweredOutcome } from "./outcome.js";
 import { machineColor, machineList, machineName } from "./machines.js";
 import { COMPACT_LAYOUT, useMedia } from "./use-media.js";
 import { CompactBees, HiveView } from "./hive.js";
@@ -47,17 +49,13 @@ import { AttachmentList, AttachmentPicker, useAttachments } from "./attachments.
 import { createBottomFollower } from "./scroll-follow.js";
 import { attentionReporter } from "./native.js";
 import { notificationReporter } from "./notifications.js";
-import { renderMarkdown } from "./markdown.js";
 import { parseAnsi, runStyle, trimAnsiEnd } from "./ansi.js";
 import "../styles.css";
 import { stepTeammate, teammates } from "./teammates.js";
 import { Crown, queenSuffix, queenTeam, teamOption } from "./queen.js";
-import { shellNewlines } from "./newlines.js";
-import { PinDialog, PinStrip, PinnedList, pinHref, pinsOf, setPinned } from "./pins.js";
-import { agentThreads } from "./chats.js";
+import { PinDialog, PinStrip, pinHref, pinsOf, setPinned } from "./pins.js";
 import { agentHash, parseAgentRoute } from "./agent-route.js";
 import { readJSON, readStored, writeJSON, writeStored } from "./storage.js";
-import { hl, searchWords, wordsRe } from "./highlight.js";
 
 /* ---------- agent controls ---------- */
 
@@ -242,176 +240,6 @@ function ResumeAgentButton({ r, refresh }) {
   };
   return html`<button type="button" class="mini resume-agent" disabled=${busy} onClick=${resume}>
     ${busy ? "resuming…" : "resume agent"}</button>${message && html`<span role="status"> ${message}</span>`} `;
-}
-
-// For Claude Code, Codex and Pi the model label is a switcher: saving drives
-// the harness's own /model command in the agent's pane, for its current
-// session only, and the hub reads the result back off the screen. An idle
-// agy agent is restarted into its conversation on the new model instead.
-// The hub also keeps the label in step when /model is typed in the pane.
-// Other harnesses keep a display-only label.
-const SWITCHABLE = ["claude", "codex", "pi", "agy"];
-const OTHER_MODEL = "\u0000other";
-
-function ModelLabel({ r, refresh }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState("");
-  const [known, setKnown] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [other, setOther] = useState(false);
-  const inputRef = useRef(null);
-  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing, other]);
-  const flavor = (r.flavor || "generic").toLowerCase();
-  const start = () => {
-    setValue(r.model || "");
-    setOther(false);
-    setEditing(true);
-    fetch("/api/spawn-options")
-      .then(res => res.json())
-      .then(d => setKnown(((d.harnesses || []).find(h => h.flavor === flavor) || {}).models || []))
-      .catch(() => {});
-  };
-  const switchable = SWITCHABLE.includes(flavor);
-  const save = async () => {
-    if (busy) return;
-    if (value.trim() === (r.model || "")) { setEditing(false); return; }
-    if (switchable && !value.trim()) return;
-    setBusy(true);
-    const path = switchable ? "switch-model" : "model";
-    const res = await fetch(`/agents/${encodeURIComponent(r.user_id)}/${path}`, jsonInit("POST", { model: value.trim() }))
-      .catch(() => null);
-    setBusy(false);
-    if (!res || !res.ok) {
-      const body = res ? await res.json().catch(() => ({})) : {};
-      const why = body.detail?.error || (res ? `error ${res.status}` : "no answer from the hub");
-      const screen = body.detail?.screen ? `\n\nLast screen:\n${body.detail.screen}` : "";
-      await showNotice(switchable
-        ? `Could not switch ${r.user_id} to ${value.trim()}: ${why}${screen}`
-        : `Could not update the model label for ${r.user_id}: ${why}`);
-      return;
-    }
-    setEditing(false);
-    refresh();
-  };
-  if (!editing) {
-    return html`<button type="button" class="model-label" onClick=${start}
-      title=${switchable
-        ? "Switch this agent's model for its current session (drives /model in its pane)."
-        : "Edit the model label. Display only: switch the real model in the agent's pane, then update it here."}>
-      ${r.model ? html`<b>${r.model}</b>` : html`<span class="unset">set model</span>`} <span class="pen">✎</span>
-    </button>`;
-  }
-  // A real <select> of the known models: a datalist arrow did nothing on
-  // desktop once the box held a value, and mobile hid it. "other…" opens a
-  // text box for a model the list does not offer.
-  const options = [...new Set([...(r.model ? [r.model] : []), ...known])];
-  const typing = other || options.length === 0;
-  const keys = e => {
-    if (e.key === "Enter") { e.preventDefault(); save(); }
-    if (e.key === "Escape") setEditing(false);
-  };
-  return html`<span class="model-edit">
-    ${typing
-      ? html`<input type="text" value=${value} placeholder="e.g. claude-opus-4-7"
-          aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
-          onInput=${e => setValue(e.target.value)} onKeyDown=${keys} />`
-      : html`<select value=${value} aria-label=${`Model for ${r.user_id}`} disabled=${busy} ref=${inputRef}
-          onChange=${e => e.target.value === OTHER_MODEL ? (setOther(true), setValue("")) : setValue(e.target.value)}
-          onKeyDown=${keys}>
-          ${!value && html`<option value="" disabled>pick a model</option>`}
-          ${options.map(m => html`<option key=${m} value=${m}>${m}</option>`)}
-          <option value=${OTHER_MODEL}>other…</option>
-        </select>`}
-    <button type="button" class="mini" disabled=${busy} onClick=${save}>${busy
-      ? (switchable ? "switching…" : "saving…")
-      : (switchable ? "switch" : "save")}</button>
-    <button type="button" class="mini" disabled=${busy} onClick=${() => setEditing(false)}>cancel</button>
-  </span>`;
-}
-
-const DEFAULT_MODEL = "default";
-
-function SpawnControl({ refresh, nodes }) {
-  const [harnesses, setHarnesses] = useState([]);
-  const [node, setNode] = useState("");
-  const [flavor, setFlavor] = useState("claude");
-  const [model, setModel] = useState(DEFAULT_MODEL);
-  const [dir, setDir] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  useEffect(() => {
-    let live = true;
-    fetch("/api/spawn-options")
-      .then(r => r.json())
-      .then(d => { if (live && d.harnesses) setHarnesses(d.harnesses); })
-      .catch(() => {});
-    return () => { live = false; };
-  }, []);
-
-  // Where this spawn would go. A picked machine that has gone away or
-  // disconnected stays picked and blocks the form; it is never swapped for
-  // the hub behind the user's back.
-  const target = spawnTarget(nodes, node, harnesses);
-  const offered = target.harnesses || [];
-  const models = (offered.find(h => h.flavor === flavor) || {}).models || [];
-  // A pick that the newly chosen machine does not list falls back to its first.
-  const dirs = target.dirs || [];
-  const cwd = dirs.includes(dir) ? dir : (dirs[0] || "");
-  const pickFlavor = (f) => { setFlavor(f); setModel(DEFAULT_MODEL); };
-  const pickNode = (n) => {
-    setNode(n);
-    const next = spawnTarget(nodes, n, harnesses);
-    if (next.ok && next.harnesses.length && !next.harnesses.some(h => h.flavor === flavor)) pickFlavor(next.harnesses[0].flavor);
-  };
-  const enrolled = nodes || [];
-  const choices = enrolled.some(n => n.name === node) || !node
-    ? enrolled : enrolled.concat([{ name: node, connected: false, gone: true }]);
-
-  const spawn = async (e) => {
-    e.preventDefault();
-    if (!target.ok) { setErr(target.reason); return; }
-    setBusy(true);
-    setErr("");
-    const body = { flavor, model: model === DEFAULT_MODEL ? null : model };
-    if (target.remote) body.node = target.node;
-    if (cwd) body.cwd = cwd;
-    try {
-      const r = await fetch("/agents/spawn", jsonInit("POST", body));
-      const payload = await r.json().catch(() => null);
-      const outcome = spawnOutcome(r.ok, payload);
-      if (outcome.status === "failed") setErr(`spawn failed: ${outcome.reason}`);
-      else if (outcome.status === "unknown") setErr(`spawn outcome unknown: ${outcome.reason}${outcome.user ? ` (registered as ${outcome.user})` : ""}`);
-      else if (outcome.status === "uncertain") setErr(`spawn not confirmed: ${outcome.reason}; check the agents list`);
-    } catch (err) {
-      setErr(`not confirmed: ${unansweredOutcome(err).reason}`);
-    } finally {
-      setBusy(false);
-      refresh();
-    }
-  };
-
-  const flavors = offered.length ? offered.map(h => h.flavor) : [];
-  return html`<form class="spawn" onSubmit=${spawn}>
-    <div class="spawn-heading">Spawn agent · choose destination</div>
-    ${(enrolled.length > 1 || node) && html`<select title="machine" value=${node} onChange=${e => pickNode(e.target.value)}>
-      ${choices.map(n => html`<option key=${n.name} value=${n.local ? "" : n.name} disabled=${!n.local && !n.connected}>${n.local ? `${n.name} (hub)` : n.gone ? `${n.name} (no longer enrolled)` : n.connected ? n.name : `${n.name} (not connected)`}</option>`)}
-    </select>`}
-    ${!target.ok && html`<span class="spawn-note">${target.reason}. Pick a connected machine.</span>`}
-    <select title="harness" value=${flavor} onChange=${e => pickFlavor(e.target.value)} disabled=${!target.ok}>
-      ${flavors.map(f => html`<option key=${f} value=${f}>${f}</option>`)}
-    </select>
-    <select title="model" value=${model} onChange=${e => setModel(e.target.value)}
-      disabled=${models.length === 0}>
-      <option value=${DEFAULT_MODEL}>default model</option>
-      ${models.map(m => html`<option key=${m} value=${m}>${m}</option>`)}
-    </select>
-    ${dirs.length > 0 && html`<select title="start folder" aria-label="start folder" value=${cwd} onChange=${e => setDir(e.target.value)}>
-      ${dirs.map(d => html`<option key=${d} value=${d}>${d}</option>`)}
-    </select>`}
-    <button class="act" type="submit" disabled=${busy || !target.ok}>${busy ? "spawning…" : "spawn agent"}</button>
-    ${err && html`<span style="color:var(--alert); font-size:11px">${err}</span>`}
-  </form>`;
 }
 
 const AGENT_DRAG_TYPE = "application/x-agent-swarm-agent";
@@ -1858,183 +1686,6 @@ function TeamStrip({ crew, user, unreadFor }) {
     })}
     ${crew.members.length > 1 && html`<span class="team-strip-hint">Alt+[ / Alt+]</span>`}
   </nav>`;
-}
-
-// "with you": every conversation the owner has had, one row per
-// agent, newest first, to find whom you asked about something that never
-// became a task. "you and queens" narrows those to the current team leads.
-// "between agents": the agents' talk with each other, as
-// bursts per pair and broadcasts (see agentThreads), newest first under day
-// headings. Each view's history loads once when it opens; new messages come
-// from the poll.
-const CHATS_ROUTE = "#/chats";
-const chatsParams = () => new URLSearchParams(location.hash.split("?")[1] || "");
-const chatsQuery = () => chatsParams().get("q") || "";
-// Agent talk beyond this many recent messages stays in each agent's own page.
-const AGENT_TALK_LIMIT = 4000;
-
-function snippet(text, words, width = 240) {
-  const flat = (text || "").replace(/\s+/g, " ").trim();
-  const at = words.length ? flat.toLowerCase().indexOf(words[0]) : -1;
-  const start = at > 80 ? at - 60 : 0;
-  const cut = flat.slice(start, start + width);
-  return `${start ? "…" : ""}${cut}${start + width < flat.length ? "…" : ""}`;
-}
-
-function ChatsView({ state, unreadFor, refresh }) {
-  const [view, setView] = useState(() => {
-    const selected = chatsParams().get("view");
-    return ["agents", "queens"].includes(selected) ? selected : "you";
-  });
-  const pick = (v) => {
-    setView(v);
-    history.replaceState(null, "", v === "you" ? CHATS_ROUTE : `${CHATS_ROUTE}?view=${v}`);
-  };
-  return html`<div class="chats">
-    <${PinnedList} pins=${state.pins} now=${state.now} refresh=${refresh} />
-    <div class="agents-view-switch chats-switch" role="group" aria-label="Which chats">
-      <button type="button" aria-pressed=${view === "you"} onClick=${() => pick("you")}>with you</button>
-      <button type="button" aria-pressed=${view === "queens"} onClick=${() => pick("queens")}>you and queens</button>
-      <button type="button" aria-pressed=${view === "agents"} onClick=${() => pick("agents")}>between agents</button>
-    </div>
-    ${view === "agents"
-      ? html`<${AgentTalk} state=${state} />`
-      : html`<${OwnerChats} key=${view} state=${state} unreadFor=${unreadFor} queensOnly=${view === "queens"} />`}
-  </div>`;
-}
-
-const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-const dayOf = (ts) => new Date(ts * 1000).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
-
-function AgentTalk({ state }) {
-  const [full, setFull] = useState(null);
-  const [query, setQuery] = useState(chatsQuery);
-  const [team, setTeam] = useState("");
-  useEffect(() => {
-    let live = true;
-    fetch(`/messages?limit=${AGENT_TALK_LIMIT}`)
-      .then(r => r.json())
-      .then(d => { if (live) setFull(d.messages || []); })
-      .catch(() => { if (live) setFull([]); });
-    return () => { live = false; };
-  }, []);
-  const update = (q) => {
-    setQuery(q);
-    history.replaceState(null, "", `${CHATS_ROUTE}?view=agents${q ? `&q=${encodeURIComponent(q)}` : ""}`);
-  };
-  const teams = state.teams || [];
-  const members = useMemo(
-    () => (team ? new Set(state.recipients.filter(r => String(r.team_id) === team).map(r => r.user_id)) : null),
-    [team, state.recipients],
-  );
-  const { threads, selfNotes } = useMemo(
-    () => agentThreads([...state.messages, ...(full || [])], { query, members }),
-    [state.messages, full, query, members],
-  );
-  const words = searchWords(query);
-  const oldest = full && full.length >= AGENT_TALK_LIMIT ? full[full.length - 1].ts : null;
-  let day = null;
-  return html`
-    <h2>between agents <span class="count">· ${threads.length} conversation${threads.length === 1 ? "" : "s"}${full === null ? " · loading…" : ""}</span></h2>
-    <div class="agent-talk-filters">
-      <input type="text" class="h-search chats-search" value=${query} autofocus
-        placeholder="search agent talk: a name, a task, a word…"
-        aria-label="Search agent talk" onInput=${e => update(e.target.value)}
-        onKeyDown=${e => { if (e.key === "Escape" && query) { e.stopPropagation(); update(""); } }} />
-      ${teams.length > 0 && html`<select aria-label="Team" value=${team} onChange=${e => setTeam(e.target.value)}>
-        <option value="">all teams</option>
-        ${teams.map(t => html`<option key=${t.id} value=${String(t.id)}>${t.name}</option>`)}
-      </select>`}
-    </div>
-    <p class="agent-talk-note">Grouped by pair: a quiet gap of 15 min starts a new conversation. The same text sent to several agents shows once.
-      ${selfNotes > 0 && ` ${selfNotes} notes agents left themselves are hidden.`}
-      ${oldest && ` Showing talk since ${dayOf(oldest)} ${clock(oldest)}.`}</p>
-    ${threads.length === 0
-      ? html`<div class="empty">${full === null ? "Loading…" : query || team ? "No agent talk matches." : "No agent talk yet."}</div>`
-      : html`<div class="agent-talk">${threads.map(t => {
-          const d = dayOf(t.end);
-          const heading = d !== day ? (day = d, html`<h3 class="agent-talk-day">${d}</h3>`) : null;
-          return html`${heading}<${TalkThread} key=${t.key} t=${t} words=${words} />`;
-        })}</div>`}`;
-}
-
-// One burst of agent talk; its messages render only while it is open.
-function TalkThread({ t, words }) {
-  const [open, setOpen] = useState(false);
-  const last = t.items[t.items.length - 1];
-  const title = t.broadcast
-    ? html`${t.people[0]} <span class="agent-talk-arrow">→</span> ${t.to.join(", ")}`
-    : html`${t.people[0]} <span class="agent-talk-arrow">↔</span> ${t.people[1]}`;
-  return html`<details class="agent-talk-thread" onToggle=${e => setOpen(e.currentTarget.open)}>
-    <summary>
-      <span class="chat-who">${title}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
-      <span class="chat-line"><b>${last.m.sender}:</b> ${hl(snippet(last.m.content, words, 200), wordsRe(words))}</span>
-    </summary>
-    ${open && html`<div class="agent-talk-msgs">${t.items.map(i => html`<div key=${i.ids[0]} class="agent-talk-msg" data-message-id=${i.m.id} tabindex="-1" onAnimationEnd=${e => e.currentTarget.classList.remove("reply-highlight")}>
-      <div class="agent-talk-hdr"><b>${i.m.sender}</b> → ${i.to.join(", ")} · ${clock(i.m.ts)}${i.m.context ? ` · ${i.m.context}` : ""}</div>
-      <${ReplyPreview} message=${i.m} messages=${t.items.map(item => item.m)} />
-      <div class="md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(shellNewlines(i.m.content)) }} />
-    </div>`)}</div>`}
-  </details>`;
-}
-
-function OwnerChats({ state, unreadFor, queensOnly = false }) {
-  const [chats, setChats] = useState(null);
-  const [query, setQuery] = useState(chatsQuery);
-  // The server builds the rows (one per conversation, search included). The
-  // list is fetched again when the search or the newest message changes.
-  const newest = state.messages.reduce((n, m) => Math.max(n, m.id), 0);
-  const queens = (state.teams || []).map(t => t.queen || "").join(",");
-  const archives = new Map((state.retired_agents || []).map(r => [r.archive_id, retiredLabel(r)]));
-  const archiveVersion = [...archives.keys()].join(",");
-  useEffect(() => {
-    let live = true;
-    const params = new URLSearchParams({ q: query });
-    if (queensOnly) params.set("queens", "true");
-    const timer = setTimeout(() => {
-      fetch(`/api/chats?${params}`)
-        .then(r => r.json())
-        .then(d => { if (live) setChats(d.chats || []); })
-        .catch(() => { if (live) setChats(c => c || []); });
-    }, query ? 150 : 0);
-    return () => { live = false; clearTimeout(timer); };
-  }, [query, queensOnly, newest, queens, archiveVersion]);
-  const update = (q) => {
-    setQuery(q);
-    const params = new URLSearchParams();
-    if (queensOnly) params.set("view", "queens");
-    if (q) params.set("q", q);
-    history.replaceState(null, "", params.size ? `${CHATS_ROUTE}?${params}` : CHATS_ROUTE);
-  };
-  const words = searchWords(query);
-  if (chats === null) return html`<h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· loading…</span></h2>`;
-  const byId = new Map(state.recipients.map(r => [r.user_id, r]));
-  return html`
-    <h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· ${chats.length}</span></h2>
-    <input type="text" class="h-search chats-search" value=${query} autofocus
-      placeholder=${queensOnly ? "search your conversations with queens…" : "search your conversations: who did I ask about…"}
-      aria-label=${queensOnly ? "Search your conversations with queens" : "Search your conversations"} onInput=${e => update(e.target.value)}
-      onKeyDown=${e => { if (e.key === "Escape" && query) { e.stopPropagation(); update(""); } }} />
-    ${chats.length === 0
-      ? html`<div class="empty">${query ? html`No conversation mentions "<b>${query}</b>".` : queensOnly ? "No conversations with current team queens yet." : "No conversations yet."}</div>`
-      : html`<div class="chat-list">${chats.map(c => {
-          const r = byId.get(c.agent);
-          const st = STATE[r ? agentStatus(r) : "unknown"] || STATE.unknown;
-          const m = c.match || c.last;
-          // A search match opens the conversation at that message; without a
-          // search the row opens the end of the conversation, as before.
-          const matchId = c.match?.id ?? null;
-          return html`<a key=${c.agent} class="chat-row" href=${agentHash(c.agent, matchId)}>
-            ${r ? html`<${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />`
-              : html`<span class="chat-gone" aria-hidden="true">◌</span>`}
-            <span class="chat-main">
-              <span class="chat-who">${archives.get(c.agent) || c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
-                ${unreadFor(c.agent) && html`<span class="team-mate-unread" title="new reply">●</span>`}
-                <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
-              <span class="chat-line">${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${hl(snippet(m.content, words), wordsRe(words))}</span>
-            </span>
-          </a>`;
-        })}</div>`}`;
 }
 
 function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor, returnState }) {
