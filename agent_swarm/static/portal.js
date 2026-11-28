@@ -9208,6 +9208,7 @@ function parseAgentRoute(hash = "") {
 //#region web/src/shared.js
 var POLL_MS$1 = 2e3;
 var PEEK_MS = 2e3;
+var TASK_DRAG_TYPE = "application/x-agent-swarm-task";
 var JSONH = { "content-type": "application/json" };
 var jsonInit = (method, body) => ({
 	method,
@@ -9553,6 +9554,15 @@ function writeJSON(key, value) {
 	writeStored(key, value === null ? null : JSON.stringify(value));
 }
 //#endregion
+//#region web/src/highlight.js
+var searchWords = (query) => query.toLowerCase().split(/\s+/).filter(Boolean);
+var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var wordsRe = (words) => words.length ? new RegExp(`(${words.map(escapeRe).join("|")})`, "gi") : null;
+function hl(text, re) {
+	if (!re || !text) return text;
+	return text.split(re).map((part, i) => i % 2 ? m$1`<mark>${part}</mark>` : part);
+}
+//#endregion
 //#region web/src/quick-switch.js
 var OPENED_KEY = "agent-swarm:agent-opened";
 var OPENED_LIMIT = 200;
@@ -9603,7 +9613,7 @@ function switchOptions(state, mode, query, opened = {}) {
 			].filter(Boolean).join(" ")
 		};
 	});
-	const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+	const words = searchWords(query);
 	return options.filter((o) => words.every((w) => o.search.toLowerCase().includes(w))).sort((a, b) => Number(!a.target) - Number(!b.target) || (mode === "agents" ? (opened[b.name] || 0) - (opened[a.name] || 0) : 0) || Number(!a.target?.pane_alive) - Number(!b.target?.pane_alive) || a.name.localeCompare(b.name));
 }
 function QuickSwitcher({ state, navigate }) {
@@ -10137,7 +10147,7 @@ function highlightSearch(html, words) {
 	if (!words.length) return html;
 	const key = JSON.stringify([html, words]);
 	if (highlights.has(key)) return highlights.get(key);
-	const expression = new RegExp(words.slice().sort((a, b) => b.length - a.length).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "giu");
+	const expression = new RegExp(words.slice().sort((a, b) => b.length - a.length).map(escapeRe).join("|"), "giu");
 	const root = document.createElement("div");
 	root.innerHTML = html;
 	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -11598,7 +11608,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 				setDropStatus(`${err.message} Refresh to check the task before retrying.`);
 			}
 		};
-		const hasTask = (e) => Array.from(e.dataTransfer?.types || []).includes("application/x-agent-swarm-task");
+		const hasTask = (e) => Array.from(e.dataTransfer?.types || []).includes(TASK_DRAG_TYPE);
 		const taskId = (e) => {
 			const raw = e.dataTransfer?.getData("application/x-agent-swarm-task") || e.dataTransfer?.getData("text/plain");
 			return /^\d+$/.test(raw || "") ? Number(raw) : null;
@@ -12315,7 +12325,6 @@ function statusRecords(recipients) {
 		}
 	})));
 }
-var tokenize = (q) => q.toLowerCase().split(/\s+/).filter(Boolean);
 function taskNumber(tokens, tasks) {
 	if (tokens.length !== 1) return null;
 	const m = /^#?(\d+)$/.exec(tokens[0]);
@@ -12329,15 +12338,7 @@ function matches(rec, tokens) {
 		return Object.values(rec.fields).some((v) => v.toLowerCase().includes(tok));
 	});
 }
-var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-function markRe(tokens) {
-	const words = tokens.filter((t) => !/^#\d+$/.test(t));
-	return words.length ? new RegExp(`(${words.map(escapeRe).join("|")})`, "gi") : null;
-}
-function hl(text, re) {
-	if (!re || !text) return text;
-	return text.split(re).map((part, i) => i % 2 ? m$1`<mark>${part}</mark>` : part);
-}
+var markRe = (tokens) => wordsRe(tokens.filter((t) => !/^#\d+$/.test(t)));
 var CLIP = 220;
 function excerpt(text, re) {
 	if (text.length <= CLIP) return text;
@@ -12536,7 +12537,7 @@ function HistoryView({ state, refresh }) {
 		...r,
 		user_id: r.archive_id
 	}))]), [state.recipients, state.retired_agents]);
-	const tokens = tokenize(s.q);
+	const tokens = searchWords(s.q);
 	const re = markRe(tokens);
 	const picked = taskNumber(tokens, tasks);
 	const linesPossible = !picked && !!(tokens.length || s.agent) && !s.status;
@@ -13433,7 +13434,7 @@ function TaskCard({ t, agentIds, teams, blockers, refresh }) {
 	const dragStart = (e) => {
 		if (!draggable) return;
 		e.dataTransfer.effectAllowed = "move";
-		e.dataTransfer.setData("application/x-agent-swarm-task", String(t.id));
+		e.dataTransfer.setData(TASK_DRAG_TYPE, String(t.id));
 		e.dataTransfer.setData("text/plain", String(t.id));
 		setDragging(true);
 	};
@@ -13676,6 +13677,16 @@ async function removeTeam(team, refresh) {
 	}
 	refresh();
 }
+function TeamMate({ r, team, unread, supervisor = false }) {
+	const st = STATE[agentStatus(r)] || STATE.unknown;
+	return m$1`<${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />
+    <span class="team-mate-name">${r.user_id}</span>
+    <${ErrorMark} error=${r.activity?.error} />
+    <${Crown} teams=${team} user=${r.user_id} />
+    ${supervisor && m$1`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
+    <span class=${`status ${st.cls}`}></span>
+    ${unread && m$1`<span class="team-mate-unread" title="new reply">●</span>`}`;
+}
 function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUser = null }) {
 	const [dragging, setDragging] = d(null);
 	const [over, setOver] = d(null);
@@ -13862,13 +13873,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 				setDragging(null);
 				setOver(null);
 			}}>
-          <${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />
-          <span class="team-mate-name">${r.user_id}</span>
-          <${ErrorMark} error=${r.activity?.error} />
-          <${Crown} teams=${team} user=${r.user_id} />
-          ${state.supervisor && state.supervisor.user_id === r.user_id && m$1`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
-          <span class=${`status ${st.cls}`}></span>
-          ${unreadFor(r.user_id) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
+          <${TeamMate} r=${r} team=${team} unread=${unreadFor(r.user_id)} supervisor=${state.supervisor?.user_id === r.user_id} />
         </a>`;
 		})}</div>
       ${g.gone.length > 0 && m$1`<div class="team-bees-offline"><span title=${g.gone.join(", ")}>${g.gone.length} offline: ${g.gone.map((id, i) => m$1`${i ? ", " : ""}${id}<${Crown} teams=${team} user=${id} />`)}</span>
@@ -14770,12 +14775,7 @@ function TeamStrip({ crew, user, unreadFor }) {
 		return m$1`<a key=${m.user_id} href=${agentHash(m.user_id)}
         class=${`team-mate ${here ? "here" : ""}`} aria-current=${here ? "page" : null}
         title=${`${m.user_id} · ${st.word}`}>
-        <${Bee} node=${m.node} flavor=${m.flavor} error=${m.activity?.error} size="small" working=${st.cls === "working"} />
-        <span class="team-mate-name">${m.user_id}</span>
-        <${ErrorMark} error=${m.activity?.error} />
-        <${Crown} teams=${crew.team} user=${m.user_id} />
-        <span class=${`status ${st.cls}`}></span>
-        ${unreadFor(m.user_id) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
+        <${TeamMate} r=${m} team=${crew.team} unread=${unreadFor(m.user_id)} />
       </a>`;
 	})}
     ${crew.members.length > 1 && m$1`<span class="team-strip-hint">Alt+[ / Alt+]</span>`}
@@ -14791,11 +14791,6 @@ function snippet(text, words, width = 240) {
 	const start = at > 80 ? at - 60 : 0;
 	const cut = flat.slice(start, start + width);
 	return `${start ? "…" : ""}${cut}${start + width < flat.length ? "…" : ""}`;
-}
-function marked(text, words) {
-	if (!words.length) return text;
-	const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
-	return text.split(re).map((part, i) => i % 2 ? m$1`<mark>${part}</mark>` : part);
 }
 function ChatsView({ state, unreadFor, refresh }) {
 	const [view, setView] = d(() => {
@@ -14855,7 +14850,7 @@ function AgentTalk({ state }) {
 		query,
 		members
 	]);
-	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+	const words = searchWords(query);
 	const oldest = full && full.length >= AGENT_TALK_LIMIT ? full[full.length - 1].ts : null;
 	let day = null;
 	return m$1`
@@ -14889,7 +14884,7 @@ function TalkThread({ t, words }) {
 	return m$1`<details class="agent-talk-thread" onToggle=${(e) => setOpen(e.currentTarget.open)}>
     <summary>
       <span class="chat-who">${t.broadcast ? m$1`${t.people[0]} <span class="agent-talk-arrow">→</span> ${t.to.join(", ")}` : m$1`${t.people[0]} <span class="agent-talk-arrow">↔</span> ${t.people[1]}`}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
-      <span class="chat-line"><b>${last.m.sender}:</b> ${marked(snippet(last.m.content, words, 200), words)}</span>
+      <span class="chat-line"><b>${last.m.sender}:</b> ${hl(snippet(last.m.content, words, 200), wordsRe(words))}</span>
     </summary>
     ${open && m$1`<div class="agent-talk-msgs">${t.items.map((i) => m$1`<div key=${i.ids[0]} class="agent-talk-msg" data-message-id=${i.m.id} tabindex="-1" onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")}>
       <div class="agent-talk-hdr"><b>${i.m.sender}</b> → ${i.to.join(", ")} · ${clock(i.m.ts)}${i.m.context ? ` · ${i.m.context}` : ""}</div>
@@ -14933,7 +14928,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
 		if (q) params.set("q", q);
 		history.replaceState(null, "", params.size ? `${CHATS_ROUTE}?${params}` : CHATS_ROUTE);
 	};
-	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+	const words = searchWords(query);
 	if (chats === null) return m$1`<h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· loading…</span></h2>`;
 	const byId = new Map(state.recipients.map((r) => [r.user_id, r]));
 	return m$1`
@@ -14958,7 +14953,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
               <span class="chat-who">${archives.get(c.agent) || c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
                 <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
-              <span class="chat-line">${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
+              <span class="chat-line">${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${hl(snippet(m.content, words), wordsRe(words))}</span>
             </span>
           </a>`;
 	})}</div>`}`;

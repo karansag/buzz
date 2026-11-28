@@ -2,6 +2,7 @@ import { html } from 'htm/preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 
 import { showAgentMessage } from './agent-route.js';
+import { escapeRe } from './highlight.js';
 
 const PAGE_SIZE = 100;
 export function useConversationSearch(user, returnState = null) {
@@ -117,7 +118,7 @@ export function highlightSearch(html, words) {
   const key = JSON.stringify([html, words]);
   if (highlights.has(key)) return highlights.get(key);
   const expression = new RegExp(words.slice().sort((a, b) => b.length - a.length)
-    .map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'giu');
+    .map(escapeRe).join('|'), 'giu');
   const root = document.createElement('div');
   root.innerHTML = html;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);

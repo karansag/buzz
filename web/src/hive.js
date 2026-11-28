@@ -6,7 +6,7 @@ import { AttachmentList } from "./attachments.js";
 import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 
-import { Bee, ERROR_RED, STATE, WORKING_HALO, agentShown, agentStatus, focusHash, harnessChoices, harnessStyle, hue, patchTask, setAgentTeam, stopAgentPrompt, stopRequest } from "./shared.js";
+import { Bee, ERROR_RED, STATE, WORKING_HALO, agentShown, agentStatus, focusHash, harnessChoices, harnessStyle, hue, TASK_DRAG_TYPE, patchTask, setAgentTeam, stopAgentPrompt, stopRequest } from "./shared.js";
 
 import { COMPACT_LAYOUT, useMedia } from "./use-media.js";
 
@@ -849,9 +849,9 @@ export function HiveView({ state, refresh, machine, harness = null, setHarness =
         setDropStatus(`${err.message} Refresh to check the task before retrying.`);
       }
     };
-    const hasTask = e => Array.from(e.dataTransfer?.types || []).includes("application/x-agent-swarm-task");
+    const hasTask = e => Array.from(e.dataTransfer?.types || []).includes(TASK_DRAG_TYPE);
     const taskId = (e) => {
-      const raw = e.dataTransfer?.getData("application/x-agent-swarm-task") ||
+      const raw = e.dataTransfer?.getData(TASK_DRAG_TYPE) ||
         e.dataTransfer?.getData("text/plain");
       return /^\d+$/.test(raw || "") ? Number(raw) : null;
     };

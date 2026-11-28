@@ -8,6 +8,7 @@ import { TaskStatusActions } from "./task-status.js";
 import { TaskTrash } from "./task-trash.js";
 import { Crown } from "./queen.js";
 import { readStored, writeStored } from "./storage.js";
+import { hl, searchWords, wordsRe } from "./highlight.js";
 
 /* The history view: every task as a tile, newest first, with a live text
    search. Its main job is to answer "who was working on X".
@@ -96,8 +97,6 @@ function statusRecords(recipients) {
   })));
 }
 
-const tokenize = (q) => q.toLowerCase().split(/\s+/).filter(Boolean);
-
 // A whole query that is one task number, "310" or "#310", picks that task on
 // its own: nobody types an id to read the tasks that mention it. A number that
 // names no task is still text, so "310" finds notes about something else when
@@ -120,19 +119,8 @@ function matches(rec, tokens) {
   });
 }
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-function markRe(tokens) {
-  const words = tokens.filter(t => !/^#\d+$/.test(t));
-  return words.length ? new RegExp(`(${words.map(escapeRe).join("|")})`, "gi") : null;
-}
-
-// Wrap each match in <mark>. `re` has one capture group, so split() puts the
-// matches at the odd indexes.
-function hl(text, re) {
-  if (!re || !text) return text;
-  return text.split(re).map((part, i) => (i % 2 ? html`<mark>${part}</mark>` : part));
-}
+// "#42" picks a task by number, so it is not highlighted as text.
+const markRe = (tokens) => wordsRe(tokens.filter(t => !/^#\d+$/.test(t)));
 
 // Long text shows a window around the first match, so a hit deep inside a
 // long note is still visible without expanding it.
@@ -328,7 +316,7 @@ export function HistoryView({ state, refresh }) {
     ...state.recipients,
     ...(state.retired_agents || []).map(r => ({ ...r, user_id: r.archive_id })),
   ]), [state.recipients, state.retired_agents]);
-  const tokens = tokenize(s.q);
+  const tokens = searchWords(s.q);
   const re = markRe(tokens);
   const picked = taskNumber(tokens, tasks);
   // Lines can appear only while searching or filtering by agent, and never under a status chip.

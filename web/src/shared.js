@@ -4,6 +4,7 @@ import { agentHash } from "./agent-route.js";
 
 export const POLL_MS = 2000;
 export const PEEK_MS = 2000;
+export const TASK_DRAG_TYPE = "application/x-agent-swarm-task";
 const JSONH = { "content-type": "application/json" };
 // The fetch options for a request with a JSON body.
 export const jsonInit = (method, body) => ({ method, headers: JSONH, body: JSON.stringify(body) });

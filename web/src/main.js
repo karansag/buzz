@@ -16,7 +16,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 
 import {
   POLL_MS, stopAgentPrompt,
-  PEEK_MS,
+  PEEK_MS, TASK_DRAG_TYPE,
   jsonInit, errorText, controlRequest, stopRequest, setAgentTeam, newClientId,
   IS_MAC, platformModifier,
   STATE,
@@ -57,6 +57,7 @@ import { PinDialog, PinStrip, PinnedList, pinHref, pinsOf, setPinned } from "./p
 import { agentThreads } from "./chats.js";
 import { agentHash, parseAgentRoute } from "./agent-route.js";
 import { readJSON, readStored, writeJSON, writeStored } from "./storage.js";
+import { hl, searchWords, wordsRe } from "./highlight.js";
 
 /* ---------- agent controls ---------- */
 
@@ -540,7 +541,7 @@ function TaskCard({ t, agentIds, teams, blockers, refresh }) {
   const dragStart = (e) => {
     if (!draggable) return;
     e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("application/x-agent-swarm-task", String(t.id));
+    e.dataTransfer.setData(TASK_DRAG_TYPE, String(t.id));
     e.dataTransfer.setData("text/plain", String(t.id));
     setDragging(true);
   };
@@ -775,6 +776,18 @@ async function removeTeam(team, refresh) {
   refresh();
 }
 
+// What a teammate chip shows, in the team boxes and the agent page's strip.
+function TeamMate({ r, team, unread, supervisor = false }) {
+  const st = STATE[agentStatus(r)] || STATE.unknown;
+  return html`<${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />
+    <span class="team-mate-name">${r.user_id}</span>
+    <${ErrorMark} error=${r.activity?.error} />
+    <${Crown} teams=${team} user=${r.user_id} />
+    ${supervisor && html`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
+    <span class=${`status ${st.cls}`}></span>
+    ${unread && html`<span class="team-mate-unread" title="new reply">●</span>`}`;
+}
+
 // Every agent control lives here. Running agents sit in outlined,
 // collapsible team boxes, queen first; agents with no team come last. Each
 // agent is one small chip that opens its page (which has "stop agent", the
@@ -942,13 +955,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
             e.dataTransfer.setData("text/plain", r.user_id);
             setDragging(r.user_id);
           }} onDragEnd=${() => { setDragging(null); setOver(null); }}>
-          <${Bee} node=${r.node} flavor=${r.flavor} error=${r.activity?.error} size="small" working=${st.cls === "working"} />
-          <span class="team-mate-name">${r.user_id}</span>
-          <${ErrorMark} error=${r.activity?.error} />
-          <${Crown} teams=${team} user=${r.user_id} />
-          ${state.supervisor && state.supervisor.user_id === r.user_id && html`<span class="crown supervisor" title="swarm supervisor">✪</span>`}
-          <span class=${`status ${st.cls}`}></span>
-          ${unreadFor(r.user_id) && html`<span class="team-mate-unread" title="new reply">●</span>`}
+          <${TeamMate} r=${r} team=${team} unread=${unreadFor(r.user_id)} supervisor=${state.supervisor?.user_id === r.user_id} />
         </a>`;
       })}</div>
       ${g.gone.length > 0 && html`<div class="team-bees-offline"><span title=${g.gone.join(", ")}>${g.gone.length} offline: ${g.gone.map((id, i) => html`${i ? ", " : ""}${id}<${Crown} teams=${team} user=${id} />`)}</span>
@@ -1846,12 +1853,7 @@ function TeamStrip({ crew, user, unreadFor }) {
       return html`<a key=${m.user_id} href=${agentHash(m.user_id)}
         class=${`team-mate ${here ? "here" : ""}`} aria-current=${here ? "page" : null}
         title=${`${m.user_id} · ${st.word}`}>
-        <${Bee} node=${m.node} flavor=${m.flavor} error=${m.activity?.error} size="small" working=${st.cls === "working"} />
-        <span class="team-mate-name">${m.user_id}</span>
-        <${ErrorMark} error=${m.activity?.error} />
-        <${Crown} teams=${crew.team} user=${m.user_id} />
-        <span class=${`status ${st.cls}`}></span>
-        ${unreadFor(m.user_id) && html`<span class="team-mate-unread" title="new reply">●</span>`}
+        <${TeamMate} r=${m} team=${crew.team} unread=${unreadFor(m.user_id)} />
       </a>`;
     })}
     ${crew.members.length > 1 && html`<span class="team-strip-hint">Alt+[ / Alt+]</span>`}
@@ -1877,12 +1879,6 @@ function snippet(text, words, width = 240) {
   const start = at > 80 ? at - 60 : 0;
   const cut = flat.slice(start, start + width);
   return `${start ? "…" : ""}${cut}${start + width < flat.length ? "…" : ""}`;
-}
-
-function marked(text, words) {
-  if (!words.length) return text;
-  const re = new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
-  return text.split(re).map((part, i) => (i % 2 ? html`<mark>${part}</mark>` : part));
 }
 
 function ChatsView({ state, unreadFor, refresh }) {
@@ -1935,7 +1931,7 @@ function AgentTalk({ state }) {
     () => agentThreads([...state.messages, ...(full || [])], { query, members }),
     [state.messages, full, query, members],
   );
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const words = searchWords(query);
   const oldest = full && full.length >= AGENT_TALK_LIMIT ? full[full.length - 1].ts : null;
   let day = null;
   return html`
@@ -1972,7 +1968,7 @@ function TalkThread({ t, words }) {
   return html`<details class="agent-talk-thread" onToggle=${e => setOpen(e.currentTarget.open)}>
     <summary>
       <span class="chat-who">${title}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
-      <span class="chat-line"><b>${last.m.sender}:</b> ${marked(snippet(last.m.content, words, 200), words)}</span>
+      <span class="chat-line"><b>${last.m.sender}:</b> ${hl(snippet(last.m.content, words, 200), wordsRe(words))}</span>
     </summary>
     ${open && html`<div class="agent-talk-msgs">${t.items.map(i => html`<div key=${i.ids[0]} class="agent-talk-msg" data-message-id=${i.m.id} tabindex="-1" onAnimationEnd=${e => e.currentTarget.classList.remove("reply-highlight")}>
       <div class="agent-talk-hdr"><b>${i.m.sender}</b> → ${i.to.join(", ")} · ${clock(i.m.ts)}${i.m.context ? ` · ${i.m.context}` : ""}</div>
@@ -2010,7 +2006,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
     if (q) params.set("q", q);
     history.replaceState(null, "", params.size ? `${CHATS_ROUTE}?${params}` : CHATS_ROUTE);
   };
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const words = searchWords(query);
   if (chats === null) return html`<h2>${queensOnly ? "you and queens" : "with you"} <span class="count">· loading…</span></h2>`;
   const byId = new Map(state.recipients.map(r => [r.user_id, r]));
   return html`
@@ -2035,7 +2031,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
               <span class="chat-who">${archives.get(c.agent) || c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && html`<span class="team-mate-unread" title="new reply">●</span>`}
                 <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
-              <span class="chat-line">${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${marked(snippet(m.content, words), words)}</span>
+              <span class="chat-line">${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${hl(snippet(m.content, words), wordsRe(words))}</span>
             </span>
           </a>`;
         })}</div>`}`;

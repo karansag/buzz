@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Bee, IS_MAC, platformModifier } from "./shared.js";
 import { Crown, queenSuffix } from "./queen.js";
 import { readJSON, writeJSON } from "./storage.js";
+import { searchWords } from "./highlight.js";
 
 // When the owner last opened each agent, newest first in the agent switcher.
 // Kept per browser; the switcher works the same without storage.
@@ -48,7 +49,7 @@ export function switchOptions(state, mode, query, opened = {}) {
         search: [a.user_id, team, a.node, a.flavor, a.model, summary].filter(Boolean).join(" ") };
     });
   }
-  const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const words = searchWords(query);
   return options.filter(o => words.every(w => o.search.toLowerCase().includes(w)))
     .sort((a, b) => Number(!a.target) - Number(!b.target)
       || (mode === "agents" ? (opened[b.name] || 0) - (opened[a.name] || 0) : 0)
