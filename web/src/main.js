@@ -21,12 +21,10 @@ import {
   FLAVOR_ICON,
   STATE,
   agentStatus,
-  Avatar,
   Bee,
   ErrorMark,
   MachineBadge,
   rel,
-  currentTask,
   SUMMARY_SOURCE,
   pairKey,
   disp,
@@ -256,12 +254,6 @@ function ResumeAgentButton({ r, refresh }) {
     ${busy ? "resuming…" : "resume agent"}</button>${message && html`<span role="status"> ${message}</span>`} `;
 }
 
-// "claude-opus-4-7" reads as "opus-4-7" next to the claude flavor tag.
-function shortModel(model, flavor) {
-  const prefix = `${flavor}-`;
-  return model.toLowerCase().startsWith(prefix) ? model.slice(prefix.length) : model;
-}
-
 // For Claude Code, Codex and Pi the model label is a switcher: saving drives
 // the harness's own /model command in the agent's pane, for its current
 // session only, and the hub reads the result back off the screen. An idle
@@ -436,16 +428,7 @@ function SpawnControl({ refresh, nodes }) {
   </form>`;
 }
 
-const ACTIVITY_RANK = { working: 0, needs_attention: 1, idle: 2, unknown: 3 };
 const AGENT_DRAG_TYPE = "application/x-agent-swarm-agent";
-
-function sortByActivity(agents) {
-  return agents
-    .map((r, i) => [r, i])
-    .sort(([a, ai], [b, bi]) =>
-      (ACTIVITY_RANK[agentStatus(a)] ?? 3) - (ACTIVITY_RANK[agentStatus(b)] ?? 3) || ai - bi)
-    .map(([r]) => r);
-}
 
 async function moveAgentToTeam(user, teamId, refresh) {
   await fetch(`/agents/${encodeURIComponent(user)}/team`, {
@@ -1061,7 +1044,7 @@ function terminalRuns(text) {
   });
 }
 
-function Scope({ user, refresh }) {
+function Scope({ user }) {
   const [open, setOpen] = useState(false);
   const scopeRef = useRef(null);
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -1150,9 +1133,7 @@ function InterruptAgent({ r }) {
     flight.current = true;
     setBusy(true);
     setMessage("");
-    if (key === "C-c") {
-      setCooling(true);
-    }
+    if (key === "C-c") setCooling(true);
     try {
       const response = await typeInto(r.user_id, { key });
       const body = await response.json().catch(() => null);
@@ -1427,7 +1408,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
       <span class="count">${text.length} character${text.length === 1 ? "" : "s"}${images.length > 0 ? ` · ${images.length} file${images.length === 1 ? "" : "s"}` : ""}</span>
       ${!compact && html`<span class="hint">Enter to send · Shift + Enter for a new line</span>`}
       <div class="actions">
-        ${!compact && status && html`<span class=${status.startsWith("delivery failed") || status.startsWith("image not added") ? "error" : "sent"} role="status">${status}</span>`}
+        ${!compact && status && html`<span class=${status.startsWith("delivery failed") ? "error" : "sent"} role="status">${status}</span>`}
         ${(text || context || images.length > 0) && html`<button type="button" class="mini" onClick=${clearDraft}>clear</button>`}
         ${!compact && submit}
       </div>
@@ -1855,14 +1836,13 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
 
 // What the agent is doing now, then what it did before, newest first.
 function Doing({ summaries, now }) {
-  const current = summaries.find(s => s.source !== "owner");
   if (summaries.length === 0) {
     return html`<div class="doing-box empty-doing">No status yet. Agents post one with
       <code>buzz status "working on …"</code>; Claude Code and Codex pane titles
       show up here too.</div>`;
   }
-  const cur = current;
-  const past = summaries.filter(s => s !== current).slice(0, 19);
+  const cur = summaries.find(s => s.source !== "owner");
+  const past = summaries.filter(s => s !== cur).slice(0, 19);
   const line = (s) => html`<span class="src" title=${SUMMARY_SOURCE[s.source] || s.source}>${s.source === "owner" ? "📌" : s.source === "agent" ? "✎" : "▭"}</span>`;
   return html`<div class="doing-box">
     ${cur && html`<div class="now">${line(cur)} ${cur.text} <span class="age">· ${rel(cur.ts, now)}</span></div>`}
@@ -2256,7 +2236,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
     <h2>status updates</h2>
     <${Doing} summaries=${r.summaries || []} now=${state.now} />
     <${OwnerNote} key=${user} agent=${r} refresh=${refresh} />
-    <${Scope} key=${user} user=${user} refresh=${refresh} />`}
+    <${Scope} key=${user} user=${user} />`}
     <h2>conversations ${hasOwnerThread && html`<span class="count">· 1</span>`}</h2>
     ${history.error && html`<p role="status">${history.error}</p>`}
     ${!history.loaded && !history.error && html`<p role="status">Loading conversation history…</p>`}

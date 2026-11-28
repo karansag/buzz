@@ -30,7 +30,6 @@ export function useAgentHistory(user, returnState = null) {
     let newest = returnState?.newest ?? null;
     const abort = new AbortController();
 
-
     const read = async query => {
       const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages?${query}`, { signal: abort.signal });
       if (!response.ok) throw Error("History unavailable");

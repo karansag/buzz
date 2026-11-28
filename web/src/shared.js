@@ -95,12 +95,6 @@ export function rel(ts, now) {
 // the tmux pane title.
 export const SUMMARY_SOURCE = { owner: "noted by you", agent: "said by the agent", title: "from its pane title" };
 
-export function currentTask(tasks, user) {
-  const mine = (tasks || []).filter(t => t.assignee === user && t.status !== "done");
-  if (!mine.length) return null;
-  const picked = mine.filter(t => t.status === "picked_up");
-  return (picked.length ? picked : mine).sort((a, b) => b.updated_at - a.updated_at)[0];
-}
 export function pairKey(a, b) { return [a, b].sort().join(" "); }
 export const disp = (u) => u === "owner" ? html`<span class="owner-name">owner</span>` : u;
 export const focusHash = (u) => agentHash(u);

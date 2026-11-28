@@ -14017,7 +14017,7 @@ function terminalRuns(text) {
 		return css ? m$1`<span style=${css}>${r.text}</span>` : r.text;
 	});
 }
-function Scope({ user, refresh }) {
+function Scope({ user }) {
 	const [open, setOpen] = d(false);
 	const scopeRef = A(null);
 	const mac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -14422,7 +14422,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
       <span class="count">${text.length} character${text.length === 1 ? "" : "s"}${images.length > 0 ? ` · ${images.length} file${images.length === 1 ? "" : "s"}` : ""}</span>
       ${!compact && m$1`<span class="hint">Enter to send · Shift + Enter for a new line</span>`}
       <div class="actions">
-        ${!compact && status && m$1`<span class=${status.startsWith("delivery failed") || status.startsWith("image not added") ? "error" : "sent"} role="status">${status}</span>`}
+        ${!compact && status && m$1`<span class=${status.startsWith("delivery failed") ? "error" : "sent"} role="status">${status}</span>`}
         ${(text || context || images.length > 0) && m$1`<button type="button" class="mini" onClick=${clearDraft}>clear</button>`}
         ${!compact && submit}
       </div>
@@ -14859,12 +14859,11 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
   </div>`;
 }
 function Doing({ summaries, now }) {
-	const current = summaries.find((s) => s.source !== "owner");
 	if (summaries.length === 0) return m$1`<div class="doing-box empty-doing">No status yet. Agents post one with
       <code>buzz status "working on …"</code>; Claude Code and Codex pane titles
       show up here too.</div>`;
-	const cur = current;
-	const past = summaries.filter((s) => s !== current).slice(0, 19);
+	const cur = summaries.find((s) => s.source !== "owner");
+	const past = summaries.filter((s) => s !== cur).slice(0, 19);
 	const line = (s) => m$1`<span class="src" title=${SUMMARY_SOURCE[s.source] || s.source}>${s.source === "owner" ? "📌" : s.source === "agent" ? "✎" : "▭"}</span>`;
 	return m$1`<div class="doing-box">
     ${cur && m$1`<div class="now">${line(cur)} ${cur.text} <span class="age">· ${rel(cur.ts, now)}</span></div>`}
@@ -15238,7 +15237,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
     <h2>status updates</h2>
     <${Doing} summaries=${r.summaries || []} now=${state.now} />
     <${OwnerNote} key=${user} agent=${r} refresh=${refresh} />
-    <${Scope} key=${user} user=${user} refresh=${refresh} />`}
+    <${Scope} key=${user} user=${user} />`}
     <h2>conversations ${hasOwnerThread && m$1`<span class="count">· 1</span>`}</h2>
     ${history.error && m$1`<p role="status">${history.error}</p>`}
     ${!history.loaded && !history.error && m$1`<p role="status">Loading conversation history…</p>`}
