@@ -323,6 +323,17 @@ async fn tasks_update((State(app), Extension(who)): Ctx, Path(raw): Path<String>
     }
 }
 
+/// Spawning agents is not cloned, so this hub offers no harness to start.
+/// The dashboard asks on load; an empty list is the true answer here.
+async fn spawn_options(Extension(who): Extension<Principal>) -> Response {
+    match who {
+        Principal::Owner => json_response(200, &json!({"harnesses": []})),
+        Principal::Node(_) => {
+            json_response(403, &json!({"detail": {"error": "owner only", "detail": "a node token cannot do this"}}))
+        }
+    }
+}
+
 async fn peek((State(app), Extension(who)): Ctx, Path(user): Path<String>) -> Response {
     run(app, who, move |cx| cx.peek(&user)).await
 }
@@ -497,6 +508,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/tasks/{task_id}", patch(tasks_update))
         .route("/api/state", get(state))
         .route("/api/peek/{user_id}", get(peek))
+        .route("/api/spawn-options", get(spawn_options))
         .route("/", get(portal))
         .route("/static/{name}", get(static_file))
         .fallback(not_found)

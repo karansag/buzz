@@ -176,7 +176,8 @@ def main() -> None:
     results = {kind: measure(kind, args.db, work, args.node, args.seconds) for kind in args.order.split(",")}
     errors = {f"{kind} {case}": c["errors"] for kind, r in results.items() for case, c in r["cases"].items() if c["errors"]}
     (work / "results.json").write_text(json.dumps(results, indent=1))
-    print(table(results))
+    if {"python", "rust"} <= set(results):
+        print(table(results))
     print(f"\nrequests that did not answer 200 (or a send not delivered): {errors or 'none'}")
     print(f"results: {work / 'results.json'}")
 
