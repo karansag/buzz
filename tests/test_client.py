@@ -528,6 +528,23 @@ def test_register_refuses_a_pane_the_caller_is_not_in(monkeypatch, capsys):
     assert "--pane" in capsys.readouterr().err
 
 
+def test_register_by_session_sends_no_pane(monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess-c")
+    monkeypatch.setattr(client, "current_pane", lambda: "%49")
+    monkeypatch.setattr(tmux, "process_in_pane", lambda pane, pid=None: False)
+    calls = _fake_server(monkeypatch, {})
+    assert client.main(["register", "--name", "explainer", "--by-session"]) == 0
+    assert calls["post"][0] == {"node": "laptop", "requested_user": "explainer", "agent_id": "sess-c",
+                                "flavor": "claude"}
+    # A hub that does not deliver through tmux is registered with the same way.
+    monkeypatch.setenv("BUZZ_DELIVERY", "rhizome")
+    assert client.main(["register"]) == 0
+    assert "tmux_pane" not in calls["post"][1]
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+    assert client.main(["register"]) == 2
+    assert "no harness session id" in capsys.readouterr().err
+
+
 def test_register_with_an_explicit_pane_binds_it_and_the_session(monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess-c")
     monkeypatch.setattr(client, "current_pane", lambda: "%49")

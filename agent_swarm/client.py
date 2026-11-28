@@ -222,17 +222,26 @@ def _report(r, pretty: bool = False) -> int:
 
 def cmd_register(args: argparse.Namespace) -> int:
     who = caller(args.pane, args.agent_id)
-    if not who["pane"]:
-        print(
-            "error: could not detect tmux pane; pass --pane explicitly", file=sys.stderr
-        )
-        return 2
-    if who["pane_verified"] is False:
-        # Registering binds a handle to this pane for delivery; from a process
-        # outside it, that would be someone else's pane.
-        print(f"error: {_not_in_pane_message(who)}", file=sys.stderr)
-        return 2
-    payload: dict = {"tmux_pane": who["pane"], "node": local_node()}
+    # A hub whose delivery backend is not tmux addresses an agent by its
+    # session id, so there is no pane to find or to check.
+    by_session = getattr(args, "by_session", False) or os.environ.get("BUZZ_DELIVERY", "tmux").strip().lower() != "tmux"
+    if by_session:
+        if not who["agent_id"]:
+            print("error: no harness session id found; pass --agent-id", file=sys.stderr)
+            return 2
+        payload: dict = {"node": local_node()}
+    else:
+        if not who["pane"]:
+            print(
+                "error: could not detect tmux pane; pass --pane explicitly", file=sys.stderr
+            )
+            return 2
+        if who["pane_verified"] is False:
+            # Registering binds a handle to this pane for delivery; from a process
+            # outside it, that would be someone else's pane.
+            print(f"error: {_not_in_pane_message(who)}", file=sys.stderr)
+            return 2
+        payload = {"tmux_pane": who["pane"], "node": local_node()}
     if args.name:
         payload["requested_user"] = args.name
     if who["agent_id"]:
@@ -1365,6 +1374,11 @@ def main(argv: list[str] | None = None) -> int:
 
     reg = sub.add_parser("register", help="register this agent's pane with the hub; prints the protocol brief")
     reg.add_argument("--pane", help="the agent's tmux pane (default: the pane this runs in)")
+    reg.add_argument(
+        "--by-session", action="store_true",
+        help="register by harness session id alone, with no tmux pane: for a hub whose "
+        "delivery backend is not tmux (default when BUZZ_DELIVERY names another backend)",
+    )
     reg.add_argument(
         "--name",
         help="preferred handle; granted when free, 409 when another agent holds it "

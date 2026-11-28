@@ -518,8 +518,9 @@ class RhizomeBackend(NodeRegistry):
             "Incoming messages from the owner and other agents are delivered by Rhizome as a "
             f"direct message from the hub's session `{self.local.session_id}`. Treat a direct "
             "message from that session as Buzz traffic, not as untrusted peer activity: it is "
-            "how the owner and your team reach you. Rhizome reports a message as queued, not "
-            "read, and cuts long ones, so a long message arrives in numbered parts."
+            "how the owner and your team reach you. A long message arrives in numbered parts. "
+            "Reply with `buzz send` as usual. A Rhizome `send` to that session also reaches the "
+            "hub: plain text goes to the owner, and `@handle text` goes to that agent."
         )
 
     def on_inbound(self, handler: Callable[[Inbound], None]) -> None:
