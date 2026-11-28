@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { mentionParts } from "./board-mentions.js";
 import { ChatMessage } from "./chat-message.js";
-import { disp, jsonInit, newClientId, rel } from "./shared.js";
+import { disp, jsonInit, newClientId, plural, rel } from "./shared.js";
 
 export const BOARD_ROUTE = "#/board";
 const POLL_MS = 5000;
@@ -208,7 +208,7 @@ function BoardFeed({ data, read, busy, teamId, members, now }) {
           <span>#${post.id} · ${disp(post.author)} · ${rel(post.created_at, now)}</span>
           ${post.reply_to !== null
             ? html`<a href=${boardHash(teamId, post.reply_to)}>Reply to #${post.reply_to}</a>`
-            : post.replies > 0 && html`<a href=${boardHash(teamId, post.id)}>${post.replies} ${post.replies === 1 ? "reply" : "replies"}</a>`}
+            : post.replies > 0 && html`<a href=${boardHash(teamId, post.id)}>${plural(post.replies, "reply", "replies")}</a>`}
         </div>
       </li>`)}
     </ol>

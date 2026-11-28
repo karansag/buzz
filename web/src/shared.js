@@ -132,6 +132,8 @@ export function rel(ts, now) {
 // the tmux pane title.
 export const SUMMARY_SOURCE = { owner: "noted by you", agent: "said by the agent", title: "from its pane title" };
 
+// "1 msg", "3 msgs"; pass `many` for an irregular plural.
+export const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 export function pairKey(a, b) { return [a, b].sort().join(" "); }
 export const disp = (u) => u === "owner" ? html`<span class="owner-name">owner</span>` : u;
 export const focusHash = (u) => agentHash(u);

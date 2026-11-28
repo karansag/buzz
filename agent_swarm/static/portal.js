@@ -794,6 +794,7 @@ var SUMMARY_SOURCE = {
 	agent: "said by the agent",
 	title: "from its pane title"
 };
+var plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 function pairKey(a, b) {
 	return [a, b].sort().join(" ");
 }
@@ -10691,6 +10692,7 @@ function spawnOutcome(httpOk, body) {
 //#endregion
 //#region web/src/spawn-control.js
 var DEFAULT_MODEL = "default";
+var machineLabel = (n) => n.local ? `${n.name} (hub)` : n.gone ? `${n.name} (no longer enrolled)` : n.connected ? n.name : `${n.name} (not connected)`;
 function SpawnControl({ refresh, nodes }) {
 	const [harnesses, setHarnesses] = d([]);
 	const [node, setNode] = d("");
@@ -10760,7 +10762,7 @@ function SpawnControl({ refresh, nodes }) {
 	return m$1`<form class="spawn" onSubmit=${spawn}>
     <div class="spawn-heading">Spawn agent</div>
     ${(enrolled.length > 1 || node) && m$1`<select title="machine" value=${node} onChange=${(e) => pickNode(e.target.value)}>
-      ${choices.map((n) => m$1`<option key=${n.name} value=${n.local ? "" : n.name} disabled=${!n.local && !n.connected}>${n.local ? `${n.name} (hub)` : n.gone ? `${n.name} (no longer enrolled)` : n.connected ? n.name : `${n.name} (not connected)`}</option>`)}
+      ${choices.map((n) => m$1`<option key=${n.name} value=${n.local ? "" : n.name} disabled=${!n.local && !n.connected}>${machineLabel(n)}</option>`)}
     </select>`}
     ${!target.ok && m$1`<span class="spawn-note">${target.reason}. Pick a connected machine.</span>`}
     <select title="harness" value=${flavor} onChange=${(e) => pickFlavor(e.target.value)} disabled=${!target.ok}>
@@ -11007,7 +11009,7 @@ function AgentTalk({ state }) {
 	const oldest = full && full.length >= AGENT_TALK_LIMIT ? full[full.length - 1].ts : null;
 	let day = null;
 	return m$1`
-    <h2>between agents <span class="count">· ${threads.length} conversation${threads.length === 1 ? "" : "s"}${full === null ? " · loading…" : ""}</span></h2>
+    <h2>between agents <span class="count">· ${plural(threads.length, "conversation")}${full === null ? " · loading…" : ""}</span></h2>
     <div class="agent-talk-filters">
       <input type="text" class="h-search chats-search" value=${query} autofocus
         placeholder="search agent talk: a name, a task, a word…"
@@ -11036,7 +11038,7 @@ function TalkThread({ t, words }) {
 	const last = t.items[t.items.length - 1];
 	return m$1`<details class="agent-talk-thread" onToggle=${(e) => setOpen(e.currentTarget.open)}>
     <summary>
-      <span class="chat-who">${t.broadcast ? m$1`${t.people[0]} <span class="agent-talk-arrow">→</span> ${t.to.join(", ")}` : m$1`${t.people[0]} <span class="agent-talk-arrow">↔</span> ${t.people[1]}`}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
+      <span class="chat-who">${t.broadcast ? m$1`${t.people[0]} <span class="agent-talk-arrow">→</span> ${t.to.join(", ")}` : m$1`${t.people[0]} <span class="agent-talk-arrow">↔</span> ${t.people[1]}`}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${plural(t.count, "msg")}</span></span>
       <span class="chat-line"><b>${last.m.sender}:</b> ${hl(snippet(last.m.content, words, 200), wordsRe(words))}</span>
     </summary>
     ${open && m$1`<div class="agent-talk-msgs">${t.items.map((i) => m$1`<div key=${i.ids[0]} class="agent-talk-msg" data-message-id=${i.m.id} tabindex="-1" onAnimationEnd=${(e) => e.currentTarget.classList.remove("reply-highlight")}>
@@ -11105,7 +11107,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
             <span class="chat-main">
               <span class="chat-who">${archives.get(c.agent) || c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && m$1`<span class="team-mate-unread" title="new reply">●</span>`}
-                <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
+                <span class="chat-when">${rel(m.ts, state.now)}${` · ${c.match ? plural(c.matches, "match", "matches") : plural(c.count, "msg")}`}</span></span>
               <span class="chat-line">${!!m.notify && m$1`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${hl(snippet(m.content, words), wordsRe(words))}</span>
             </span>
           </a>`;
@@ -12681,7 +12683,7 @@ function BoardFeed({ data, read, busy, teamId, members, now }) {
         </a>
         <div class="board-post-meta">
           <span>#${post.id} · ${disp(post.author)} · ${rel(post.created_at, now)}</span>
-          ${post.reply_to !== null ? m$1`<a href=${boardHash(teamId, post.reply_to)}>Reply to #${post.reply_to}</a>` : post.replies > 0 && m$1`<a href=${boardHash(teamId, post.id)}>${post.replies} ${post.replies === 1 ? "reply" : "replies"}</a>`}
+          ${post.reply_to !== null ? m$1`<a href=${boardHash(teamId, post.reply_to)}>Reply to #${post.reply_to}</a>` : post.replies > 0 && m$1`<a href=${boardHash(teamId, post.id)}>${plural(post.replies, "reply", "replies")}</a>`}
         </div>
       </li>`)}
     </ol>
@@ -14463,7 +14465,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
     <div id=${optionsId} class="compose-meta" hidden=${compact && !optionsOpen}>
       <input class="context" type="text" value=${context} onInput=${(e) => setContext(e.target.value)}
         placeholder="context tag (optional)" aria-label="Optional context tag" />
-      <span class="count">${text.length} character${text.length === 1 ? "" : "s"}${images.length > 0 ? ` · ${images.length} file${images.length === 1 ? "" : "s"}` : ""}</span>
+      <span class="count">${plural(text.length, "character")}${images.length > 0 ? ` · ${plural(images.length, "file")}` : ""}</span>
       ${!compact && m$1`<span class="hint">Enter to send · Shift + Enter for a new line</span>`}
       <div class="actions">
         ${!compact && status && m$1`<span class=${status.startsWith("delivery failed") ? "error" : "sent"} role="status">${status}</span>`}
@@ -14495,7 +14497,7 @@ function sentByViewer(sender, a, b, page) {
 }
 var JUMP_SHOW_PX = 160;
 var OLDER_PX = 300;
-var gapLabel = ({ count, after, before }) => `${count} message${count === 1 ? "" : "s"} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
+var gapLabel = ({ count, after, before }) => `${plural(count, "message")} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
 function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null, pins = [], readOnly = false, returnState = null, caughtUp = true }) {
 	_(() => {
 		if (search?.open) setExpanded(true);
@@ -14811,7 +14813,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
           disabled=${focused} onClick=${() => setExpanded((v) => !v)}>
         <span class="thread-chevron" aria-hidden="true">${expanded ? "▾" : "▸"}</span>
         <span class="thread-participants">${disp(a)} <span class="swap">⇄</span> ${disp(b)}</span>
-        <span class="n">${msgs.length} msg${msgs.length === 1 ? "" : "s"}</span>
+        <span class="n">${plural(msgs.length, "msg")}</span>
       </button>
       ${search && m$1`<button type="button" class="thread-focus" aria-label="Search conversation" title="Search conversation (Cmd/Ctrl+F)" onClick=${search.show}>⌕</button>`}
       ${focused && m$1`

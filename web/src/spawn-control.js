@@ -6,6 +6,10 @@ import { jsonInit } from "./shared.js";
 
 const DEFAULT_MODEL = "default";
 
+const machineLabel = (n) => (n.local ? `${n.name} (hub)`
+  : n.gone ? `${n.name} (no longer enrolled)`
+    : n.connected ? n.name : `${n.name} (not connected)`);
+
 export function SpawnControl({ refresh, nodes }) {
   const [harnesses, setHarnesses] = useState([]);
   const [node, setNode] = useState("");
@@ -70,7 +74,7 @@ export function SpawnControl({ refresh, nodes }) {
   return html`<form class="spawn" onSubmit=${spawn}>
     <div class="spawn-heading">Spawn agent</div>
     ${(enrolled.length > 1 || node) && html`<select title="machine" value=${node} onChange=${e => pickNode(e.target.value)}>
-      ${choices.map(n => html`<option key=${n.name} value=${n.local ? "" : n.name} disabled=${!n.local && !n.connected}>${n.local ? `${n.name} (hub)` : n.gone ? `${n.name} (no longer enrolled)` : n.connected ? n.name : `${n.name} (not connected)`}</option>`)}
+      ${choices.map(n => html`<option key=${n.name} value=${n.local ? "" : n.name} disabled=${!n.local && !n.connected}>${machineLabel(n)}</option>`)}
     </select>`}
     ${!target.ok && html`<span class="spawn-note">${target.reason}. Pick a connected machine.</span>`}
     <select title="harness" value=${flavor} onChange=${e => pickFlavor(e.target.value)} disabled=${!target.ok}>

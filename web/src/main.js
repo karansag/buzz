@@ -20,7 +20,7 @@ import {
   POLL_MS, stopAgentPrompt,
   PEEK_MS, TASK_DRAG_TYPE,
   jsonInit, errorText, controlRequest, stopRequest, setAgentTeam, newClientId,
-  IS_MAC, platformModifier,
+  IS_MAC, platformModifier, plural,
   STATE,
   agentStatus,
   Bee,
@@ -1172,7 +1172,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
     <div id=${optionsId} class="compose-meta" hidden=${compact && !optionsOpen}>
       <input class="context" type="text" value=${context} onInput=${e => setContext(e.target.value)}
         placeholder="context tag (optional)" aria-label="Optional context tag" />
-      <span class="count">${text.length} character${text.length === 1 ? "" : "s"}${images.length > 0 ? ` · ${images.length} file${images.length === 1 ? "" : "s"}` : ""}</span>
+      <span class="count">${plural(text.length, "character")}${images.length > 0 ? ` · ${plural(images.length, "file")}` : ""}</span>
       ${!compact && html`<span class="hint">Enter to send · Shift + Enter for a new line</span>`}
       <div class="actions">
         ${!compact && status && html`<span class=${status.startsWith("delivery failed") ? "error" : "sent"} role="status">${status}</span>`}
@@ -1214,7 +1214,7 @@ const OLDER_PX = 300;
 // How a hole in the loaded history is described, both inside a thread and
 // above the conversations.
 const gapLabel = ({ count, after, before }) =>
-  `${count} message${count === 1 ? "" : "s"} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
+  `${plural(count, "message")} between #${after} and #${before} ${count === 1 ? "is" : "are"} not loaded`;
 
 function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null, search = null, jumpTo = null, gaps = [], loadGap = null, older = null, pins = [], readOnly = false, returnState = null, caughtUp = true }) {
   useLayoutEffect(() => { if (search?.open) setExpanded(true); }, [search?.open]);
@@ -1530,7 +1530,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
           disabled=${focused} onClick=${() => setExpanded(v => !v)}>
         <span class="thread-chevron" aria-hidden="true">${expanded ? "▾" : "▸"}</span>
         <span class="thread-participants">${disp(a)} <span class="swap">⇄</span> ${disp(b)}</span>
-        <span class="n">${msgs.length} msg${msgs.length === 1 ? "" : "s"}</span>
+        <span class="n">${plural(msgs.length, "msg")}</span>
       </button>
       ${search && html`<button type="button" class="thread-focus" aria-label="Search conversation" title="Search conversation (Cmd/Ctrl+F)" onClick=${search.show}>⌕</button>`}
       ${focused && html`

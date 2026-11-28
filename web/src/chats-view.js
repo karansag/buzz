@@ -9,7 +9,7 @@ import { shellNewlines } from "./newlines.js";
 import { PinnedList } from "./pins.js";
 import { Crown } from "./queen.js";
 import { ReplyPreview } from "./reply-preview.js";
-import { Bee, ErrorMark, STATE, agentStatus, rel, retiredLabel } from "./shared.js";
+import { Bee, ErrorMark, STATE, agentStatus, plural, rel, retiredLabel } from "./shared.js";
 
 // "with you": every conversation the owner has had, one row per
 // agent, newest first, to find whom you asked about something that never
@@ -86,7 +86,7 @@ function AgentTalk({ state }) {
   const oldest = full && full.length >= AGENT_TALK_LIMIT ? full[full.length - 1].ts : null;
   let day = null;
   return html`
-    <h2>between agents <span class="count">· ${threads.length} conversation${threads.length === 1 ? "" : "s"}${full === null ? " · loading…" : ""}</span></h2>
+    <h2>between agents <span class="count">· ${plural(threads.length, "conversation")}${full === null ? " · loading…" : ""}</span></h2>
     <div class="agent-talk-filters">
       <input type="text" class="h-search chats-search" value=${query} autofocus
         placeholder="search agent talk: a name, a task, a word…"
@@ -118,7 +118,7 @@ function TalkThread({ t, words }) {
     : html`${t.people[0]} <span class="agent-talk-arrow">↔</span> ${t.people[1]}`;
   return html`<details class="agent-talk-thread" onToggle=${e => setOpen(e.currentTarget.open)}>
     <summary>
-      <span class="chat-who">${title}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${t.count} msg${t.count === 1 ? "" : "s"}</span></span>
+      <span class="chat-who">${title}<span class="chat-when">${clock(t.start)}${t.end - t.start >= 60 ? `–${clock(t.end)}` : ""} · ${plural(t.count, "msg")}</span></span>
       <span class="chat-line"><b>${last.m.sender}:</b> ${hl(snippet(last.m.content, words, 200), wordsRe(words))}</span>
     </summary>
     ${open && html`<div class="agent-talk-msgs">${t.items.map(i => html`<div key=${i.ids[0]} class="agent-talk-msg" data-message-id=${i.m.id} tabindex="-1" onAnimationEnd=${e => e.currentTarget.classList.remove("reply-highlight")}>
@@ -181,7 +181,7 @@ function OwnerChats({ state, unreadFor, queensOnly = false }) {
             <span class="chat-main">
               <span class="chat-who">${archives.get(c.agent) || c.agent}<${ErrorMark} error=${r?.activity?.error} /><${Crown} teams=${state.teams} user=${c.agent} word=${!queensOnly} /><span class=${`status ${st.cls}`} title=${r ? st.word : "no longer registered"}></span>
                 ${unreadFor(c.agent) && html`<span class="team-mate-unread" title="new reply">●</span>`}
-                <span class="chat-when">${rel(m.ts, state.now)}${c.match ? ` · ${c.matches} match${c.matches === 1 ? "" : "es"}` : ` · ${c.count} msg${c.count === 1 ? "" : "s"}`}</span></span>
+                <span class="chat-when">${rel(m.ts, state.now)}${` · ${c.match ? plural(c.matches, "match", "matches") : plural(c.count, "msg")}`}</span></span>
               <span class="chat-line">${!!m.notify && html`<span class="notification-mark" role="img" aria-label="notification" title="Agent notification">🔔</span> `}<b>${m.sender === "owner" ? "you" : m.sender}:</b> ${hl(snippet(m.content, words), wordsRe(words))}</span>
             </span>
           </a>`;
