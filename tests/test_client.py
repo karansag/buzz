@@ -478,8 +478,8 @@ def test_attached_command_sends_its_session_and_verified_pane(monkeypatch):
     monkeypatch.setattr(tmux, "process_in_pane", lambda pane, pid=None: True)
     calls = _fake_server(monkeypatch, {"user_id": "otter", "identified_by": "session"})
     assert client.main(["send", "--to", "owner", "--message", "hi"]) == 0
-    assert calls["get"][0] == {"node": "laptop", "tmux_pane": "%5", "agent_id": "sess-a", "pane_verified": "true",
-                               "pane_in_tree": "true", "harness": "claude"}
+    assert calls["get"][0] == {"node": "laptop", "tmux_pane": "%5", "agent_id": "sess-a", "pane_verified": True,
+                               "pane_in_tree": True, "harness": "claude"}
     assert calls["post"][0]["agent_id"] == "sess-a" and calls["post"][0]["pane_verified"] is True
     # Inside its own pane: the hub may move the registration to this session.
     assert calls["post"][0]["pane_in_tree"] is True and calls["post"][0]["harness"] == "claude"
@@ -561,7 +561,7 @@ def test_whoami_lookup_asks_the_server_for_this_pane_on_this_node(monkeypatch):
     who = {"pane": "%1", "agent_id": None, "pane_verified": True, "pane_in_tree": True, "harness": None}
     assert client.whoami_lookup(who)["user_id"] == "laptop-agent"
     assert captured["url"] == "http://localhost:8765/whoami"
-    assert captured["params"] == {"tmux_pane": "%1", "node": "laptop", "pane_verified": "true", "pane_in_tree": "true"}
+    assert captured["params"] == {"tmux_pane": "%1", "node": "laptop", "pane_verified": True, "pane_in_tree": True}
     monkeypatch.setattr(client.httpx, "get", lambda url, params, headers, timeout: SimpleNamespace(is_success=False))
     assert client.whoami_lookup(who)["user_id"] is None
 

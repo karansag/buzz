@@ -186,20 +186,25 @@ def caller(pane_arg: str | None = None, agent_id_arg: str | None = None) -> dict
     }
 
 
+def _identity_payload(who: dict) -> dict:
+    """Who is calling, as request fields (JSON body or query string)."""
+    payload: dict = {"node": local_node()}
+    if who["pane"]:
+        payload["tmux_pane"] = who["pane"]
+    if who["agent_id"]:
+        payload["agent_id"] = who["agent_id"]
+    if who["pane_verified"] is not None:
+        payload["pane_verified"] = who["pane_verified"]
+    if who.get("pane_in_tree"):
+        payload["pane_in_tree"] = True
+    if who.get("harness"):
+        payload["harness"] = who["harness"]
+    return payload
+
+
 def whoami_lookup(who: dict) -> dict:
     """The server's view of `who`: user_id, identified_by, detail, pane label."""
-    params = {"node": local_node()}
-    if who["pane"]:
-        params["tmux_pane"] = who["pane"]
-    if who["agent_id"]:
-        params["agent_id"] = who["agent_id"]
-    if who["pane_verified"] is not None:
-        params["pane_verified"] = "true" if who["pane_verified"] else "false"
-    if who.get("pane_in_tree"):
-        params["pane_in_tree"] = "true"
-    if who.get("harness"):
-        params["harness"] = who["harness"]
-    r = httpx.get(f"{base_url()}/whoami", params=params, headers=_headers(), timeout=5)
+    r = httpx.get(f"{base_url()}/whoami", params=_identity_payload(who), headers=_headers(), timeout=5)
     if not r.is_success:
         code, text = getattr(r, "status_code", "?"), getattr(r, "text", "")
         return {"user_id": None, "detail": f"server said {code}: {text[:200]}"}
@@ -235,6 +240,12 @@ def _identify_or_explain(who: dict) -> str | None:
     return None
 
 
+def _report(r, pretty: bool = False) -> int:
+    """Print the hub's answer and turn it into an exit code."""
+    print(json.dumps(r.json(), indent=2) if pretty else r.text)
+    return 0 if r.is_success else 1
+
+
 def cmd_register(args: argparse.Namespace) -> int:
     who = caller(args.pane, args.agent_id)
     if not who["pane"]:
@@ -267,8 +278,7 @@ def cmd_register(args: argparse.Namespace) -> int:
     if args.submit_key:
         payload["submit_key"] = args.submit_key
     r = httpx.post(f"{base_url()}/register", json=payload, headers=_headers(), timeout=5)
-    print(r.text)
-    return 0 if r.is_success else 1
+    return _report(r)
 
 
 # Processes that may sit between a pane's shell and its harness: shells and
@@ -464,21 +474,6 @@ def cmd_autoregister(args: argparse.Namespace) -> int:
     return 0
 
 
-def _identity_payload(who: dict) -> dict:
-    payload: dict = {"node": local_node()}
-    if who["pane"]:
-        payload["tmux_pane"] = who["pane"]
-    if who["agent_id"]:
-        payload["agent_id"] = who["agent_id"]
-    if who["pane_verified"] is not None:
-        payload["pane_verified"] = who["pane_verified"]
-    if who.get("pane_in_tree"):
-        payload["pane_in_tree"] = True
-    if who.get("harness"):
-        payload["harness"] = who["harness"]
-    return payload
-
-
 def cmd_send(args: argparse.Namespace) -> int:
     who = caller(getattr(args, "pane", None))
     if not _identify_or_explain(who):
@@ -489,8 +484,7 @@ def cmd_send(args: argparse.Namespace) -> int:
     if args.context:
         payload["context"] = args.context
     r = httpx.post(f"{base_url()}/send", json=payload, headers=_headers(), timeout=10)
-    print(r.text)
-    return 0 if r.is_success else 1
+    return _report(r)
 
 
 def cmd_notify(args: argparse.Namespace) -> int:
@@ -499,8 +493,7 @@ def cmd_notify(args: argparse.Namespace) -> int:
         return 2
     r = httpx.post(f"{base_url()}/notify", json={**_identity_payload(who),
                    "content": args.text, "context": args.context}, headers=_headers(), timeout=10)
-    print(r.text)
-    return 0 if r.is_success else 1
+    return _report(r)
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -510,8 +503,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     r = httpx.post(
         f"{base_url()}/status", json={**_identity_payload(who), "text": args.text}, headers=_headers(), timeout=5
     )
-    print(r.text)
-    return 0 if r.is_success else 1
+    return _report(r)
 
 
 def cmd_messages(args: argparse.Namespace) -> int:
@@ -521,14 +513,12 @@ def cmd_messages(args: argparse.Namespace) -> int:
     if args.user:
         params["user"] = args.user
     r = httpx.get(f"{base_url()}/messages", params=params, headers=_headers(), timeout=5)
-    print(json.dumps(r.json(), indent=2))
-    return 0 if r.is_success else 1
+    return _report(r, pretty=True)
 
 
 def cmd_recipients(_: argparse.Namespace) -> int:
     r = httpx.get(f"{base_url()}/recipients", headers=_headers(), timeout=5)
-    print(json.dumps(r.json(), indent=2))
-    return 0 if r.is_success else 1
+    return _report(r, pretty=True)
 
 
 def cmd_snapshot(args: argparse.Namespace) -> int:
@@ -738,8 +728,7 @@ def cmd_prune(args: argparse.Namespace) -> int:
         json={"include_shells": args.include_shells},
         timeout=10,
     )
-    print(json.dumps(r.json(), indent=2))
-    return 0 if r.is_success else 1
+    return _report(r, pretty=True)
 
 
 def cmd_unregister(args: argparse.Namespace) -> int:
@@ -752,8 +741,7 @@ def cmd_unregister(args: argparse.Namespace) -> int:
         print("error: current pane is not registered; pass --user HANDLE", file=sys.stderr)
         return 2
     response = httpx.delete(f"{base_url()}/recipients/{quote(user, safe='')}", headers=_headers(), timeout=5)
-    print(response.text)
-    return 0 if response.is_success else 1
+    return _report(response)
 
 
 def cmd_tasks(args: argparse.Namespace) -> int:
@@ -796,8 +784,7 @@ def cmd_task_create(args: argparse.Namespace) -> int:
     if args.depends_on is not None:
         payload["depends_on"] = _parse_deps(args.depends_on)
     r = httpx.post(f"{base_url()}/tasks", json=payload, headers=_headers(), timeout=5)
-    print(r.text)
-    return 0 if r.is_success else 1
+    return _report(r)
 
 
 def cmd_task_update(args: argparse.Namespace) -> int:
@@ -824,8 +811,7 @@ def cmd_task_update(args: argparse.Namespace) -> int:
         return 2
     payload.update(fields)
     r = httpx.patch(f"{base_url()}/tasks/{args.id}", json=payload, headers=_headers(), timeout=5)
-    print(r.text)
-    return 0 if r.is_success else 1
+    return _report(r)
 
 
 def cmd_model(args: argparse.Namespace) -> int:
@@ -895,11 +881,7 @@ def _board_scope_params() -> dict:
     who = caller()
     if not (who["agent_id"] or who["pane_verified"]):
         return {}
-    return {key: value for key, value in {
-        "node": local_node(), "tmux_pane": who["pane"], "agent_id": who["agent_id"],
-        "pane_verified": who["pane_verified"], "pane_in_tree": who["pane_in_tree"],
-        "harness": who["harness"],
-    }.items() if value is not None}
+    return _identity_payload(who)
 
 
 def cmd_team(args: argparse.Namespace) -> int:
@@ -1149,8 +1131,7 @@ def cmd_spawn(args: argparse.Namespace) -> int:
     if args.cwd:
         payload["cwd"] = args.cwd
     r = httpx.post(f"{base_url()}/agents/spawn", json=payload, headers=_headers(), timeout=30)
-    print(r.text)
-    return 0 if r.is_success else 1
+    return _report(r)
 
 
 def cmd_switch(args: argparse.Namespace) -> int:
@@ -1208,8 +1189,7 @@ def cmd_switch(args: argparse.Namespace) -> int:
 
 def cmd_stop(args: argparse.Namespace) -> int:
     r = httpx.post(f"{base_url()}/agents/{quote(args.handle, safe='')}/stop", headers=_headers(), timeout=15)
-    print(r.text)
-    return 0 if r.is_success else 1
+    return _report(r)
 
 
 def cmd_retire(args: argparse.Namespace) -> int:
@@ -1299,8 +1279,7 @@ def cmd_node_token(args: argparse.Namespace) -> int:
 
 def cmd_nodes(_: argparse.Namespace) -> int:
     r = httpx.get(f"{base_url()}/nodes", headers=_headers(), timeout=5)
-    print(json.dumps(r.json(), indent=2))
-    return 0 if r.is_success else 1
+    return _report(r, pretty=True)
 
 
 def cmd_export(args: argparse.Namespace) -> int:
