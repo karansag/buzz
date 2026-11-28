@@ -122,7 +122,7 @@ def test_restart_cli_all_uses_the_hub_and_limits_a_node_to_its_own_agents(monkey
 
 
 def test_local_respawn_checks_the_server_and_running_pane_before_launching(monkeypatch):
-    from agent_swarm import nodes
+    from agent_swarm.delivery import tmux_backend as nodes
 
     row = {"command": "pi", "cwd": "/a folder"}
     monkeypatch.setattr(tmux, "server_id", lambda: SERVER)

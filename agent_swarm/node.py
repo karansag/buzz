@@ -39,7 +39,8 @@ from pathlib import Path
 
 import httpx
 
-from . import attachments, config, nodes, protocol, restore, tmux
+from . import attachments, config, protocol, restore, tmux
+from .delivery import tmux_backend
 
 log = logging.getLogger("agent_swarm.node")
 
@@ -234,7 +235,7 @@ class Executor:
 
     def __init__(
         self,
-        local: nodes.LocalNode,
+        local: tmux_backend.LocalNode,
         store: OpStore,
         attachment_path: Callable[[str, float], Path] | None = None,
     ):
@@ -353,7 +354,7 @@ class Executor:
         if kind == "resolve":
             try:
                 resolved = self.local.resolve(a["target"])
-            except nodes.Unavailable as e:
+            except tmux_backend.Unavailable as e:
                 return protocol.result(op_id, "failed", str(e))
             if resolved is None:
                 return protocol.result(op_id, "ok", None, pane=None, label=None, tmux_server=None)
@@ -433,7 +434,7 @@ class Daemon:
         self.seq += 1
         try:
             snap = self.executor.local.snapshot()
-        except nodes.Unavailable as e:
+        except tmux_backend.Unavailable as e:
             return protocol.observe(self.seq, None, None, {}, str(e))
         screens = {}
         for pane, expected in self.watched.items():
@@ -622,6 +623,6 @@ def _run() -> None:
         cache.sweep()
 
     maintenance()
-    local = nodes.LocalNode(settings.node, attachments_root=cache.root)
+    local = tmux_backend.LocalNode(settings.node, attachments_root=cache.root)
     daemon = Daemon(settings, Executor(local, store, cache.path_for), maintenance=maintenance)
     asyncio.run(daemon.run_forever())

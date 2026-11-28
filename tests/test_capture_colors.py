@@ -7,7 +7,8 @@ import uuid
 
 import pytest
 
-from agent_swarm import nodes, tmux
+from agent_swarm import tmux
+from agent_swarm.delivery import tmux_backend as nodes
 
 
 @pytest.fixture

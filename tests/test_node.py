@@ -7,7 +7,8 @@ import time
 
 import pytest
 
-from agent_swarm import config, node, nodes, protocol, tmux
+from agent_swarm import config, node, protocol, tmux
+from agent_swarm.delivery import tmux_backend as nodes
 
 
 class FakeLocal(nodes.LocalNode):

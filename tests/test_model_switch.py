@@ -4,7 +4,8 @@ import json
 import pytest
 
 from agent_swarm import model_switch as ms
-from agent_swarm import nodes, tmux
+from agent_swarm import tmux
+from agent_swarm.delivery import tmux_backend as nodes
 
 CLAUDE_ROWS = ["Default (recommended)", "Opus 5.5", "Fable 5.2", "Sonnet 5.5", "Haiku 5.5"]
 CODEX_ROWS = ["GPT-6.1-Sol", "GPT-6-Astra", "GPT-6.1 Terra", "GPT-6-Luna"]

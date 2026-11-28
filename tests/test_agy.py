@@ -10,7 +10,8 @@ import json
 
 import pytest
 
-from agent_swarm import activity, client, handoff, nodes, restore, tmux
+from agent_swarm import activity, client, handoff, restore, tmux
+from agent_swarm.delivery import tmux_backend as nodes
 from agent_swarm import model_switch as ms
 
 CATALOG = (

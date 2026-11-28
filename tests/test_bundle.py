@@ -8,7 +8,8 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_swarm import bundle, db, nodes, server, tmux
+from agent_swarm import bundle, db, server, tmux
+from agent_swarm.delivery import tmux_backend as nodes
 
 
 def make(**over) -> dict:
@@ -267,7 +268,7 @@ def test_the_same_export_is_not_taken_in_twice(live):
 
 def connect(app, name="macbook"):
     """That machine's daemon, connected: a pane there can be resolved."""
-    app.state.nodes.add(nodes.LocalNode(name))
+    app.state.delivery.add(nodes.LocalNode(name))
 
 
 def test_a_reserved_handle_is_claimed_by_registering(live):
@@ -419,7 +420,7 @@ def test_nothing_is_written_when_an_import_fails_after_it_has_begun(live, monkey
 
 def test_import_reconnects_only_verified_panes(live, monkeypatch):
     app, owner, _ = live
-    app.state.nodes.add(nodes.LocalNode('macbook'))
+    app.state.delivery.add(nodes.LocalNode('macbook'))
     monkeypatch.setattr(tmux, 'pane_table', lambda: {
         '%1': {'label': 'a:0.0', 'command': 'claude', 'title': '', 'agent_swarm': 'otter'},
         '%2': {'label': 'a:0.1', 'command': 'codex', 'title': '', 'agent_swarm': 'someone-else'},

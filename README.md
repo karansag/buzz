@@ -1011,7 +1011,8 @@ agent_swarm/
   bundle.py    export and import between hubs
   attachments.py, search.py, message_index.py  files and message search
   node.py      the node daemon
-  nodes.py     local and remote machines behind one interface
+  delivery/    delivery backends: base.py (the interface), tmux_backend.py
+               (local and remote tmux), rhizome_backend.py (Rhizome)
   protocol.py  frames between hub and node
   config.py    the per-machine settings file
   names.py     the handle pool

@@ -3,7 +3,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_swarm import config, nodes, server, tmux
+from agent_swarm import config, server, tmux
+from agent_swarm.delivery import tmux_backend as nodes
 
 
 def owner(app):
@@ -18,7 +19,7 @@ def remote(app, token=None):
 def enrol(app, name):
     r = owner(app).post(f"/nodes/{name}/token")
     assert r.status_code == 200
-    app.state.nodes.add(nodes.LocalNode(name))
+    app.state.delivery.add(nodes.LocalNode(name))
     return r.json()["token"]
 
 
@@ -90,7 +91,7 @@ def test_tokens_are_issued_once_rotated_and_revoked(hub):
     assert remote(hub, second).get("/recipients").status_code == 200
     assert owner(hub).delete("/nodes/macbook").status_code == 200
     assert remote(hub, second).get("/recipients").status_code == 401
-    assert hub.state.nodes.get("macbook") is None
+    assert hub.state.delivery.get("macbook") is None
     assert owner(hub).delete("/nodes/macbook").status_code == 404
 
 

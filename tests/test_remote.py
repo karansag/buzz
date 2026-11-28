@@ -9,7 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from agent_swarm import db, nodes, protocol, server, tmux
+from agent_swarm import db, protocol, server, tmux
+from agent_swarm.delivery import tmux_backend as nodes
 
 
 @pytest.fixture()
@@ -73,7 +74,7 @@ def test_the_handshake_needs_the_nodes_token_and_a_matching_hello(hub):
     with pytest.raises(WebSocketDisconnect):
         with connect(owner, token, hello=protocol.hello("laptop", "0.1.0", None, [])) as ws:
             ws.receive_json()
-    assert app.state.nodes.get("macbook") is None
+    assert app.state.delivery.get("macbook") is None
 
 
 def test_a_connected_node_is_welcomed_observed_and_listed(hub):
@@ -82,7 +83,7 @@ def test_a_connected_node_is_welcomed_observed_and_listed(hub):
         welcome = ws.receive_json()
         assert welcome["type"] == "welcome" and welcome["watch"] == []
         assert welcome["interval"] == pytest.approx(0.2)
-        node = app.state.nodes.get("macbook")
+        node = app.state.delivery.get("macbook")
         assert isinstance(node, nodes.RemoteNode) and node.harnesses == ["claude"]
         listed = owner.get("/nodes").json()["nodes"][0]
         assert listed["connected"] is True and listed["version"] == "0.1.0"
@@ -99,9 +100,9 @@ def test_a_connected_node_is_welcomed_observed_and_listed(hub):
         assert node.capture("%1", "mac-srv") == ("the screen", None)
     for _ in range(50):
         time.sleep(0.01)
-        if app.state.nodes.get("macbook") is None:
+        if app.state.delivery.get("macbook") is None:
             break
-    assert app.state.nodes.get("macbook") is None
+    assert app.state.delivery.get("macbook") is None
     assert owner.get("/nodes").json()["nodes"][0]["connected"] is False
 
 
@@ -171,7 +172,7 @@ def test_a_dropped_connection_leaves_in_flight_deliveries_unknown_and_agents_off
     assert out["value"]["status"] == "unknown" and "disconnected" in out["value"]["delivery_error"]
     for _ in range(50):
         time.sleep(0.01)
-        if app.state.nodes.get("macbook") is None:
+        if app.state.delivery.get("macbook") is None:
             break
     row = next(r for r in owner.get("/recipients").json()["recipients"] if r["user_id"] == "puffin")
     assert row["alive"] is False and "not connected" in row["offline_reason"]
@@ -200,10 +201,10 @@ def test_a_newer_connection_replaces_and_fences_the_older(hub):
     app, owner, token = hub
     with connect(owner, token) as first:
         first.receive_json()
-        older = app.state.nodes.get("macbook")
+        older = app.state.delivery.get("macbook")
         with connect(owner, token) as second:
             second.receive_json()
-            newer = app.state.nodes.get("macbook")
+            newer = app.state.delivery.get("macbook")
             assert newer is not older and newer.generation > older.generation
             assert older.fenced == "replaced by a newer connection"
             assert older.deliver("m", "%1", "mac-srv", "x").status == "unknown"
@@ -216,12 +217,12 @@ def test_rotating_or_revoking_a_token_closes_its_connection(hub):
     app, owner, token = hub
     with connect(owner, token) as ws:
         ws.receive_json()
-        node = app.state.nodes.get("macbook")
+        node = app.state.delivery.get("macbook")
         owner.post("/nodes/macbook/token")
         assert node.fenced == "token rotated"
         with pytest.raises(WebSocketDisconnect):
             ws.receive_json()
-        assert app.state.nodes.get("macbook") is None
+        assert app.state.delivery.get("macbook") is None
     with pytest.raises(WebSocketDisconnect):
         with connect(owner, token) as ws:
             ws.receive_json()
@@ -303,14 +304,14 @@ def test_a_token_revoked_or_rotated_during_the_hello_window_is_refused(hub):
         ws.send_json(protocol.hello("macbook", "0.1.0", "mac-srv", []))
         with pytest.raises(WebSocketDisconnect):
             ws.receive_json()
-    assert app.state.nodes.get("macbook") is None
+    assert app.state.delivery.get("macbook") is None
     token = owner.post("/nodes/macbook/token").json()["token"]
     with owner.websocket_connect("/nodes/ws", headers={"Authorization": f"Bearer {token}"}) as ws:
         owner.post("/nodes/macbook/token")  # rotated while the hello is pending
         ws.send_json(protocol.hello("macbook", "0.1.0", "mac-srv", []))
         with pytest.raises(WebSocketDisconnect):
             ws.receive_json()
-    assert app.state.nodes.get("macbook") is None
+    assert app.state.delivery.get("macbook") is None
 
 
 def test_a_pane_is_paired_with_the_server_that_resolved_it_not_a_cached_one(hub):
@@ -394,13 +395,13 @@ def test_restart_remote_agent_from_its_node_and_wait_for_registration(hub, tmp_p
     db.register(conn, "puffin", "%1", "fake-pi-session", flavor="pi",
                 tmux_server="mac-srv", node="macbook")
     db.register(conn, "local-bird", "%1", "fake-local-session", flavor="pi",
-                tmux_server="hub-srv", node=app.state.nodes.local.name)
+                tmux_server="hub-srv", node=app.state.delivery.local.name)
 
     with connect(owner, token) as ws:
         ws.receive_json()
         ws.send_json(protocol.observe(1, "mac-srv",
                                        {"%1": {**TABLE["%1"], "cwd": "/remote folder"}}, {}))
-        node = app.state.nodes.get("macbook")
+        node = app.state.delivery.get("macbook")
         for _ in range(100):
             try:
                 node.snapshot()

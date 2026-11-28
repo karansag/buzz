@@ -49,7 +49,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import nodes, restore, tmux
+from . import delivery, restore, tmux
 
 SWITCHABLE = ("claude", "codex", "pi", "agy")
 
@@ -377,7 +377,7 @@ class SwitchFailed(Exception):
 @dataclass
 class Pane:
     """One agent's pane, reached through its node."""
-    node: nodes.Node
+    node: delivery.Node
     pane: str
     tmux_server: str | None
     submit_key: str
@@ -393,20 +393,20 @@ class Pane:
 
     def type(self, text: str, retry_submit: bool) -> None:
         r = self.node.deliver(
-            nodes.new_op_id(), self.pane, self.tmux_server, text,
+            delivery.new_op_id(), self.pane, self.tmux_server, text,
             submit_key=self.submit_key, flavor=self.flavor, retry_submit=retry_submit,
         )
         if r.status != "ok":
             raise SwitchFailed(f"could not type {text!r}: {r.error or r.status}")
 
     def key(self, key: str) -> None:
-        r = self.node.send_key(nodes.new_op_id(), self.pane, self.tmux_server, key)
+        r = self.node.send_key(delivery.new_op_id(), self.pane, self.tmux_server, key)
         if r.status != "ok":
             raise SwitchFailed(f"could not press {key}: {r.error or r.status}")
 
     def text(self, text: str) -> None:
         """Type `text` without submitting it."""
-        r = self.node.send_key(nodes.new_op_id(), self.pane, self.tmux_server, text, literal=True)
+        r = self.node.send_key(delivery.new_op_id(), self.pane, self.tmux_server, text, literal=True)
         if r.status != "ok":
             raise SwitchFailed(f"could not type {text!r}: {r.error or r.status}")
 
@@ -663,7 +663,7 @@ def _agy_restart(pane: Pane, wanted: str, sleep: Callable[[float], None]) -> str
     def shell(_screen: str) -> bool:
         try:
             snap = pane.node.snapshot()
-        except nodes.Unavailable:
+        except delivery.Unavailable:
             return False
         return pane.pane in snap.existing and pane.pane not in snap.live
 

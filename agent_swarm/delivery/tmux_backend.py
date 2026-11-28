@@ -1,10 +1,11 @@
-"""What the server asks of a machine's tmux, behind one interface.
+"""The tmux delivery backend: messages are typed into an agent's tmux pane.
 
 The server never touches tmux directly. It asks the Node that owns the
 recipient's pane, found by the recipient's `node` column. LocalNode is the
 tmux the server runs beside; a node for another machine arrives with the
 node daemon. Every method maps onto one tmux operation, so a remote
-implementation is a transport, not a reinterpretation.
+implementation is a transport, not a reinterpretation. TmuxBackend is the
+set of those nodes, as the hub's DeliveryBackend.
 """
 
 from __future__ import annotations
@@ -13,14 +14,23 @@ import asyncio
 import logging
 import shlex
 import time
-import uuid
 from collections.abc import Awaitable, Callable
 from concurrent.futures import TimeoutError as FutureTimeout
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
 
-from . import activity, config, protocol, tmux
+from .. import activity, config, protocol, tmux
+from .base import (
+    Capabilities,
+    Inbound,
+    Node,
+    NodeRegistry,
+    PaneSnapshot,
+    Resolved,
+    Result,
+    Spawned,
+    Unavailable,
+    new_op_id,
+)
 
 log = logging.getLogger("agent_swarm.nodes")
 
@@ -28,142 +38,6 @@ log = logging.getLogger("agent_swarm.nodes")
 # the verify-and-retry wait, so it gets the longest.
 DELIVER_TTL = 30.0
 COMMAND_TTL = 15.0
-
-
-@dataclass(frozen=True)
-class Result:
-    """Outcome of an operation with a side effect.
-
-    `unknown` means the node cannot say whether the side effect happened: a
-    message may have been pasted and its result lost. The caller must not
-    retry an unknown operation on its own, or the agent gets it twice.
-    """
-
-    status: Literal["ok", "failed", "unknown"]
-    error: str | None = None
-
-    @property
-    def ok(self) -> bool:
-        return self.status == "ok"
-
-
-@dataclass(frozen=True)
-class Resolved:
-    """A pane target resolved on its node: the id, its positional label, and
-    the tmux server that issued the id, all from one coherent look. The
-    server travels with the pane so the hub never pairs a fresh pane with
-    a server id it cached earlier."""
-
-    pane: str
-    label: str
-    tmux_server: str | None
-
-
-@dataclass(frozen=True)
-class Spawned:
-    """Outcome of a spawn: a Result plus the pane it made, when it did, with
-    the label and the tmux server that created it."""
-
-    status: Literal["ok", "failed", "unknown"]
-    pane: str | None = None
-    error: str | None = None
-    label: str | None = None
-    tmux_server: str | None = None
-
-    @property
-    def ok(self) -> bool:
-        return self.status == "ok"
-
-
-class Unavailable(Exception):
-    """The node could not observe its tmux coherently right now.
-
-    Distinct from an empty snapshot: nothing is known, so nothing may be
-    treated as confirmed absent.
-    """
-
-
-def new_op_id() -> str:
-    """An id for a side-effecting operation that has no message row of its own."""
-    return uuid.uuid4().hex
-
-
-@dataclass(frozen=True)
-class PaneSnapshot:
-    """One look at a node's tmux: which panes exist and which hold an agent."""
-
-    server: str | None  # tmux server id; None when tmux is not running
-    server_start: float | None
-    existing: frozenset[str]
-    live: frozenset[str]  # existing panes running something other than a shell
-    table: dict[str, dict[str, str]]  # pane id -> {label, command, title}
-
-    def label(self, pane: str) -> str | None:
-        row = self.table.get(pane)
-        return row["label"] if row else None
-
-    def title(self, pane: str) -> str | None:
-        row = self.table.get(pane)
-        return row["title"] if row else None
-
-    def cwd(self, pane: str) -> str | None:
-        """The folder the pane's foreground program runs in; None from a node
-        too old to report it."""
-        row = self.table.get(pane)
-        return (row.get("cwd") or None) if row else None
-
-
-class Node(Protocol):
-    """One machine's tmux.
-
-    Every operation on a pane also names the tmux server that issued the
-    pane id, and the node checks it before acting: pane ids start over when
-    tmux restarts, so an id checked only at the hub could reach a different
-    pane by the time the command runs. The check narrows that window; it is
-    not atomic with the tmux calls that follow it.
-
-    Every operation with a side effect (deliver, spawn, kill, tag_pane,
-    rename_window) carries an op id, the message id for a delivery and a
-    fresh id otherwise, and returns a Result that can be unknown. A node
-    that may execute a command more than once (a remote one, after a
-    reconnect) uses the id to return the earlier result instead of acting
-    twice.
-
-    snapshot() raises Unavailable when the node cannot observe its tmux
-    coherently; callers treat that as nothing known, never as empty.
-    """
-
-    name: str
-    spawn_dirs: list[str]  # folders a new agent may start in (AGENT_SWARM_SPAWN_DIRS)
-
-    def snapshot(self) -> PaneSnapshot: ...
-    def server_id(self) -> str | None: ...
-    def resolve(self, target: str) -> Resolved | None: ...
-    def capture(
-        self, pane: str, tmux_server: str | None, colors: bool = False
-    ) -> tuple[str | None, str | None]: ...
-    def screen(self, pane: str, tmux_server: str | None) -> str | None:
-        """The pane's plain screen if it can be had without waiting on a node, else None."""
-        ...
-    def deliver(
-        self,
-        op_id: str,
-        pane: str,
-        tmux_server: str | None,
-        text: str,
-        *,
-        attachments: list[str] = (),
-        message_prefix: str | None = None,
-        submit_key: str = tmux.DEFAULT_SUBMIT_KEY,
-        flavor: str | None = None,
-        retry_submit: bool = True,
-    ) -> Result: ...
-    def spawn(self, op_id: str, command: str | None, cwd: str | None = None, resume: bool = False) -> Spawned: ...
-    def respawn(self, op_id: str, pane: str, tmux_server: str, cwd: str, command: str) -> Result: ...
-    def kill(self, op_id: str, pane: str, tmux_server: str | None) -> Result: ...
-    def send_key(self, op_id: str, pane: str, tmux_server: str | None, key: str, literal: bool = False) -> Result: ...
-    def tag_pane(self, op_id: str, pane: str, tmux_server: str | None, handle: str) -> Result: ...
-    def rename_window(self, op_id: str, pane: str, tmux_server: str | None, name: str) -> Result: ...
 
 
 def _stale_server(expected: str | None) -> str | None:
@@ -348,35 +222,6 @@ class LocalNode:
             return Result("failed", stale)
         ok, err = tmux.rename_window(pane, name)
         return Result("ok" if ok else "failed", err)
-
-
-class NodeRegistry:
-    """The nodes this server can reach right now, by name.
-
-    Always holds the local node. A node that is absent is one the server
-    cannot reach: its agents read offline and nothing is sent to it.
-    """
-
-    def __init__(self, local: Node):
-        self.local = local
-        self._nodes: dict[str, Node] = {local.name: local}
-
-    def add(self, node: Node) -> None:
-        # The local node is fixed for the server's life; a connection
-        # claiming its name is misconfigured, never a replacement.
-        if node.name == self.local.name:
-            raise ValueError(f"{node.name} is this server's own node")
-        self._nodes[node.name] = node
-
-    def remove(self, name: str) -> None:
-        if name != self.local.name:
-            self._nodes.pop(name, None)
-
-    def get(self, name: str | None) -> Node | None:
-        return self._nodes.get(name or self.local.name)
-
-    def names(self) -> list[str]:
-        return list(self._nodes)
 
 
 def _observed(observation: dict, pane: str, colors: bool) -> str | None:
@@ -642,3 +487,34 @@ class RemoteNode:
     def rename_window(self, op_id: str, pane: str, tmux_server: str | None, name: str) -> Result:
         r = self._call("rename_window", COMMAND_TTL, op_id=op_id, pane=pane, tmux_server=tmux_server, name=name)
         return Result(r.get("status", "unknown"), r.get("error"))
+
+
+class TmuxBackend(NodeRegistry):
+    """Agents in tmux panes, on this machine and on connected ones."""
+
+    name = "tmux"
+    address_kind = "pane"
+    capabilities = Capabilities(
+        deliver=True, liveness=True, inbound=False, peek=True, activity=True,
+        keys=True, spawn=True, restart=True, stop=True, remote_nodes=True,
+    )
+
+    def __init__(self, attachments_root: Path | None = None, local: Node | None = None):
+        super().__init__(local or LocalNode(tmux.local_node(), attachments_root))
+
+    def offline_reason(self, address: str, snapshot: PaneSnapshot, stale: str | None) -> str | None:
+        return tmux.offline_reason(address, snapshot.existing, snapshot.live, stale=stale)
+
+    def arrival_note(self) -> str:
+        return (
+            "Incoming messages from the owner and other agents are delivered by injecting a "
+            "line into your tmux pane (as if typed) followed by the configured "
+            "submit key (default `C-m`)."
+        )
+
+    def on_inbound(self, handler: Callable[[Inbound], None]) -> None:
+        # Agents answer over the hub's HTTP API; tmux carries nothing back.
+        pass
+
+    def close(self) -> None:
+        pass

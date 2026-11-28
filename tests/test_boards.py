@@ -9,7 +9,7 @@ def board(client, tmp_path):
     conn = db.connect(tmp_path / "db.sqlite")
     team = db.create_team(conn, "board team")["id"]
     db.register(conn, "puffin", "0:0.0", "fake-pi", flavor="pi",
-                node=client.app.state.nodes.local.name, tmux_server="srv-1")
+                node=client.app.state.delivery.local.name, tmux_server="srv-1")
     db.set_agent_team(conn, "puffin", team)
     yield conn, team, f"/teams/{team}/board"
     conn.close()
@@ -80,7 +80,7 @@ def test_board_read_cap_never_skips_unreturned_posts_and_new_member_backlog(clie
     conn, team, path = board
     expected = [_post(client, path, body="🐝" * 200) for _ in range(30)]
     db.register(conn, "late", "0:1.0", "fake-late", flavor="pi",
-                node=client.app.state.nodes.local.name, tmux_server="srv-1")
+                node=client.app.state.delivery.local.name, tmux_server="srv-1")
     db.set_agent_team(conn, "late", team)
     newest = _post(client, path)
     assert client.get(path, params={"agent_id": "fake-late"}).json()["unread"] == 21
@@ -125,7 +125,7 @@ def test_board_rename_and_retirement_preserve_history_not_new_handle_state(clien
     assert client.get(f"{path}/{mid}").json()["post"]["author"] == archive
     assert conn.execute("SELECT user_id FROM board_reads").fetchone()[0] == archive
     db.register(conn, "tern", "0:1.0", "fresh-pi", flavor="pi",
-                node=client.app.state.nodes.local.name, tmux_server="srv-1")
+                node=client.app.state.delivery.local.name, tmux_server="srv-1")
     db.set_agent_team(conn, "tern", team)
     assert client.get(path, params={"agent_id": "fresh-pi", "unread": 1}).json()["unread"] == 1
 
@@ -150,11 +150,11 @@ def test_board_hint_only_in_existing_deliveries_and_summary_is_scoped(client, bo
 
 
 def test_board_hint_remains_eligible_after_definite_delivery_failure(client, board, monkeypatch):
-    from agent_swarm import nodes
+    from agent_swarm.delivery import tmux_backend as nodes
 
     _, _, path = board
     _post(client, path)
-    local = client.app.state.nodes.local
+    local = client.app.state.delivery.local
     deliver = local.deliver
     attempts = []
 

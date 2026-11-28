@@ -255,7 +255,7 @@ def test_nudge_delivery_runs_off_the_event_loop(client, monkeypatch):
     """A remote node's send waits on a future scheduled on the server's loop,
     so a nudge sent from the monitor coroutine itself would deadlock until
     the timeout and end unknown. The fake below makes the same round trip."""
-    from agent_swarm import nodes
+    from agent_swarm.delivery import tmux_backend as nodes
 
     class LoopBoundNode(nodes.LocalNode):
         loop = None
@@ -269,7 +269,7 @@ def test_nudge_delivery_runs_off_the_event_loop(client, monkeypatch):
             return super().deliver(op_id, pane, tmux_server, text, **kw)
 
     node = LoopBoundNode("macbook")
-    client.app.state.nodes.add(node)
+    client.app.state.delivery.add(node)
     client.post("/register", json={"tmux_pane": "0:0.0", "requested_user": "heron", "node": "macbook"})
     _register(client, "0:1.0", "vole")
     client.put("/supervisor", json={"user_id": "heron"})

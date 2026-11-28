@@ -14,7 +14,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_swarm import activity, db, handoff, nodes, server, tmux
+from agent_swarm import activity, db, handoff, server, tmux
+from agent_swarm.delivery import tmux_backend as nodes
 
 
 WEB_ROOT = Path(__file__).parents[1] / "web"
@@ -476,7 +477,7 @@ def test_state_reports_agents_liveness_and_ordered_messages(client, monkeypatch)
 
 
 def test_restart_only_advertises_force_for_activity_skips(client, tmp_path):
-    local = client.app.state.nodes.local.name
+    local = client.app.state.delivery.local.name
     with closing(db.connect(tmp_path / "db.sqlite")) as conn:
         db.register(conn, "busy", "0:0.0", "busy-session", flavor="pi", tmux_server="srv-1", node=local)
         db.set_cwd(conn, "busy", "/work")
@@ -531,7 +532,7 @@ def test_peek_returns_pane_capture(client, monkeypatch):
     def unexpected_snapshot():
         pytest.fail("peek should use the registered label without listing panes")
 
-    monkeypatch.setattr(client.app.state.nodes.local, "snapshot", unexpected_snapshot)
+    monkeypatch.setattr(client.app.state.delivery.local, "snapshot", unexpected_snapshot)
     r = client.get(f"/api/peek/{user}")
     assert asked == [True]  # the terminal view shows the pane's colors
     assert r.status_code == 200
@@ -1395,10 +1396,10 @@ def test_unregister_forgets_summaries(client):
 
 def _connect_node(client, name):
     """A second reachable machine whose tmux is the same fake as the local one."""
-    from agent_swarm import nodes
+    from agent_swarm.delivery import tmux_backend as nodes
 
     node = nodes.LocalNode(name)
-    client.app.state.nodes.add(node)
+    client.app.state.delivery.add(node)
     return node
 
 
@@ -1463,7 +1464,7 @@ def test_agents_on_a_disconnected_node_read_offline_and_are_never_pruned(client)
     user = client.post(
         "/register", json={"tmux_pane": "0:0.0", "node": "macbook", "requested_user": "puffin"}
     ).json()["user_id"]
-    client.app.state.nodes.remove("macbook")
+    client.app.state.delivery.remove("macbook")
     row = next(x for x in client.get("/recipients").json()["recipients"] if x["user_id"] == user)
     assert row["alive"] is False
     assert row["offline_reason"] == "recipient offline: node macbook is not connected"
@@ -1584,7 +1585,7 @@ class _AnsweringNode(nodes.LocalNode):
 
 def test_delivery_is_recorded_before_dispatch_and_an_unknown_result_is_kept(client, tmp_path):
     node = _AnsweringNode("macbook", nodes.Result("unknown", "socket closed"), tmp_path / "db.sqlite")
-    client.app.state.nodes.add(node)
+    client.app.state.delivery.add(node)
     client.post("/register", json={"tmux_pane": "0:0.0", "node": "macbook", "requested_user": "puffin"})
     client.post("/register", json={"tmux_pane": "0:1.0", "requested_user": "otter"})
     r = client.post("/send", json={"tmux_pane": "0:1.0", "recipient": "puffin", "content": "hi"})
@@ -1605,7 +1606,7 @@ def test_delivery_is_recorded_before_dispatch_and_an_unknown_result_is_kept(clie
 
 def test_failed_and_delivered_results_settle_the_message(client, tmp_path):
     node = _AnsweringNode("macbook", nodes.Result("failed", "pane vanished"), tmp_path / "db.sqlite")
-    client.app.state.nodes.add(node)
+    client.app.state.delivery.add(node)
     client.post("/register", json={"tmux_pane": "0:0.0", "node": "macbook", "requested_user": "puffin"})
     r = client.post("/owner/send", json={"recipient": "puffin", "content": "x"})
     assert r.json()["status"] == "failed" and r.json()["ok"] is False
@@ -1645,7 +1646,7 @@ def test_an_exception_during_delivery_leaves_the_message_unknown(client, tmp_pat
         def deliver(self, *a, **k):
             raise TimeoutError("socket read timed out")
 
-    client.app.state.nodes.add(Exploding("macbook"))
+    client.app.state.delivery.add(Exploding("macbook"))
     client.post("/register", json={"tmux_pane": "0:0.0", "node": "macbook", "requested_user": "puffin"})
     r = client.post("/owner/send", json={"recipient": "puffin", "content": "x"})
     assert r.status_code == 200
@@ -1674,7 +1675,7 @@ def test_a_node_that_cannot_observe_its_tmux_is_unavailable_not_empty(client):
         def snapshot(self):
             raise nodes.Unavailable("tmux restarting")
 
-    client.app.state.nodes.add(Blind("macbook"))
+    client.app.state.delivery.add(Blind("macbook"))
     client.post("/register", json={"tmux_pane": "0:0.0", "node": "macbook", "requested_user": "puffin"})
     row = next(x for x in client.get("/recipients").json()["recipients"] if x["user_id"] == "puffin")
     assert row["alive"] is False and row["observed"] is False
@@ -1695,7 +1696,7 @@ def test_a_failing_capture_does_not_end_the_monitor_tick(client):
         def capture(self, pane, tmux_server, colors=False):
             raise RuntimeError("tmux hiccup")
 
-    client.app.state.nodes.add(Jumpy("macbook"))
+    client.app.state.delivery.add(Jumpy("macbook"))
     client.post("/register", json={"tmux_pane": "0:0.0", "node": "macbook", "requested_user": "puffin"})
     client.post("/register", json={"tmux_pane": "0:1.0", "requested_user": "otter"})
     asyncio.run(client.app.state.monitor_tick())
@@ -1713,7 +1714,7 @@ def test_monitor_flags_an_agent_stopped_by_an_error(client):
             asked.append(colors)
             return (screen if colors else activity.strip_colors(screen)), None
 
-    client.app.state.nodes.add(Limited("macbook"))
+    client.app.state.delivery.add(Limited("macbook"))
     client.post("/register", json={"tmux_pane": "0:0.0", "node": "macbook",
                                    "requested_user": "skink", "flavor": "codex"})
     # The screen has been still for a while.
@@ -2161,7 +2162,7 @@ def test_retire_remote_agent_waits_for_a_confirmed_stop(client, tmp_path):
     conn = db.connect(tmp_path / "db.sqlite")
     db.register(conn, "alpaca", "%8", agent_id="remote-session", node="retire-test-node",
                 tmux_server="remote-server")
-    fleet = client.app.state.nodes
+    fleet = client.app.state.delivery
     assert client.post("/agents/alpaca/retire").status_code == 409
     assert db.get_recipient(conn, "alpaca") is not None
     calls = []

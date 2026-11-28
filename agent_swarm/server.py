@@ -30,7 +30,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import activity, attachments, boards, bundle, db, digest, handoff, model_switch, names, nodes, notifications, panes, protocol, restart, restore, team_view, tmux
+from . import activity, attachments, boards, bundle, db, digest, handoff, model_switch, names, notifications, panes, protocol, restart, restore, team_view, tmux
+from .delivery import tmux_backend as nodes
 
 log = logging.getLogger("agent_swarm.monitor")
 
@@ -1116,7 +1117,7 @@ def create_app(
     )
     # Same dict the monitor loop mutates; exposed so tests can seed it.
     app.state.activity_registry = registry
-    app.state.nodes = fleet
+    app.state.delivery = fleet
 
     @app.get("/health")
     def health():

@@ -10,7 +10,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_swarm import client as cli, config, node, nodes, restore, server, tmux
+from agent_swarm import client as cli, config, node, restore, server, tmux
+from agent_swarm.delivery import tmux_backend as nodes
 
 SNAPSHOT = {
     "node": "macbook",
