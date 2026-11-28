@@ -804,7 +804,14 @@ AGENT_SWARM_SUBMIT_VERIFY_DELAY=1.5
 AGENT_SWARM_AUTOREGISTER=1               # 0: startup hooks never register
 AGENT_SWARM_TABS=                        # extra dashboard tabs: name=url,name=url
 AGENT_SWARM_SPAWN_DIRS=                  # start folders for new agents: ~/agents,~/work (also on nodes)
+BUZZ_DELIVERY=tmux                       # what carries a message to an agent: tmux or rhizome
+BUZZ_RHIZOME_COMMAND=                    # rhizome backend: the MCP command (default: rhizome mcp --agent claude)
+BUZZ_RHIZOME_SESSION_ID=                 # rhizome backend: the hub's own session id (default: buzz-hub-<node>)
 ```
+
+Delivery is a backend behind one interface. tmux is the default; the Rhizome
+backend delivers messages only, with no peek, keys, spawn or restart. See
+[docs/design/delivery-backends.md](docs/design/delivery-backends.md).
 
 The CLI and node daemon read the hub URL, node name, and token from
 `~/.agent-swarm/node.toml` (`AGENT_SWARM_CONFIG` points elsewhere).

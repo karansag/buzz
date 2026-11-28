@@ -356,7 +356,7 @@ its hello reply.
 
 ## Hub changes
 
-`agent_swarm/nodes.py` defines the interface both sides use:
+`agent_swarm/delivery/tmux_backend.py` defines the interface both sides use:
 
 ```python
 class Node(Protocol):
