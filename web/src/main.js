@@ -19,7 +19,6 @@ import {
   PEEK_MS,
   JSONH, newClientId,
   IS_MAC, platformModifier,
-  FLAVOR_ICON,
   STATE,
   agentStatus,
   Bee,
@@ -960,7 +959,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
       <div class="team-bees-chips">${empty && dragging && html`<span class="team-bees-empty">drop here</span>`}${g.members.map(r => {
         const st = STATE[agentStatus(r)] || STATE.unknown;
         return html`<a key=${r.user_id} class=${`team-mate ${focusUser === r.user_id ? "here" : ""}`}
-          aria-current=${focusUser === r.user_id ? "page" : null} href=${`#/agent/${encodeURIComponent(r.user_id)}`}
+          aria-current=${focusUser === r.user_id ? "page" : null} href=${agentHash(r.user_id)}
           style=${`--machine:${machineColor(r.node)}`} title=${[r.user_id, machineName(r.node), st.word, agentPreview(r)].filter(Boolean).join(" · ")}
           draggable="true" onDragStart=${e => {
             e.dataTransfer.effectAllowed = "move";
@@ -1753,7 +1752,7 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
           disabled=${focusFont <= FOCUS_FONT.min} onClick=${() => stepFont(-FOCUS_FONT.step)}>A−</button>
         <button type="button" class="thread-focus" title="Larger text" aria-label="Larger text"
           disabled=${focusFont >= FOCUS_FONT.max} onClick=${() => stepFont(FOCUS_FONT.step)}>A+</button>`}
-      ${peer && !focused && html`<a class="thread-focus thread-goto" href=${`#/agent/${encodeURIComponent(peer)}`}
+      ${peer && !focused && html`<a class="thread-focus thread-goto" href=${agentHash(peer)}
         title=${`Go to ${peer}'s page to message them`}>open ${peer} →</a>`}
       <button type="button" class="thread-focus thread-focus-toggle" aria-pressed=${focused} onClick=${toggleFocus}
         aria-label=${focused ? "Close focused conversation" : "Focus conversation"}
@@ -1878,7 +1877,7 @@ function useTeammateKeys(members) {
         composer: !!document.activeElement?.closest?.(".thread .composer"),
         focus: !!document.querySelector(".thread.focused"),
       };
-      location.hash = `#/agent/${encodeURIComponent(next)}`;
+      location.hash = agentHash(next);
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
@@ -1892,7 +1891,7 @@ function TeamStrip({ crew, user, unreadFor }) {
     ${crew.members.map(m => {
       const st = STATE[agentStatus(m)] || STATE.unknown;
       const here = m.user_id === user;
-      return html`<a key=${m.user_id} href=${`#/agent/${encodeURIComponent(m.user_id)}`}
+      return html`<a key=${m.user_id} href=${agentHash(m.user_id)}
         class=${`team-mate ${here ? "here" : ""}`} aria-current=${here ? "page" : null}
         title=${`${m.user_id} · ${st.word}`}>
         <${Bee} node=${m.node} flavor=${m.flavor} error=${m.activity?.error} size="small" working=${st.cls === "working"} />
@@ -2193,7 +2192,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
       <div class="who">
         <div class="nm">${user}<${Crown} teams=${state.teams} user=${user} word=${true} teamName=${true} /><span class=${`status ${st.cls}`} title=${st.word}></span></div>
         <div class="meta">
-          <span class="chip">${FLAVOR_ICON[flavor] || FLAVOR_ICON.generic} ${flavor}</span>
+          <span class="chip">${harnessStyle(flavor).mark} ${flavor}</span>
           <${ModelLabel} r=${r} refresh=${refresh} /> · <${MachineBadge} node=${r.node} /> · pane <b>${r.pane_label}</b>${r.pane_alive ? "" : " (stopped)"}
           · joined ${rel(r.registered_at, state.now)}
           ${ctx && html`· <span class=${`ctx-use ${ctx.level}`} title=${ctx.title}>${ctx.text}</span>`}
@@ -2529,7 +2528,7 @@ function App() {
       <a href="#/" class=${onOverview ? "on" : ""} title=${`Overview (${IS_MAC ? "⌥H" : "Alt+H"})`} aria-keyshortcuts="Alt+h">overview</a>
       ${agentTab && html`<a class=${`agent-view-tab ${focusUser ? "on" : ""}`} href=${agentTabHash}
         aria-current=${focusUser ? "page" : null} title=${`Return to ${agentTab.user_id}`}>
-        <span aria-hidden="true">${FLAVOR_ICON[agentTab.flavor] || FLAVOR_ICON.generic}</span>
+        <span aria-hidden="true">${harnessStyle(agentTab.flavor).mark}</span>
         <span class="agent-view-label">${agentTab.user_id}</span>
       </a>`}
       <a href=${CHATS_ROUTE} class=${onChats ? "on" : ""}>chats</a>

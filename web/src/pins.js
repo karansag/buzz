@@ -5,6 +5,7 @@
 import { html } from "htm/preact";
 import { useEffect, useRef } from "preact/hooks";
 import { JSONH, disp, pairKey, rel } from "./shared.js";
+import { agentHash } from "./agent-route.js";
 import { ChatMessage } from "./chat-message.js";
 import { showNotice } from "./dialogs.js";
 
@@ -27,8 +28,8 @@ const flat = (text, width) => {
 
 // The chat a pin belongs to: the agent's page, for the owner's own chats;
 // otherwise the recipient's page, which shows its chats with other agents.
-export const pinPage = (m) => (m.sender === "owner" ? m.recipient : m.recipient === "owner" ? m.sender : m.recipient);
-export const pinHref = (m) => `#/agent/${encodeURIComponent(pinPage(m))}?m=${m.id}`;
+const pinPage = (m) => (m.sender === "owner" ? m.recipient : m.recipient === "owner" ? m.sender : m.recipient);
+export const pinHref = (m) => agentHash(pinPage(m), m.id);
 
 export const pinsOf = (pins, a, b) => (pins || []).filter(m => pairKey(m.sender, m.recipient) === pairKey(a, b));
 
