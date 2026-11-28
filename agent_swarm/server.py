@@ -542,11 +542,15 @@ def _supervisor_prompt(user_id: str, objective: str, peers: list[dict]) -> str:
     )
 
 
-def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = None) -> str:
+def _protocol_brief(
+    user_id: str, peers: list[dict], owner_note: str | None = None, on_team: bool = False
+) -> str:
     """A one-shot primer the agent sees in its register response.
 
     Tells the agent what inbound messages look like so a line appearing in
-    its prompt doesn't get mistaken for user input.
+    its prompt doesn't get mistaken for user input. The paragraph about teams
+    and their boards is only for agents that are on a team; the supervisor
+    sentence applies to everyone.
     """
 
     def _peer_line(p: dict) -> str:
@@ -571,6 +575,16 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         if offline else ""
     )
     owner_note_line = f"Owner note about your work: {owner_note}\n" if owner_note else ""
+    team_paragraph = (
+        "The owner may group agents into teams, each with a queen who "
+        "coordinates it. A task assigned to a team goes to its queen, who "
+        "parcels it out. `buzz tasks --team <name or id>` lists a team's tasks. "
+        "`buzz team [name]` shows each member's state and open tasks, and which "
+        "tasks are ready, blocked or stale. Each team has a board: `buzz board` "
+        "reads unread posts and `buzz board post` writes one without "
+        "interrupting anyone. "
+        if on_team else ""
+    )
     return (
         f"You are registered as '{user_id}'.\n"
         f"{owner_note_line}"
@@ -614,15 +628,10 @@ def _protocol_brief(user_id: str, peers: list[dict], owner_note: str | None = No
         "\n"
         f"{STATUS_GUIDANCE}\n"
         "\n"
-        "The owner may group agents into teams, each with a queen who "
-        "coordinates it. A task assigned to a team goes to its queen, who "
-        "parcels it out. `buzz tasks --team <name or id>` lists a team's tasks. "
-        "`buzz team [name]` shows each member's state and open tasks, and which "
-        "tasks are ready, blocked or stale. Each team has a board: `buzz board` "
-        "reads unread posts and `buzz board post` writes one without "
-        "interrupting anyone. The owner may also appoint one agent as swarm "
-        "supervisor, the agent they ask about the whole swarm; `buzz "
-        "supervisor` says who, if anyone, holds it."
+        f"{team_paragraph}"
+        "The owner may also appoint one agent as swarm supervisor, the agent "
+        "they ask about the whole swarm; `buzz supervisor` says who, if "
+        "anyone, holds it."
     )
 
 
@@ -1277,7 +1286,10 @@ def create_app(
             "requested_user": requested,
             "renamed_from": renamed_from,
             "owner_note": registered.get("owner_note") if registered else None,
-            "protocol_brief": _protocol_brief(user_id, peers, registered.get("owner_note") if registered else None),
+            "protocol_brief": _protocol_brief(
+                user_id, peers, registered.get("owner_note") if registered else None,
+                on_team=bool(registered and registered.get("team_id") is not None),
+            ),
         }
 
     def _node_or_422(name: str | None) -> nodes.Node:

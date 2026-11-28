@@ -755,6 +755,36 @@ def test_protocol_brief_mentions_owner_and_tasks(client):
     assert "task-create" in brief
 
 
+def test_brief_leaves_out_teams_and_the_board_for_an_agent_on_no_team(client):
+    brief = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["protocol_brief"]
+    assert "group agents into teams" not in brief
+    assert "buzz board" not in brief
+    # The supervisor is not a team thing, so that sentence stays.
+    assert "`buzz supervisor`" in brief
+    assert "`buzz team [name]`" not in brief
+
+
+def test_brief_tells_a_team_member_about_teams_and_the_board(client):
+    member = _register(client, "0:0.0")
+    team = client.post("/teams", json={"name": "crew"}).json()["team"]
+    client.post(f"/agents/{member}/team", json={"team_id": team["id"]})
+    brief = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["protocol_brief"]
+    assert "group agents into teams" in brief
+    assert "`buzz team [name]`" in brief
+    assert "`buzz board`" in brief and "`buzz board post`" in brief
+    assert "`buzz supervisor`" in brief
+
+
+def test_leaving_a_team_takes_the_board_out_of_the_next_brief(client):
+    member = _register(client, "0:0.0")
+    team = client.post("/teams", json={"name": "crew"}).json()["team"]
+    client.post(f"/agents/{member}/team", json={"team_id": team["id"]})
+    assert "buzz board" in client.post("/register", json={"tmux_pane": "0:0.0"}).json()["protocol_brief"]
+    client.post(f"/agents/{member}/team", json={"team_id": None})
+    brief = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["protocol_brief"]
+    assert "buzz board" not in brief
+
+
 def test_create_task_notifies_assignee(client):
     user = client.post("/register", json={"tmux_pane": "0:1.0"}).json()["user_id"]
     r = client.post("/tasks", json={"title": "fix the build", "assignee": user})
