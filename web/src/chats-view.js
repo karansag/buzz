@@ -97,7 +97,7 @@ function AgentTalk({ state }) {
         ${teams.map(t => html`<option key=${t.id} value=${String(t.id)}>${t.name}</option>`)}
       </select>`}
     </div>
-    <p class="agent-talk-note">Grouped by pair: a quiet gap of 15 min starts a new conversation. The same text sent to several agents shows once.
+    <p class="agent-talk-note">Grouped by pair. A 15 min gap starts a new conversation. Text sent to several agents shows once.
       ${selfNotes > 0 && ` ${selfNotes} notes agents left themselves are hidden.`}
       ${oldest && ` Showing talk since ${dayOf(oldest)} ${clock(oldest)}.`}</p>
     ${threads.length === 0

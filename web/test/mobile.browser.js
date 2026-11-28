@@ -3292,7 +3292,7 @@ test('hive stop corner appears only during bee drags and preserves registration'
     await drag();
     const prompt=await answer(page,'Cancel');
     assert.match(prompt,/Stop stoat on karans-linux/);
-    assert.match(prompt, /"resume agent" on its page brings the session back later/);
+    assert.match(prompt, /"resume agent" on its page brings it back/);
     assert.deepEqual(mutations,[]);
     await drag();
     await answer(page);

@@ -118,7 +118,7 @@ export function useAgentHistory(user, returnState = null) {
         const page = await read(`before=${before}&limit=${PAGE}`);
         merge(page, page.has_more);
       }
-      catch { fail("Could not load older messages. Please try again."); }
+      catch { fail("Could not load older messages. Try again."); }
       finally {
         busy = false;
         if (active) setHistory(prev => ({ ...prev, busy: false }));
@@ -161,7 +161,7 @@ export function useAgentHistory(user, returnState = null) {
           from = Math.max(...ids);
           if (!body.has_more) break;
         }
-      } catch { fail("Could not load the missing messages. Please try again."); }
+      } catch { fail("Could not load the missing messages. Try again."); }
       finally {
         busy = false;
         if (active) setHistory(prev => ({ ...prev, busy: false }));

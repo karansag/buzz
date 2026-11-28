@@ -57,7 +57,7 @@ export function ModelLabel({ r, refresh }) {
     return html`<button type="button" class="model-label" onClick=${start}
       title=${switchable
         ? "Switch this agent's model for its current session (drives /model in its pane)."
-        : "Edit the model label. Display only: switch the real model in the agent's pane, then update it here."}>
+        : "Edit the model label. Display only: switch the real model in the agent's pane first."}>
       ${r.model ? html`<b>${r.model}</b>` : html`<span class="unset">set model</span>`} <span class="pen">✎</span>
     </button>`;
   }

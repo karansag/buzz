@@ -14,7 +14,7 @@ export async function setPinned(id, pinned, refresh) {
     const r = await fetch(`/api/messages/${id}/pin`, jsonInit("POST", { pinned }));
     if (!r.ok) throw new Error(String(r.status));
   } catch {
-    showNotice(pinned ? "Could not pin the message. Please try again." : "Could not unpin the message. Please try again.");
+    showNotice(pinned ? "Could not pin the message. Try again." : "Could not unpin the message. Try again.");
     return;
   }
   refresh?.();

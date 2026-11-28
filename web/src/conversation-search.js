@@ -41,7 +41,7 @@ export function useConversationSearch(user, returnState = null) {
     if (!s.pages.has(offset)) {
       const response = await fetch(`/api/agents/${encodeURIComponent(user)}/messages/search?${new URLSearchParams({q: s.query, limit: PAGE_SIZE, offset})}`,
         {signal: s.abort.signal});
-      if (!response.ok) throw Error('Could not search this conversation. Please try again.');
+      if (!response.ok) throw Error('Could not search this conversation. Try again.');
       const page = await response.json();
       if (!Array.isArray(page.matches) || !Number.isInteger(page.total)) throw Error('Invalid search response.');
       s.total = page.total;

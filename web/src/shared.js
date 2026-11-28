@@ -46,7 +46,7 @@ export const IS_MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || "
 export const platformModifier = (e) => (IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
 
 export function stopAgentPrompt(agent) {
-  return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`;
+  return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends its session. Messages and tasks are kept. "resume agent" on its page brings it back.`;
 }
 
 // Harness glyphs identify the runtime; machine colors live in machines.js.

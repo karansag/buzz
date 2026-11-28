@@ -648,7 +648,7 @@ async function setAgentTeam(user, teamId) {
 var IS_MAC = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || "");
 var platformModifier = (e) => IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 function stopAgentPrompt(agent) {
-	return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends the running session. Messages and tasks are kept, and "resume agent" on its page brings the session back later.`;
+	return `Stop ${agent.user_id} on ${machineName(agent.node)}? This kills its tmux pane and ends its session. Messages and tasks are kept. "resume agent" on its page brings it back.`;
 }
 var HARNESSES = Object.freeze({
 	claude: {
@@ -1261,7 +1261,7 @@ function useAgentHistory(user, returnState = null) {
 				const page = await read(`before=${before}&limit=${PAGE}`);
 				merge(page, page.has_more);
 			} catch {
-				fail("Could not load older messages. Please try again.");
+				fail("Could not load older messages. Try again.");
 			} finally {
 				busy = false;
 				if (active) setHistory((prev) => ({
@@ -1322,7 +1322,7 @@ function useAgentHistory(user, returnState = null) {
 					if (!body.has_more) break;
 				}
 			} catch {
-				fail("Could not load the missing messages. Please try again.");
+				fail("Could not load the missing messages. Try again.");
 			} finally {
 				busy = false;
 				if (active) setHistory((prev) => ({
@@ -1413,7 +1413,7 @@ function useConversationSearch(user, returnState = null) {
 				limit: PAGE_SIZE,
 				offset
 			})}`, { signal: s.abort.signal });
-			if (!response.ok) throw Error("Could not search this conversation. Please try again.");
+			if (!response.ok) throw Error("Could not search this conversation. Try again.");
 			const page = await response.json();
 			if (!Array.isArray(page.matches) || !Number.isInteger(page.total)) throw Error("Invalid search response.");
 			s.total = page.total;
@@ -10305,7 +10305,7 @@ function showNotice(message) {
 //#endregion
 //#region web/src/task-trash.js
 async function trashTask(task) {
-	if (!await confirmDialog(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files will remain.`)) return false;
+	if (!await confirmDialog(`Permanently trash task #${task.id}: ${task.title}? This cannot be undone. Agent conversations and working files are kept.`)) return false;
 	const response = await fetch(`/tasks/${task.id}`, { method: "DELETE" });
 	const body = await response.json();
 	if (!response.ok) throw new Error(body.detail?.error || "Could not trash task.");
@@ -10551,7 +10551,7 @@ function ModelLabel({ r, refresh }) {
 		refresh();
 	};
 	if (!editing) return m$1`<button type="button" class="model-label" onClick=${start}
-      title=${switchable ? "Switch this agent's model for its current session (drives /model in its pane)." : "Edit the model label. Display only: switch the real model in the agent's pane, then update it here."}>
+      title=${switchable ? "Switch this agent's model for its current session (drives /model in its pane)." : "Edit the model label. Display only: switch the real model in the agent's pane first."}>
       ${r.model ? m$1`<b>${r.model}</b>` : m$1`<span class="unset">set model</span>`} <span class="pen">✎</span>
     </button>`;
 	const options = [.../* @__PURE__ */ new Set([...r.model ? [r.model] : [], ...known])];
@@ -10758,7 +10758,7 @@ function SpawnControl({ refresh, nodes }) {
 	};
 	const flavors = offered.length ? offered.map((h) => h.flavor) : [];
 	return m$1`<form class="spawn" onSubmit=${spawn}>
-    <div class="spawn-heading">Spawn agent · choose destination</div>
+    <div class="spawn-heading">Spawn agent</div>
     ${(enrolled.length > 1 || node) && m$1`<select title="machine" value=${node} onChange=${(e) => pickNode(e.target.value)}>
       ${choices.map((n) => m$1`<option key=${n.name} value=${n.local ? "" : n.name} disabled=${!n.local && !n.connected}>${n.local ? `${n.name} (hub)` : n.gone ? `${n.name} (no longer enrolled)` : n.connected ? n.name : `${n.name} (not connected)`}</option>`)}
     </select>`}
@@ -10863,7 +10863,7 @@ async function setPinned(id, pinned, refresh) {
 		const r = await fetch(`/api/messages/${id}/pin`, jsonInit("POST", { pinned }));
 		if (!r.ok) throw new Error(String(r.status));
 	} catch {
-		showNotice(pinned ? "Could not pin the message. Please try again." : "Could not unpin the message. Please try again.");
+		showNotice(pinned ? "Could not pin the message. Try again." : "Could not unpin the message. Try again.");
 		return;
 	}
 	refresh?.();
@@ -11023,7 +11023,7 @@ function AgentTalk({ state }) {
         ${teams.map((t) => m$1`<option key=${t.id} value=${String(t.id)}>${t.name}</option>`)}
       </select>`}
     </div>
-    <p class="agent-talk-note">Grouped by pair: a quiet gap of 15 min starts a new conversation. The same text sent to several agents shows once.
+    <p class="agent-talk-note">Grouped by pair. A 15 min gap starts a new conversation. Text sent to several agents shows once.
       ${selfNotes > 0 && ` ${selfNotes} notes agents left themselves are hidden.`}
       ${oldest && ` Showing talk since ${dayOf(oldest)} ${clock(oldest)}.`}</p>
     ${threads.length === 0 ? m$1`<div class="empty">${full === null ? "Loading…" : query || team ? "No agent talk matches." : "No agent talk yet."}</div>` : m$1`<div class="agent-talk">${threads.map((t) => {
@@ -12421,7 +12421,7 @@ function HiveView({ state, refresh, machine, harness = null, setHarness = () => 
 		harness
 	]);
 	return m$1`<div class="hive-panel">${compact ? compactBody || m$1`<${CompactBees} state=${state} machine=${machine} harness=${harness} />` : m$1`<div class="hive-scroll"><canvas ref=${canvasRef} tabindex="0"
-    aria-label="Live activity. Bee body color and the machine name below each bee identify its machine, matching the machine selector. Stripe color and the symbol beside the agent name identify its harness. Drag a comb cell or a task card onto a bee or a team outline to assign the task, or onto the trash corner shown during a drag to permanently delete it after confirmation; drop a bee on that corner to stop its agent after confirmation, keeping its registration so resume agent can bring it back; drag a bee into or out of a team outline to change its team; drag a team outline by its empty space to move the whole team somewhere else. Bees outside a team are kept out of team outlines. The task assignee select, sidebar team boxes and agent detail stop button are the keyboard and touch alternatives."></canvas><div class="hive-trash-zone" aria-hidden="true"><strong>⌫ Trash task</strong><span>Drop task here</span></div></div>`}
+    aria-label="Live activity map. Body color and the name under each bee show its machine. Stripe color and the symbol by its name show its harness. Drag a comb cell or task card onto a bee or team outline to assign the task, or onto the trash corner to delete it. Drag a bee onto that corner to stop its agent, or into or out of a team outline to change its team. Drag a team outline by its empty space to move the team. Keyboard and touch: use the task assignee select, the sidebar team boxes and the stop button on the agent page."></canvas><div class="hive-trash-zone" aria-hidden="true"><strong>⌫ Trash task</strong><span>Drop task here</span></div></div>`}
     <div class="harness-legend" aria-label="Bee harness legend">
       <span class="legend-title">Body = machine · stripes + symbol = harness</span>
       <span class="working-halo-key" style=${`--working:${WORKING_HALO.color}`}><span aria-hidden="true"></span>Green halo = working</span>
@@ -13343,7 +13343,7 @@ function CopyPaneCommand({ command, paneLabel }) {
 			prompt("Copy this, then paste it at tmux's command prompt (prefix, then :)", command);
 		}
 	};
-	return m$1`<button type="button" class="mini" title=${`Copy "${command}" — paste it at tmux's command prompt (prefix, then :) to jump to ${paneLabel}`} onClick=${copy}>${copied ? "copied" : "copy pane"}</button>`;
+	return m$1`<button type="button" class="mini" title=${`Copy "${command}". Paste it at tmux's command prompt (prefix, then :) to go to ${paneLabel}.`} onClick=${copy}>${copied ? "copied" : "copy pane"}</button>`;
 }
 var AGENT_MORE_KEY = "agent-swarm:agent-controls-open";
 function AgentControls({ r, refresh }) {
@@ -13549,7 +13549,7 @@ function Resend({ m, refresh }) {
 	const clientId = A(null);
 	const resend = async () => {
 		if (busy || sent) return;
-		if (m.status === "unknown" && !await confirmDialog("The outcome of this message is unknown: the agent may already have it. Send it again as a new message?")) return;
+		if (m.status === "unknown" && !await confirmDialog("The agent may already have it. Send it again as a new message?")) return;
 		if (!clientId.current) clientId.current = newClientId();
 		setBusy(true);
 		setNote("");
@@ -13573,7 +13573,7 @@ function Resend({ m, refresh }) {
 	};
 	return m$1`<button type="button" class="resend" disabled=${busy || sent} onClick=${resend}
     aria-label=${m.status === "failed" ? `Retry message ${m.id}` : null}
-    title="Send this message again as a new message">${busy ? "sending…" : sent ? "sent" : m.status === "failed" ? "retry" : "send again"}</button>${note && m$1` <span class="ctx" role="status">${note}</span>`}`;
+    title="Send again as a new message">${busy ? "sending…" : sent ? "sent" : m.status === "failed" ? "retry" : "send again"}</button>${note && m$1` <span class="ctx" role="status">${note}</span>`}`;
 }
 function MachineBar({ state, machine, selectMachine }) {
 	const machines = machineList(state.nodes, state.recipients);
@@ -13632,16 +13632,15 @@ function TaskCard({ t, agentIds, teams, blockers, refresh }) {
 	};
 	return m$1`<div class=${`tcard ${dragging ? "dragging" : ""} ${blocked ? "blocked" : ""}`} draggable=${draggable}
       onDragStart=${dragStart} onDragEnd=${() => setDragging(false)}
-      title=${draggable ? "Drag this task onto a bee or team in the activity view to assign it" : "Reopen this task before assigning it by drag"}>
+      title=${draggable ? "Drag onto a bee or team to assign" : "Reopen to assign by drag"}>
     <div class="t">${t.title}</div>
     <div class="meta">#${t.id} · created ${when}${deps.length > 0 ? ` · after ${deps.map((d) => `#${d}`).join(" ")}` : ""}${t.description ? ` · ${t.description}` : ""}${t.worktree ? ` · worktree ${t.worktree}` : ""}</div>
     ${blocked && m$1`<div class="meta blocked-tag" title="dependencies not yet done">blocked by ${blockers.map((d) => `#${d}`).join(" ")}</div>`}
     <${AttachmentList} files=${t.attachments} />
     ${t.assignee && m$1`<div class="meta">${t.status === "open" ? "assigned to" : t.status === "done" ? "done by" : "picked up by"} <a class="agent-link" href=${focusHash(t.assignee)}
-        title=${`Open ${t.assignee} and message it`}>${t.assignee}</a><${Crown} teams=${teams} user=${t.assignee} /></div>`}
+        title=${`Open ${t.assignee}`}>${t.assignee}</a><${Crown} teams=${teams} user=${t.assignee} /></div>`}
     ${t.note && m$1`<div class="tnote">
-      <button type="button" class="tnote-toggle" onClick=${() => setShowNote(!showNote)}
-        title="How to verify this work">${showNote ? "▾" : "▸"} how to verify</button>
+      <button type="button" class="tnote-toggle" onClick=${() => setShowNote(!showNote)}>${showNote ? "▾" : "▸"} how to verify</button>
       ${showNote && m$1`<div class="tnote-body">${t.note}</div>`}
     </div>`}
     ${err && m$1`<div class="meta tnote-err">${err}</div>`}
@@ -13741,7 +13740,7 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
 	const form = m$1`<form class=${`task-composer ${attachments.dragging ? "dragging" : ""}`} onSubmit=${create} ...${busy ? {} : attachments.dropProps}>
     ${!folded && m$1`<div class="task-compose-heading">${user ? `Create a task for ${forWhom}` : "New task"}</div>`}
     <input class="task-title" aria-label="Task title" placeholder="What needs doing?" value=${title} disabled=${busy} onInput=${(e) => setTitle(e.target.value)} onPaste=${attachments.onPaste} required />
-    <textarea aria-label="Task details" placeholder="Details, context, or steps to reproduce… (optional) · Enter to create · Shift + Enter for a new line" rows="2" value=${description} disabled=${busy} onInput=${(e) => setDescription(e.target.value)} onPaste=${attachments.onPaste}
+    <textarea aria-label="Task details" placeholder="Details (optional) · Enter to create · Shift + Enter for a new line" rows="2" value=${description} disabled=${busy} onInput=${(e) => setDescription(e.target.value)} onPaste=${attachments.onPaste}
       onKeyDown=${(e) => {
 		if (e.key === "Enter" && !e.shiftKey && !(e.metaKey || e.ctrlKey) && !e.isComposing) create(e);
 	}} />
@@ -13751,8 +13750,8 @@ function TaskComposer({ state, refresh, user = "", folded = false }) {
       ${!targetExists && m$1`<option value=${assignee} disabled>${assignee} (unavailable)</option>`}
       ${teams.length > 0 && m$1`<optgroup label="Teams">${teams.map((t) => m$1`<option value=${`t:${t.id}`}>${teamOption(t)}</option>`)}</optgroup>`}
       <optgroup label="Agents">${agents.map((r) => m$1`<option value=${r.user_id}>${r.user_id}${queenSuffix(teams, r.user_id)} · ${machineName(r.node)}${r.pane_alive ? "" : " (offline)"}</option>`)}</optgroup>
-    </select></label><button class="act" disabled=${busy || attachments.uploading > 0 || !title.trim() || !targetExists}>${busy ? "Creating…" : "create task"}</button></div>
-    ${!targetExists && m$1`<p class="task-compose-status">The selected assignee is unavailable. Choose another destination.</p>`}
+    </select></label><button class="act" disabled=${busy || attachments.uploading > 0 || !title.trim() || !targetExists}>${busy ? "creating…" : "create task"}</button></div>
+    ${!targetExists && m$1`<p class="task-compose-status">Assignee unavailable. Pick another.</p>`}
     ${status && m$1`<p class="task-compose-status" role="status">${status}</p>`}
   </form>`;
 	if (!folded) return form;
@@ -14003,7 +14002,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 		};
 		return m$1`<details key=${g.key} ref=${teamRowRef} data-team-id=${g.teamId} class=${`team-bees-group ${g.key === "none" ? "loose" : ""} ${empty && !dragging ? "empty" : ""} ${over === g.key ? "over" : ""} ${reorderClass} ${teamDrag?.id === g.teamId ? "dragging" : ""}`}
         open=${!collapsed.has(g.key) || managing === g.key} onToggle=${(e) => toggle(g.key, e.currentTarget.open)} ...${drop}>
-      <summary>${team && m$1`<button type="button" class="team-bees-drag" aria-label=${`Reorder team ${g.name}`} title="Drag to reorder team; arrow keys move it" disabled=${reorderBusy}
+      <summary>${team && m$1`<button type="button" class="team-bees-drag" aria-label=${`Reorder team ${g.name}`} title="Drag or use arrow keys to reorder" disabled=${reorderBusy}
           onClick=${(e) => {
 			e.preventDefault();
 			e.stopPropagation();
@@ -14019,7 +14018,7 @@ function TeamBees({ state, refresh, machine, harness = null, unreadFor, focusUse
 				resetTeamDrag();
 			}
 		}}><span aria-hidden="true">⠿</span></button>`}<span class="team-bees-title"><span class="team-bees-name">${g.name}</span>
-        ${team && (team.queen ? m$1`<span class="team-bees-queen" title=${`queen of ${team.name}: ${team.queen}`}>♛ ${team.queen}</span>` : m$1`<span class="team-bees-queen none" title="this team has no queen">no queen</span>`)}</span>
+        ${team && (team.queen ? m$1`<span class="team-bees-queen" title=${`queen of ${team.name}: ${team.queen}`}>♛ ${team.queen}</span>` : m$1`<span class="team-bees-queen none">no queen</span>`)}</span>
         <span class="team-bees-actions"><span class="team-bees-counts" title=${`${g.members.length} agents${busy ? `, ${busy} working` : ""}${attention ? `, ${attention} need you` : ""}`}>${g.members.length}${attention ? m$1` · <span class="attn">${attention}!</span>` : ""}</span>
         ${team && m$1`<button type="button" class="team-bees-manage" aria-pressed=${managing === g.key}
           aria-label=${`Manage team ${g.name}`} title=${team.queen ? `manage team · queen: ${team.queen}` : "manage team"}
@@ -14413,7 +14412,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 		else if (outcome.status === "uncertain") {
 			keepDraft();
 			report({
-				status: `not confirmed: ${outcome.reason}. Draft kept; sending it unchanged is safe, it will not arrive twice`,
+				status: `not confirmed: ${outcome.reason}. Draft kept. Sending it again unchanged will not duplicate it`,
 				draft
 			});
 		} else {
@@ -14457,7 +14456,7 @@ function MessageComposer({ recipient, refresh, autoFocus = false, focused = fals
 			cancelReply();
 		}
 	}}
-        placeholder=${compact ? "Message…" : `Message ${recipient}… (paste or drop files)`} aria-label=${`Message ${recipient} as owner`} />
+        placeholder=${compact ? "Message…" : `Message ${recipient}…`} aria-label=${`Message ${recipient} as owner`} />
       ${compact && submit}
     </div>
     <${AttachmentPicker} files=${images} controls=${attachments} disabled=${sending} />
@@ -14821,10 +14820,10 @@ function Thread({ a, b, msgs, freshIds, now, refresh, page = null, agents = null
         <button type="button" class="thread-focus" title="Larger text" aria-label="Larger text"
           disabled=${focusFont >= FOCUS_FONT.max} onClick=${() => stepFont(FOCUS_FONT.step)}>A+</button>`}
       ${peer && !focused && m$1`<a class="thread-focus thread-goto" href=${agentHash(peer)}
-        title=${`Go to ${peer}'s page to message them`}>open ${peer} →</a>`}
+        title=${`Open ${peer}'s page`}>open ${peer} →</a>`}
       <button type="button" class="thread-focus thread-focus-toggle" aria-pressed=${focused} onClick=${toggleFocus}
         aria-label=${focused ? "Close focused conversation" : "Focus conversation"}
-        title=${focused ? `Back to the page (Esc or ${focusShortcut})` : `Expand this conversation to fill the window${recipient ? ` (${focusShortcut})` : ""}`}>
+        title=${focused ? `Back to the page (Esc or ${focusShortcut})` : `Fill the window${recipient ? ` (${focusShortcut})` : ""}`}>
         <span aria-hidden="true">${focused ? "✕" : "⤢"}</span><span class="focus-label">${focused ? " close" : " focus"}</span>${recipient && m$1` <span class="focus-key-hint">${focusShortcut}</span>`}</button>
     </div>
     <div id=${bodyId} class="thread-body" hidden=${!expanded}>
@@ -15080,7 +15079,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
     <h2>conversations ${hasOwnerThread && m$1`<span class="count">· 1</span>`}</h2>
     ${history.error && m$1`<p role="status">${history.error}</p>`}
     ${!history.loaded && !history.error && m$1`<p role="status">Loading conversation history…</p>`}
-    ${messageId && look.id === messageId && look.status === "loading" && m$1`<p role="status">Loading the message you followed…</p>`}
+    ${messageId && look.id === messageId && look.status === "loading" && m$1`<p role="status">Loading the linked message…</p>`}
     ${messageId && look.id === messageId && look.status === "missing" && m$1`<p class="jump-missing" role="status">
       Message #${messageId} is not part of this conversation.</p>`}
     ${messageId && look.id === messageId && look.status === "failed" && m$1`<p role="status">
@@ -15089,7 +15088,7 @@ function FocusView({ user, messageId = null, state, refresh, freshIds, unreadFor
     ${looseGaps.map((gap) => m$1`<p class="history-gap" role="status">
       ${`${gapLabel(gap)}.`}
       <button type="button" class="mini" disabled=${history.busy} onClick=${() => history.loadGap(gap)}>
-        ${history.busy ? "Loading…" : "load the missing messages"}</button></p>`)}
+        ${history.busy ? "loading…" : "load the missing messages"}</button></p>`)}
     ${!hasOwnerThread && history.more && m$1`<button type="button" class="mini" disabled=${history.busy} onClick=${history.loadOlder}>
       ${history.busy ? "Loading older messages…" : "Load older messages"}</button>`}
     ${hasOwnerThread ? renderThread(groups.get(ownerThread)) : m$1`<div class="thread">
