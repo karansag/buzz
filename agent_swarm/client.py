@@ -1,33 +1,7 @@
-"""Tiny CLI client. Usage:
+"""The `buzz` CLI. `buzz --help` lists the commands; the README has a full reference.
 
-    buzz register [--pane Y] [--name HANDLE] [--flavor NAME] [--instructions TXT]
-                         [--message-prefix TXT]
-    buzz autoregister [--hook] [--verbose]   # from a harness startup hook
-    buzz allow-model-switch   # from Claude Code's PreModelSwitch hook
-    buzz send --to Y | --to-queen TEAM [--context CTX] --message MSG
-    buzz messages [--user X] [--limit N] [--id N]
-    buzz recipients
-    buzz whoami       # prints detected tmux pane + registered handle
-    buzz status "working on X"   # what you are doing, shown on the dashboard
-    buzz tasks [--status open|picked_up|done]
-    buzz task-create TITLE [--description TEXT] [--assignee HANDLE] [--depends-on 3,5]
-    buzz task-update ID --status open|picked_up|done [--assignee X] [--worktree PATH]
-                            [--depends-on 3,5] [--note TEXT]   # --note required to close
-    buzz board [read|show ID|post TEXT|reply ID TEXT] [--team T] [--json]   # the team's board
-    buzz digest [--minutes N | --after-message ID] [--team [TEAM]]   # what changed, as text
-    buzz team [TEAM] [--since 2h] [--stale-hours N] [--json]   # a team for its queen
-    buzz supervisor [HANDLE [--objective TEXT] | --clear]   # the swarm supervisor role
-    buzz spawn [--flavor claude|codex|pi|agy|hermes] [--model M] [--node N]
-    buzz stop HANDLE   # kill that agent's tmux pane
-    buzz model HANDLE... --to MODEL | --team --to MODEL   # switch agents' models (owner or their queen)
-    buzz switch HANDLE... --to claude|codex|pi|agy [--model M] [--team] [--apply]   # move them to another harness
-    buzz snapshot      # save this machine's tmux layout and the agent in each pane
-    buzz restore [--from FILE] [--apply] [--stagger SECONDS]   # after a reboot
-    buzz restart HANDLE... | --all [--flavor F] [--force] [--apply]   # e.g. after a harness upgrade
-
-Defaults:
-    --pane            current shell's tmux pane (via `TMUX_PANE`-targeted `tmux display-message`)
-    server URL        $AGENT_SWARM_URL (else http://127.0.0.1:8765)
+Defaults: the pane is this shell's own tmux pane ($TMUX_PANE); the hub is
+$AGENT_SWARM_URL, else ~/.agent-swarm/node.toml, else http://127.0.0.1:8765.
 """
 
 from __future__ import annotations
@@ -1389,8 +1363,8 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="buzz")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    reg = sub.add_parser("register")
-    reg.add_argument("--pane")
+    reg = sub.add_parser("register", help="register this agent's pane with the hub; prints the protocol brief")
+    reg.add_argument("--pane", help="the agent's tmux pane (default: the pane this runs in)")
     reg.add_argument(
         "--name",
         help="preferred handle; granted when free, 409 when another agent holds it "
@@ -1465,7 +1439,7 @@ def main(argv: list[str] | None = None) -> int:
     rst.add_argument("--stagger", type=float, default=5.0, help="seconds between agent launches")
     rst.set_defaults(func=cmd_restore)
 
-    snd = sub.add_parser("send")
+    snd = sub.add_parser("send", help="send a message to an agent, the owner, or a team's queen")
     dest = snd.add_mutually_exclusive_group(required=True)
     dest.add_argument("--to")
     dest.add_argument("--to-queen", metavar="TEAM",
@@ -1476,30 +1450,30 @@ def main(argv: list[str] | None = None) -> int:
     snd.add_argument("--pane", help="the agent's tmux pane, when this process isn't in it")
     snd.set_defaults(func=cmd_send)
 
-    ntf = sub.add_parser("notify", help="Notify the owner about a result or blocking decision")
+    ntf = sub.add_parser("notify", help="notify the owner about a result or a blocking decision")
     ntf.add_argument("text")
     ntf.add_argument("--context")
     ntf.add_argument("--pane")
     ntf.set_defaults(func=cmd_notify)
 
-    msg = sub.add_parser("messages")
+    msg = sub.add_parser("messages", help="recent messages, for history (delivery is push; do not poll)")
     msg.add_argument("--user")
     msg.add_argument("--limit", type=int, default=20)
     msg.add_argument("--id", type=int, help="show just this message, e.g. one a reply points at")
     msg.set_defaults(func=cmd_messages)
 
-    rcp = sub.add_parser("recipients")
+    rcp = sub.add_parser("recipients", help="list registered agents")
     rcp.set_defaults(func=cmd_recipients)
 
     prune = sub.add_parser(
         "prune",
-        help="forget registered agents whose tmux pane no longer exists "
-        "(add --include-shells to also forget panes that only run a bare shell)",
+        help="forget registered agents whose tmux pane no longer exists",
     )
-    prune.add_argument("--include-shells", action="store_true")
+    prune.add_argument("--include-shells", action="store_true",
+                       help="also forget panes that only run a bare shell")
     prune.set_defaults(func=cmd_prune)
 
-    tsk = sub.add_parser("tasks")
+    tsk = sub.add_parser("tasks", help="list tasks")
     tsk.add_argument("--status", choices=["open", "picked_up", "done"])
     tsk.add_argument("--team", metavar="TEAM",
                      help="only this team's tasks (name or id): its members' and the team's own")
@@ -1516,7 +1490,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     tcreate.set_defaults(func=cmd_task_create)
 
-    tup = sub.add_parser("task-update")
+    tup = sub.add_parser("task-update", help="change a task: status, assignee, worktree, dependencies, note")
     tup.add_argument("id", type=int)
     tup.add_argument("--status", choices=["open", "picked_up", "done"])
     tup.add_argument("--assignee")
@@ -1567,7 +1541,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     allow.set_defaults(func=cmd_allow_model_switch)
 
-    who = sub.add_parser("whoami")
+    who = sub.add_parser("whoami", help="show your handle, pane, node and the hub URL")
     who.set_defaults(func=cmd_whoami)
 
     dg = sub.add_parser(
