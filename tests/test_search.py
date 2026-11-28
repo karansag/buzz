@@ -1,9 +1,7 @@
 """Conversation search covers full history and keeps owner authorization."""
-import pytest
 
 from agent_swarm import db, search
-from tests.test_server import client  # noqa: F401
-from tests.test_auth import hub, owner, remote, enrol  # noqa: F401
+from tests.test_auth import owner, remote, enrol
 
 
 def test_plain_query_is_literal_unicode_casefolded_all_words(tmp_path):

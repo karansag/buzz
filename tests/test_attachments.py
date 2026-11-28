@@ -9,7 +9,6 @@ import zlib
 from fastapi.testclient import TestClient
 
 from agent_swarm import attachments, server, tmux
-from tests.test_server import client  # noqa: F401  (reuse the app fixture)
 
 
 def png(color: int = 0) -> bytes:

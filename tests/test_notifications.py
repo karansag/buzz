@@ -3,7 +3,6 @@
 import pytest
 
 from agent_swarm import db, notifications
-from tests.test_server import client  # noqa: F401
 
 
 def test_notification_route_identity_history_and_cooldown(client):

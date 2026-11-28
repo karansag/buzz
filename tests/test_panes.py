@@ -2,7 +2,6 @@
 renumbers can't send a message to the wrong agent. A small fake tmux keeps
 panes by id with a positional label, the way the real one does."""
 
-import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient

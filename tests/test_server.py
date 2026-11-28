@@ -27,90 +27,6 @@ def portal_source():
     return "\n".join(path.read_text() for path in paths)
 
 
-@pytest.fixture()
-def client(tmp_path, monkeypatch):
-    calls = []
-    retries = []
-
-    def fake_deliver(
-        pane,
-        text,
-        message_prefix=None,
-        submit_key=tmux.DEFAULT_SUBMIT_KEY,
-        flavor=None,
-        retry_submit=True,
-    ):
-        calls.append((pane, text, message_prefix, submit_key, flavor))
-        retries.append(retry_submit)
-        return True, None
-
-    window_names = []
-    pane_tags = []
-
-    def fake_tag_pane(pane, handle):
-        pane_tags.append((pane, handle))
-        return True, None
-
-    def fake_rename_window(pane, name):
-        window_names.append((pane, name))
-        return True, None
-
-    monkeypatch.setattr(tmux, "deliver", fake_deliver)
-    monkeypatch.setattr(tmux, "rename_window", fake_rename_window)
-    monkeypatch.setattr(tmux, "tag_pane", fake_tag_pane)
-    # 0:0.0 and 0:1.0 run agents; 0:2.0 exists but holds a bare shell.
-    monkeypatch.setattr(tmux, "list_panes", lambda: {"0:0.0", "0:1.0", "0:2.0"})
-    monkeypatch.setattr(tmux, "live_agent_panes", lambda: {"0:0.0", "0:1.0"})
-    # Fake panes are their own ids, all from one tmux server; an unknown
-    # target resolves to nothing, as tmux would.
-    monkeypatch.setattr(
-        tmux, "resolve_pane",
-        lambda target: (target, target) if target in tmux.list_panes() else None,
-    )
-    monkeypatch.setattr(tmux, "server_id", lambda: "srv-1")
-    monkeypatch.setattr(tmux, "server_start_time", lambda: 0.0)
-    # Existing and live panes derive from this one table.
-    monkeypatch.setattr(
-        tmux, "pane_table",
-        lambda: {
-            "0:0.0": {"label": "0:0.0", "command": "claude", "title": ""},
-            "0:1.0": {"label": "0:1.0", "command": "claude", "title": ""},
-            "0:2.0": {"label": "0:2.0", "command": "bash", "title": ""},
-        },
-    )
-    monkeypatch.setattr(
-        tmux, "capture_pane", lambda pane, colors=False: (f"screen of {pane}\n$ ", None)
-    )
-
-    spawns = []
-    spawn_cwds = []
-
-    def fake_spawn_window(session=tmux.AGENTS_SESSION, command=None, cwd=None):
-        spawns.append((session, command))
-        spawn_cwds.append(cwd)
-        pane = f"agents:{len(spawns)}.0"
-        return tmux.Created(pane, pane, "srv-1"), None
-
-    monkeypatch.setattr(tmux, "spawn_window", fake_spawn_window)
-    kills = []
-
-    def fake_kill_pane(pane):
-        kills.append(pane)
-        return True, None
-
-    monkeypatch.setattr(tmux, "kill_pane", fake_kill_pane)
-    app = server.create_app(tmp_path / "db.sqlite", monitor=False)
-    c = TestClient(app, client=("127.0.0.1", 50000))
-    c._calls = calls
-    c._retries = retries
-    c._spawns = spawns
-    c._spawn_cwds = spawn_cwds
-    c._kills = kills
-    c._window_names = window_names
-    c._pane_tags = pane_tags
-    return c
-
-
 def test_health(client):
     r = client.get("/health")
     assert r.status_code == 200
@@ -1391,7 +1307,7 @@ def test_assignment_message_and_brief_tell_agents_to_leave_a_note(client):
     # The long "how to verify" wording is what the refusal carries, not
     # something repeated in every task message.
     assert "how to use the feature" not in delivered
-    refusal = client.patch(f"/tasks/1", json={"status": "done"})
+    refusal = client.patch("/tasks/1", json={"status": "done"})
     assert refusal.json()["detail"]["note"] == server.NOTE_GUIDANCE
     assert "how to use the feature" in server.NOTE_GUIDANCE
 
@@ -1832,8 +1748,6 @@ def test_importing_the_server_module_builds_no_app():
 
 
 def test_spawn_and_stop_report_unknown_outcomes_distinctly(client, monkeypatch):
-    import subprocess
-
     def timed_out_launch(session=tmux.AGENTS_SESSION, command=None, cwd=None):
         raise tmux.Uncertain(
             "launch command did not report back: timed out",

@@ -4,7 +4,6 @@ copy the hub keeps so a machine that lost its disk can still be restored."""
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from types import SimpleNamespace
 

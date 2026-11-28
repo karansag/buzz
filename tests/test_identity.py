@@ -6,8 +6,7 @@ say who is calling. These tests pin how /send, /status and /whoami resolve a
 caller, and that an unknown or foreign session id never falls back to the
 agent that happens to hold the named pane."""
 
-from tests.test_auth import enrol, hub, owner, remote  # noqa: F401  (fixtures/helpers)
-from tests.test_server import client  # noqa: F401  (reuse the app fixture)
+from tests.test_auth import enrol, owner, remote
 
 
 def register(client, pane, name, agent_id=None):

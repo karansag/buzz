@@ -2,7 +2,6 @@
 
 from agent_swarm import client as cli
 from agent_swarm import team_view
-from tests.test_server import client  # noqa: F401  (reuse the app fixture)
 
 HOUR = 3600.0
 NOW = 1_000_000.0

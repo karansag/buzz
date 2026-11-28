@@ -6,19 +6,6 @@ from fastapi.testclient import TestClient
 from agent_swarm import config, nodes, server, tmux
 
 
-@pytest.fixture()
-def hub(tmp_path, monkeypatch):
-    monkeypatch.setattr(tmux, "server_id", lambda: "srv-1")
-    monkeypatch.setattr(tmux, "resolve_pane", lambda t: (t, t))
-    monkeypatch.setattr(
-        tmux, "pane_table",
-        lambda: {"%1": {"label": "a:0.0", "command": "claude", "title": ""}},
-    )
-    monkeypatch.setattr(tmux, "deliver", lambda *a, **k: (True, None))
-    monkeypatch.setattr(tmux, "tag_pane", lambda *a: (True, None))
-    return server.create_app(tmp_path / "db.sqlite", monitor=False)
-
-
 def owner(app):
     return TestClient(app, client=("127.0.0.1", 40000))
 

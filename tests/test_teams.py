@@ -2,7 +2,6 @@
 
 import pytest
 
-from tests.test_server import client  # noqa: F401  (reuse the app fixture)
 
 
 def _register(client, pane="0:0.0", model="m"):

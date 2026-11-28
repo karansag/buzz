@@ -2,7 +2,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent_swarm import boards, db, server
-from tests.test_server import client  # noqa: F401
 
 
 @pytest.fixture

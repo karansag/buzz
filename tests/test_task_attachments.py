@@ -2,10 +2,8 @@
 import hashlib
 import os
 import time
-from pathlib import Path
 
-from agent_swarm import attachments, node
-from tests.test_server import client
+from agent_swarm import node
 from tests.test_attachments import png, register, upload
 
 

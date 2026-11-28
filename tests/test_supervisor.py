@@ -4,7 +4,6 @@ reads and the throttled nudge that tells it something changed."""
 import asyncio
 
 from agent_swarm import digest, server
-from tests.test_server import client  # noqa: F401  (reuse the app fixture)
 
 
 def _register(client, pane, name):
@@ -110,7 +109,7 @@ def test_digest_lists_new_traffic_and_task_changes_with_a_cursor(client):
     again = client.get("/digest", params={"after_message": first_id}).json()
     assert "first" not in again["text"]
     assert "nearly there" in again["text"]
-    assert again["text"].startswith(f"swarm digest") and f"since message #{first_id}" in again["text"]
+    assert again["text"].startswith("swarm digest") and f"since message #{first_id}" in again["text"]
     # Task assignment pasted a message too; it is in the window.
     assert "task #1" in again["text"]
 
