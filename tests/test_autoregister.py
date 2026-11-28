@@ -121,7 +121,7 @@ def test_antigravity_hook_injects_its_brief_and_registers_its_conversation(monke
     assert posts == [{"tmux_pane": "%5", "node": "laptop", "flavor": "agy",
                       "agent_id": "agy-session", "model": "gemini-3-agy"}]
     brief = ("You are registered as 'otter'.\nCurrently registered peers:\n"
-             "  (2 registered; `buzz recipients` lists them)\nEnd.")
+             "  (2 registered)\nEnd.")
     assert json.loads(out.out) == {"injectSteps": [{"systemMessage": {"systemMessage": brief}}]}
 
 
@@ -145,7 +145,7 @@ def test_hook_registers_with_the_hooks_session_and_model(monkeypatch, capsys):
                       "agent_id": "new-thread", "model": "gpt-6-sol"}]
     context = json.loads(out.out)["hookSpecificOutput"]["additionalContext"]
     # The roster stays out of every session's context.
-    assert "  - a" not in context and "(2 registered;" in context and "OFFLINE" not in context
+    assert "  - a" not in context and "(2 registered)" in context and "OFFLINE" not in context
 
 
 def test_env_session_of_another_harness_is_not_used(monkeypatch, capsys):

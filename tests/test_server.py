@@ -192,10 +192,11 @@ def test_register_includes_protocol_brief(client):
     assert "[agent-msg from" in brief
     assert first["user_id"] in brief
     # peer metadata appears for context
-    assert "claude-x" in brief and "uuid-a" in brief
+    assert "claude-x" in brief
+    # ...but not what a peer has no use for: session ids and submit keys.
+    assert "uuid-a" not in brief and "submit=" not in brief
     assert "use /queue before each message" in brief
     assert "flavor=claude" in brief
-    assert "submit=C-m" in brief
 
 
 def test_register_then_send_delivers_and_records(client):
@@ -748,7 +749,7 @@ def test_agent_can_reply_to_owner_without_tmux_delivery(client):
 def test_protocol_brief_mentions_owner_and_tasks(client):
     brief = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["protocol_brief"]
     assert "'owner' is the human operator" in brief
-    assert "Terminal-only output does not reach the owner" in brief
+    assert "Terminal output does not reach the sender" in brief
     assert "as Markdown" in brief
     assert "task-update" in brief
     assert "task-create" in brief
@@ -1297,7 +1298,7 @@ def test_reopening_and_other_updates_never_need_a_note(client):
 def test_assignment_message_and_brief_tell_agents_to_leave_a_note(client):
     client.post("/register", json={"tmux_pane": "0:1.0", "requested_user": "ibis"})
     brief = client.post("/register", json={"tmux_pane": "0:0.0"}).json()["protocol_brief"]
-    assert "--note" in brief and "closing without a note" in brief
+    assert "--note" in brief and "a close without a note is refused" in brief
     # The brief points at the refusal instead of repeating NOTE_GUIDANCE.
     assert "how to use the feature" not in brief
 

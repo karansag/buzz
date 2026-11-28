@@ -391,7 +391,7 @@ def short_brief(brief: str) -> str:
     """The protocol brief without its peer list, for a session's context.
 
     A hook's output lands in every new session; the full roster would cost
-    each one a screenful, and `buzz recipients` gives it on demand.
+    each one a screenful, and the brief says how to list it on demand.
     """
     lines = brief.splitlines()
     peers = [line for line in lines if line.startswith("  - ")]
@@ -401,7 +401,7 @@ def short_brief(brief: str) -> str:
             continue
         out.append(line)
         if line.endswith("Currently registered peers:"):
-            out.append(f"  ({len(peers)} registered; `buzz recipients` lists them)")
+            out.append(f"  ({len(peers)} registered)")
     return "\n".join(out)
 
 
