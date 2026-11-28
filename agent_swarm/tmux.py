@@ -70,12 +70,7 @@ FLAVOR_SUBMIT_DELAYS = {
     "codex": 0.2,
 }
 
-SUBMIT_VERIFY_DELAY = float(
-    os.environ.get(
-        "AGENT_SWARM_SUBMIT_VERIFY_DELAY",
-        os.environ.get("AGENT_MSG_SUBMIT_VERIFY_DELAY", "1.5"),
-    )
-)
+SUBMIT_VERIFY_DELAY = float(os.environ.get("AGENT_SWARM_SUBMIT_VERIFY_DELAY", "1.5"))
 
 
 def _has_label_token(label: str, token: str) -> bool:

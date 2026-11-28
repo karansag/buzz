@@ -69,7 +69,8 @@ ln -sf buzz-server agent-swarm-server
 ln -sf buzz-node agent-swarm-node
 ```
 
-The `AGENT_MSG_*` environment variables still work.
+The `AGENT_MSG_*` environment variables are no longer read. Rename each to
+`AGENT_SWARM_*` (same suffix).
 
 ## 5. Start the server
 

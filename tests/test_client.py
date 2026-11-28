@@ -306,14 +306,7 @@ def test_offline_reason_distinguishes_gone_from_shell():
     assert "no longer exists" in tmux.offline_reason("z:9.9", existing, live)
 
 
-def test_base_url_accepts_legacy_environment_name(monkeypatch):
-    monkeypatch.delenv("AGENT_SWARM_URL", raising=False)
-    monkeypatch.setenv("AGENT_MSG_URL", "http://legacy.example:9999")
-    assert client.base_url() == "http://legacy.example:9999"
-
-
-def test_base_url_prefers_new_environment_name(monkeypatch):
-    monkeypatch.setenv("AGENT_MSG_URL", "http://legacy.example:9999")
+def test_base_url_comes_from_the_environment(monkeypatch):
     monkeypatch.setenv("AGENT_SWARM_URL", "http://new.example:8765")
     assert client.base_url() == "http://new.example:8765"
 

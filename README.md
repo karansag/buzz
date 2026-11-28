@@ -777,9 +777,7 @@ The CLI and node daemon read the hub URL, node name, and token from
 With neither, the hub is `http://127.0.0.1:8765`. The node daemon keeps its
 state under `AGENT_SWARM_NODE_HOME` (default `~/.agent-swarm`).
 
-The old settings `AGENT_MSG_HOST`, `_PORT`, `_DB`, `_URL`, `_MONITOR_INTERVAL`,
-`_ATTENTION_GRACE`, and `_SUBMIT_VERIFY_DELAY` still work. Upgrading from agent-msg?
-See [docs/upgrading.md](docs/upgrading.md).
+Upgrading from agent-msg? See [docs/upgrading.md](docs/upgrading.md).
 
 ## Running the hub
 

@@ -17,7 +17,7 @@ def _isolated_settings(monkeypatch, tmp_path):
     for flavor in tmux.SPAWNABLE_FLAVORS:
         monkeypatch.delenv(f"AGENT_SWARM_{flavor.upper()}_COMMAND", raising=False)
     # The harness session ids too: tests run inside Claude Code or Codex.
-    for var in ("AGENT_SWARM_URL", "AGENT_MSG_URL", "AGENT_SWARM_TOKEN", "AGENT_SWARM_NODE",
+    for var in ("AGENT_SWARM_URL", "AGENT_SWARM_TOKEN", "AGENT_SWARM_NODE",
                 "AGENT_SWARM_TABS",
                 "CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "PI_SESSION_ID",
                 "ANTIGRAVITY_CONVERSATION_ID",

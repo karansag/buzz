@@ -87,12 +87,7 @@ def _node_name(raw: str) -> str:
 
 def load() -> Settings:
     file = _file()
-    hub = (
-        os.environ.get("AGENT_SWARM_URL")
-        or os.environ.get("AGENT_MSG_URL")
-        or file.get("hub")
-        or DEFAULT_HUB
-    )
+    hub = os.environ.get("AGENT_SWARM_URL") or file.get("hub") or DEFAULT_HUB
     token = os.environ.get("AGENT_SWARM_TOKEN") or file.get("token") or None
     node = os.environ.get("AGENT_SWARM_NODE") or file.get("node")
     if not node:

@@ -70,12 +70,7 @@ def _read_json(value: dict) -> Response:
 # yet. The dashboard must tolerate this shape.
 UNKNOWN_ACTIVITY = {"status": "unknown", "detail": None, "error": None, "since": None, "context": None}
 
-DB_PATH = Path(
-    os.environ.get(
-        "AGENT_SWARM_DB",
-        os.environ.get("AGENT_MSG_DB", "~/.agent-swarm/db.sqlite"),
-    )
-).expanduser()
+DB_PATH = Path(os.environ.get("AGENT_SWARM_DB", "~/.agent-swarm/db.sqlite")).expanduser()
 PORTAL_PATH = Path(__file__).parent / "portal.html"
 PORTAL_STATIC_PATH = Path(__file__).parent / "static"
 
@@ -718,18 +713,8 @@ def create_app(
     retirement_lock = threading.Lock()
     restart_lock = threading.Lock()
     restarting: set[str] = set()
-    interval = float(
-        os.environ.get(
-            "AGENT_SWARM_MONITOR_INTERVAL",
-            os.environ.get("AGENT_MSG_MONITOR_INTERVAL", "5.0"),
-        )
-    )
-    grace = float(
-        os.environ.get(
-            "AGENT_SWARM_ATTENTION_GRACE",
-            os.environ.get("AGENT_MSG_ATTENTION_GRACE", "60.0"),
-        )
-    )
+    interval = float(os.environ.get("AGENT_SWARM_MONITOR_INTERVAL", "5.0"))
+    grace = float(os.environ.get("AGENT_SWARM_ATTENTION_GRACE", "60.0"))
 
     # How often the supervisor is told about traffic it was not party to.
     # Every nudge is a paste into its pane, so this is deliberately coarse.
@@ -3160,12 +3145,8 @@ def _run() -> None:
     """
     import uvicorn
 
-    port = int(
-        os.environ.get("AGENT_SWARM_PORT", os.environ.get("AGENT_MSG_PORT", "8765"))
-    )
-    host = os.environ.get(
-        "AGENT_SWARM_HOST", os.environ.get("AGENT_MSG_HOST", "127.0.0.1")
-    )
+    port = int(os.environ.get("AGENT_SWARM_PORT", "8765"))
+    host = os.environ.get("AGENT_SWARM_HOST", "127.0.0.1")
     # No proxy-header rewriting: request.client must be the real socket peer,
     # since the auth middleware decides trust by it.
     uvicorn.run(create_app(), host=host, port=port, reload=False, proxy_headers=False)
